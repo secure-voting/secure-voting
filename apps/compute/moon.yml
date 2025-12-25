@@ -15,3 +15,9 @@ tasks:
       - '**/Cargo.toml'
     outputs:
       - 'target'
+  lint:
+    command: "cargo clippy -- -Dwarnings -D clippy::pedantic"
+    inputs:
+      - 'voting-core/src/**'
+      - 'compute-service/src/**'
+      - '**/Cargo.toml'
