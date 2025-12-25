@@ -9,7 +9,7 @@ deploy:
 services:
   # TS frontend
   frontend:
-    image: node:25
+    build: apps/frontend
     container_name: ts-frontend
     ports:
       - "8080:80"
