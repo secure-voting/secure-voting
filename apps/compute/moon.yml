@@ -1,0 +1,17 @@
+tasks:
+  build:
+    command: "cargo build --release"
+    inputs:
+      - 'voting-core/src/**'
+      - 'compute-service/src/**'
+      - '**/Cargo.toml'
+    outputs:
+      - 'target'
+  test:
+    command: "cargo test --release"
+    inputs:
+      - 'voting-core/src/**'
+      - 'compute-service/src/**'
+      - '**/Cargo.toml'
+    outputs:
+      - 'target'
