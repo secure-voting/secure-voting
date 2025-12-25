@@ -10,3 +10,9 @@ apps/compute/target
 # General stuff
 
 .env
+
+# Docker volumes
+db-data/
+cache/
+mongo-data/
+iggy/
