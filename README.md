@@ -54,4 +54,4 @@ Services communicate through internal docker networks
 
 ## Dev access
 
-You should only access database, if necessary using `docker exec -it <service-name> <command>`
+You should only access database, if necessary, using `docker exec -it <service-name> <command>`, there are no exposed ports
