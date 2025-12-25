@@ -6,3 +6,7 @@
 # compute service
 
 apps/compute/target
+
+# General stuff
+
+.env
