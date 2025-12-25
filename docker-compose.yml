@@ -1,0 +1,255 @@
+version: '3.8'
+
+deploy:
+  resources:
+    limits:
+      cpus: '4.0'
+      memory: 8G
+
+services:
+  # TS frontend
+  frontend:
+    image: node:25
+    container_name: ts-frontend
+    ports:
+      - "8080:80"
+    networks:
+      - app_network
+    volumes:
+      - cache:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    read_only: true
+    profiles:
+      - frontend
+      - prod
+
+  # Go backend
+  backend:
+    build: apps/backend
+    container_name: go-backend
+    networks:
+      - app_network
+      - rpc_network
+      - db_network
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      iggy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - backend
+      - prod    
+
+  # SQL Postgres db
+  db:
+    image: postgres:18.1
+    container_name: postgres-db
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=secure-voting
+      - POSTGRES_USER=admin
+    networks:
+      - db_network
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - db
+      - prod
+
+  # Postgres WebUI
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: postgres-webui
+    ports:
+      - "127.0.0.1:15433:80"
+    networks:
+      - db_network
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    restart: unless-stopped
+    depends_on:
+      - db
+    read_only: true
+    profiles:
+      - db
+      - debug
+
+  # Redis cache
+  cache:
+    image: redis:8.4
+    container_name: redis-cache
+    networks:
+      - app_network
+      - redis_network      
+    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5    
+    profiles:
+      - db
+      - prod
+
+  # Redis WebUI
+  redis-webui:
+    image: redisinsight:2.70
+    container_name: redis-webui
+    ports:
+      - "127.0.0.1:5540:5540"
+    networks:
+      - redis_network
+    restart: unless-stopped
+    depends_on:
+      - cache
+    read_only: true
+    profiles:
+      - db
+      - debug
+      
+  # NoSQL MongoDB
+  mongo:
+    image: mongo:8.0
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME: root
+      - MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    networks:
+      - db_network
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - db
+      - prod  
+
+  mongodb-webui:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: mongodb-webui
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+    ports:
+      - "127.0.0.1:8082:8082"
+    networks:
+      - db_network
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    read_only: true
+    profiles:
+      - db
+      - debug
+
+  # Compute core
+  compute:
+    build: apps/compute
+    container_name: rust-compute
+    networks:
+      - rpc_network
+    restart: unless-stopped
+    read_only: true
+    profiles:
+      - compute
+      - prod
+
+  # Apache Iggy message broker
+  iggy:
+    image: apache/iggy:1.0.2-20-alpine3.19
+    container_name: iggy-mq
+    cap_add:
+      - SYS_NICE
+    security_opt:
+      - seccomp:unconfined
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    environment:
+      - IGGY_ROOT_USERNAME=iggy
+      - IGGY_ROOT_PASSWORD=${IGGY_ROOT_PASSWORD}
+      - IGGY_HTTP_ENABLED=true
+      - IGGY_HTTP_ADDRESS=0.0.0.0:80
+      - IGGY_TCP_ENABLED=true
+      - IGGY_TCP_ADDRESS=0.0.0.0:3000
+      - IGGY_QUIC_ENABLED=false
+      - IGGY_WEBSOCKET_ENABLED=false
+      - IGGY_HEARTBEAT_ENABLED=true
+      - IGGY_HEARTBEAT_INTERVAL=5s
+    networks:
+      - iggy_network
+    volumes:
+      - iggy:/iggy/local_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    profiles:
+      - iggy
+      - prod
+
+  # Apache Iggy WebUI
+  iggy-webui:
+    image: apache/iggy-web-ui:1.0.2-20-alpine3.19
+    container_name: iggy-webui
+    environment:
+      - PUBLIC_IGGY_API_URL=http://iggy:80
+    ports:
+      - "127.0.0.1:3050:3050"
+    networks:
+      - iggy_network
+    read_only: true
+    profiles:
+      - iggy
+      - debug
+  
+networks:
+  app_network:
+    driver: bridge
+  db_network:
+    driver: bridge
+    internal: true
+  rpc_network:
+    driver: bridge
+    internal: true
+  iggy_network:
+    driver: bridge
+  redis_network:
+    driver: bridge
+
+volumes:
+  db-data:
+    driver: local
+  cache:
+    driver: local
+  mongo-data:
+    driver: local
+  iggy:
+    driver: local
