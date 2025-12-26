@@ -1,5 +1,12 @@
 unstable_rust:
   version: '1.92.0'
-  components: ['clippy', 'rustfmt']
-  targets: ['x86_64-unknown-linux-gnu', 'x86_64-pc-windows-msvc']
+  bins:
+    - 'cargo-nextest'
+  components:
+    - 'clippy'
+    - 'rustfmt'
+    - 'rust-analyzer'
+  targets:
+    - 'x86_64-unknown-linux-gnu'
+    - 'x86_64-pc-windows-msvc'
   syncToolchainConfig: true
