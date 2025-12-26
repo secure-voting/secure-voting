@@ -8,13 +8,14 @@ tasks:
     outputs:
       - 'target'
   test:
-    command: "cargo test --release"
+    command: "nextest run --workspace"
     inputs:
       - 'voting-core/src/**'
       - 'compute-service/src/**'
       - '**/Cargo.toml'
-    outputs:
       - 'target'
+    deps:
+      - '~:build'
   lint:
     command: "cargo clippy -- -Dwarnings -D clippy::pedantic"
     inputs:
