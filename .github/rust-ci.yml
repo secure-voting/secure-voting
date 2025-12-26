@@ -1,0 +1,36 @@
+name: "Compute-core pipeline"
+on:
+  push:
+    branches:
+      - 'dev'
+      - 'master'
+  pull_request:
+
+jobs:
+  ci:
+    name: rust-ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: setup rust things
+        uses: moonrepo/setup-rust@v1
+        with:
+          cache: true
+          cache-target: release
+          targets: 'x86_64-pc-windows-msvc,x86_64-unknown-linux-gnu'
+          bins: cargo-nextest,cargo-tarpaulin
+          components: clippy,rust-analyzer,rustfmt  
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: run tests
+        run: nextest run --workspace
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Generate coverage
+        run: tarpaulin --workspace --out Xml
+
+      
