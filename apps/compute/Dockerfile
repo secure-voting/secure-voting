@@ -2,12 +2,10 @@ FROM rust:1.92
 
 WORKDIR /app
 
-COPY Cargo.toml .
+COPY ./ ./
 
 RUN cargo build --release
 
-COPY target/release/* .
-
 EXPOSE 8081
 
-CMD ["./main"]
+CMD ["./target/release/compute-service"]
