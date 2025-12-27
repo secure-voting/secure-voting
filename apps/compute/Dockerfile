@@ -1,11 +1,17 @@
-FROM rust:1.92
+# ---- building ----
+
+FROM rust:1.92 AS builder
 
 WORKDIR /app
-
 COPY ./ ./
-
 RUN cargo build --release
 
-EXPOSE 8081
+# ---- runtime ----
 
-CMD ["./target/release/compute-service"]
+FROM debian:bookworm-slim
+WORKDIR /app
+
+COPY --from=builder /app/target/release/compute-service .
+
+EXPOSE 8081
+CMD ["./compute-service"]
