@@ -20,7 +20,7 @@ jobs:
           cache: true
           cache-target: release
           targets: 'x86_64-pc-windows-msvc,x86_64-unknown-linux-gnu'
-          bins: cargo-nextest,cargo-tarpaulin
+          bins: cargo-nextest,cargo-tarpaulin,cargo-bloat
           components: clippy,rust-analyzer,rustfmt  
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

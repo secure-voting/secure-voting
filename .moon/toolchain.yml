@@ -2,6 +2,8 @@ unstable_rust:
   version: '1.92.0'
   bins:
     - 'cargo-nextest'
+    - 'cargo-tarpaulin'
+    - 'cargo-bloat'
   components:
     - 'clippy'
     - 'rustfmt'
