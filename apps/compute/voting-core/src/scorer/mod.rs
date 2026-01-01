@@ -1,5 +1,8 @@
 use crate::types::Profile;
 
+pub mod approval;
+pub mod plurality;
+
 pub trait Scorer {
     fn score_ballot(ballot: &[usize], scores: &mut [usize]);
     fn compute_score(profile: &Profile) -> Vec<usize> {
