@@ -17,3 +17,5 @@
 //! 15. Inverse Borda
 //! 16. Nanson
 //! 17. Coombs
+
+pub use crate::voting_rules::plurality::PluralityRule;
