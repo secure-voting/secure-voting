@@ -1,18 +1,19 @@
-//! Voting rule helper type.
+//! Voting rule with the 3 steps.
 //!
 //! Allows to modularly combine a scorer, decider and tie-breaker of choice.
 //!
 //! This module defines the [`VotingRule`] struct as well as its [`VotingRuleError`] error type.
 
 use std::fmt::Debug;
+use thiserror::Error;
 
 use crate::{
     decider::Decider,
     profile::{CandidateId, Profile},
     scorer::Scorer,
     tie_breaker::TieBreaker,
+    voting_rules::VotingRuleExec,
 };
-use thiserror::Error;
 
 /// VotingRule error type.
 ///
@@ -54,7 +55,7 @@ pub struct VotingRule<S: Scorer, D: Decider, T: TieBreaker> {
     tiebreaker: T,
 }
 
-/// Helper result type returned from the [`run`] method of [`VotingRule`] struct.
+/// Helper result type returned from the [`run`] method of [`SimpleVotingRule`] struct.
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
 pub type VotingRuleResult<S, D, T> = Result<
@@ -83,7 +84,7 @@ where
     /// Run the constructed pipeline.
     ///
     /// Returns an error if any of the steps didn't succeed.
-    pub fn run(&self, profile: &Profile) -> VotingRuleResult<S, D, T> {
+    fn run(&self, profile: &Profile) -> VotingRuleResult<S, D, T> {
         let scores = self
             .scorer
             .compute_score(profile)
@@ -95,5 +96,18 @@ where
         self.tiebreaker
             .tie_break(&candidates, profile)
             .map_err(VotingRuleError::TieBreakError)
+    }
+}
+
+impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec for VotingRule<S, D, T>
+where
+    <S as Scorer>::Error: Debug,
+    <D as Decider>::Error: Debug,
+    <T as TieBreaker>::Error: Debug,
+{
+    type Error = VotingRuleError<S::Error, D::Error, T::Error>;
+
+    fn run_pipeline(&self, profile: &Profile) -> Result<CandidateId, Self::Error> {
+        self.run(profile)
     }
 }

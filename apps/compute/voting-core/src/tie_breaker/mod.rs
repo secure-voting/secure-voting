@@ -4,6 +4,14 @@
 
 use crate::profile::{CandidateId, Profile};
 
+/// The outcome of performing a tie-breaker.
+pub enum RuleOutcome {
+    /// A single winner is chosen.
+    Winner(CandidateId),
+    /// This tie-breaker can't decide a winner
+    Undecided,
+}
+
 /// Resolves ties between selected winners to determine a single absolute winner.
 pub trait TieBreaker {
     /// Error returned when the tie break can't be performed.
@@ -17,5 +25,5 @@ pub trait TieBreaker {
         &self,
         candidates: &[CandidateId],
         profile: &Profile,
-    ) -> Result<CandidateId, Self::Error>;
+    ) -> Result<RuleOutcome, Self::Error>;
 }
