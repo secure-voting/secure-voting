@@ -9,9 +9,9 @@ use thiserror::Error;
 
 use crate::{
     decider::Decider,
-    profile::{CandidateId, Profile},
+    profile::Profile,
     scorer::Scorer,
-    tie_breaker::TieBreaker,
+    tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::VotingRuleExec,
 };
 
@@ -46,7 +46,7 @@ where
 /// 1. Scorer - transforms the raw vote data into score data for further analysis
 /// 2. Decider - chooses a set of winners depending on the score information
 /// 3. TieBreaker - chooses an absolute winner from the selected set
-pub struct VotingRule<S: Scorer, D: Decider, T: TieBreaker> {
+pub struct VotingRule<S, D, T> {
     /// A scorer instance.
     scorer: S,
     /// A decider instance.
@@ -59,7 +59,7 @@ pub struct VotingRule<S: Scorer, D: Decider, T: TieBreaker> {
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
 pub type VotingRuleResult<S, D, T> = Result<
-    CandidateId,
+    RuleOutcome,
     VotingRuleError<<S as Scorer>::Error, <D as Decider>::Error, <T as TieBreaker>::Error>,
 >;
 
@@ -107,7 +107,7 @@ where
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
-    fn run_pipeline(&self, profile: &Profile) -> Result<CandidateId, Self::Error> {
+    fn run_pipeline(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         self.run(profile)
     }
 }

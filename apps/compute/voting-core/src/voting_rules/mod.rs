@@ -2,7 +2,7 @@
 //!
 //! This module defines the trait [`VotingRuleExec`] and pre-defined voting rule implementations.
 
-use crate::profile::{CandidateId, Profile};
+use crate::{profile::Profile, tie_breaker::RuleOutcome};
 
 pub mod voting_rule;
 
@@ -12,5 +12,5 @@ pub trait VotingRuleExec {
     type Error;
 
     /// Run the constructed pipeline.
-    fn run_pipeline(&self, profile: &Profile) -> Result<CandidateId, Self::Error>;
+    fn run_pipeline(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error>;
 }
