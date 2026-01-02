@@ -1,20 +1,11 @@
-use crate::types::Profile;
+use crate::profile::Profile;
 
 pub mod approval;
 pub mod plurality;
 
 pub trait Scorer {
-    fn score_ballot(ballot: &[usize], scores: &mut [usize]);
-    fn compute_score(profile: &Profile) -> Vec<usize> {
-        let n_candidates = profile.n_candidates();
-        let n_voters = profile.n_voters();
+    type Output;
+    type Error;
 
-        let mut scores = vec![0; n_candidates];
-
-        for i in 0..n_voters {
-            Self::score_ballot(&profile[i], &mut scores);
-        }
-
-        scores
-    }
+    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error>;
 }

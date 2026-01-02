@@ -1,13 +1,39 @@
-use crate::scorer::Scorer;
+use rayon::prelude::*;
+use thiserror::Error;
+
+use crate::{profile::Profile, scorer::Scorer};
 
 pub struct ApprovalScorer<const Q: usize>;
 
+#[derive(Debug, Error)]
+#[error("Too little candidates for this Q")]
+pub struct ApprovalScorerError;
+
 impl<const Q: usize> Scorer for ApprovalScorer<Q> {
-    fn score_ballot(ballot: &[usize], scores: &mut [usize]) {
-        if ballot.len() < Q {
-            return;
+    type Output = Vec<usize>;
+    type Error = ApprovalScorerError;
+
+    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+        let n_voters = profile.n_voters();
+        let n_candidates = profile.n_candidates();
+
+        if n_candidates < Q {
+            return Err(ApprovalScorerError);
         }
-        (0..Q).for_each(|i| scores[ballot[i]] += 1);
+
+        Ok((0..n_voters)
+            .into_par_iter()
+            .map(|i| {
+                let mut tmp = vec![0; n_candidates];
+
+                (0..Q).for_each(|x| tmp[profile[i][x]] = 1);
+
+                tmp
+            })
+            .reduce(
+                || vec![0; n_candidates],
+                |a, b| a.iter().zip(b.iter()).map(|(x, y)| x + y).collect(),
+            ))
     }
 }
 
@@ -16,13 +42,25 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![]], vec![]; "empty votes")]
     #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], vec![3, 3]; "count all")]
     #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]], vec![3, 1, 2]; "count top 2")]
-    fn test_simple_plurality(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+        let scorer = ApprovalScorer::<2>;
+
         assert_eq!(
             answer,
-            ApprovalScorer::<2>::compute_score(&votes.try_into().unwrap())
+            scorer.compute_score(&votes.try_into().unwrap()).unwrap()
         );
+    }
+
+    #[test_case(vec![vec![]]; "empty votes")]
+    #[test_case(vec![vec![0, 1], vec![1, 0], vec![0, 1]]; "less than q")]
+    fn test_incorrect_too_little_candidates_for_this_q(votes: Vec<Vec<usize>>) {
+        let scorer = ApprovalScorer::<3>;
+
+        assert!(matches!(
+            scorer.compute_score(&votes.try_into().unwrap()),
+            Err(ApprovalScorerError)
+        ));
     }
 }
