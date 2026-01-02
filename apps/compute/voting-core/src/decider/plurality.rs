@@ -1,9 +1,14 @@
-use crate::{decider::Decider, types::CandidateId};
+use std::convert::Infallible;
+
+use crate::{decider::Decider, profile::CandidateId};
 
 pub struct PluralityDecider;
 
 impl Decider for PluralityDecider {
-    fn decide(scores: &[usize]) -> Vec<CandidateId> {
+    type Input = Vec<usize>;
+    type Error = Infallible;
+
+    fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error> {
         let mut cur_max = 0;
         let mut winners = vec![];
 
@@ -16,7 +21,7 @@ impl Decider for PluralityDecider {
             }
         }
 
-        winners
+        Ok(winners)
     }
 }
 
@@ -26,22 +31,25 @@ mod tests {
 
     #[test]
     fn test_one_winner() {
-        let scores = [0, 1, 0, 2];
+        let scores = vec![0, 1, 0, 2];
 
-        assert_eq!(vec![3], PluralityDecider::decide(&scores));
+        assert_eq!(vec![3], PluralityDecider.decide(&scores).unwrap());
     }
 
     #[test]
     fn test_several_winners() {
-        let scores = [0, 1, 0, 1];
+        let scores = vec![0, 1, 0, 1];
 
-        assert_eq!(vec![1, 3], PluralityDecider::decide(&scores));
+        assert_eq!(vec![1, 3], PluralityDecider.decide(&scores).unwrap());
     }
 
     #[test]
     fn test_all_winners() {
-        let scores = [1, 1, 1, 1, 1];
+        let scores = vec![1, 1, 1, 1, 1];
 
-        assert_eq!(vec![0, 1, 2, 3, 4], PluralityDecider::decide(&scores));
+        assert_eq!(
+            vec![0, 1, 2, 3, 4],
+            PluralityDecider.decide(&scores).unwrap()
+        );
     }
 }

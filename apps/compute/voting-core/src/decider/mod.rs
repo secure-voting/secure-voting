@@ -1,7 +1,10 @@
-use crate::types::CandidateId;
+use crate::profile::CandidateId;
 
 pub mod plurality;
 
 pub trait Decider {
-    fn decide(scores: &[usize]) -> Vec<CandidateId>;
+    type Input;
+    type Error;
+
+    fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error>;
 }
