@@ -6,6 +6,8 @@ use std::fmt::Debug;
 
 use crate::profile::{CandidateId, Profile};
 
+pub mod fallthrough;
+
 /// The outcome of performing a tie-breaker.
 pub enum RuleOutcome {
     /// A single winner is chosen.
