@@ -2,6 +2,8 @@
 //!
 //! This module defines the [`Decider`] trait and provides pre-packaged decider implementations.
 
+use std::fmt::Debug;
+
 use crate::profile::CandidateId;
 
 pub mod plurality;
@@ -14,7 +16,7 @@ pub trait Decider {
     /// Error returned when a decision cannot be made.
     ///
     /// Use [`std::convert::Infallible`] if this decider cannot fail.
-    type Error;
+    type Error: Debug;
 
     /// Decides the winner or a set of winners from the scores provided.
     fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error>;

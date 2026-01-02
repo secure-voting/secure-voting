@@ -68,9 +68,6 @@ where
     S: Scorer<Output = D::Input>,
     D: Decider,
     T: TieBreaker,
-    <S as Scorer>::Error: Debug,
-    <D as Decider>::Error: Debug,
-    <T as TieBreaker>::Error: Debug,
 {
     /// Construct a new VotingRule from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
@@ -107,7 +104,7 @@ where
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
-    fn run_pipeline(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
+    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         self.run(profile)
     }
 }

@@ -2,15 +2,18 @@
 //!
 //! This module defines the trait [`VotingRuleExec`] and pre-defined voting rule implementations.
 
+use std::fmt::Debug;
+
 use crate::{profile::Profile, tie_breaker::RuleOutcome};
 
+pub mod adaptors;
 pub mod voting_rule;
 
 /// Trait for all the voting rules, simple and complex ones.
 pub trait VotingRuleExec {
     /// Returned if the voting pipeline can't be completed.
-    type Error;
+    type Error: Debug;
 
     /// Run the constructed pipeline.
-    fn run_pipeline(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error>;
+    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error>;
 }
