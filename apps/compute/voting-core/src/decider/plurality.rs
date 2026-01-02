@@ -1,7 +1,13 @@
+//! Plurality Decider implementation
+
 use std::convert::Infallible;
 
 use crate::{decider::Decider, profile::CandidateId};
 
+/// Plurality decider.
+///
+/// Selects all candidates whose score is equal to the maximum score.
+/// This type is a zero-sized marker implementing [`Decider`].
 pub struct PluralityDecider;
 
 impl Decider for PluralityDecider {
@@ -29,34 +35,22 @@ impl Decider for PluralityDecider {
 mod tests {
     use super::*;
 
+    fn ids(v: Vec<CandidateId>) -> Vec<usize> {
+        v.into_iter().map(|x| x.into_inner()).collect()
+    }
+
     #[test]
     fn test_one_winner() {
         let scores = vec![0, 1, 0, 2];
 
-        assert_eq!(
-            vec![3],
-            PluralityDecider
-                .decide(&scores)
-                .unwrap()
-                .iter()
-                .map(|x| x.into_inner())
-                .collect::<Vec<_>>()
-        );
+        assert_eq!(vec![3], ids(PluralityDecider.decide(&scores).unwrap()));
     }
 
     #[test]
     fn test_several_winners() {
         let scores = vec![0, 1, 0, 1];
 
-        assert_eq!(
-            vec![1, 3],
-            PluralityDecider
-                .decide(&scores)
-                .unwrap()
-                .iter()
-                .map(|x| x.into_inner())
-                .collect::<Vec<_>>()
-        );
+        assert_eq!(vec![1, 3], ids(PluralityDecider.decide(&scores).unwrap()));
     }
 
     #[test]
@@ -65,12 +59,7 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 3, 4],
-            PluralityDecider
-                .decide(&scores)
-                .unwrap()
-                .iter()
-                .map(|x| x.into_inner())
-                .collect::<Vec<_>>()
+            ids(PluralityDecider.decide(&scores).unwrap())
         );
     }
 }
