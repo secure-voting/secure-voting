@@ -1,6 +1,11 @@
 use std::fmt::Debug;
 
-use crate::{decider::Decider, profile::Profile, scorer::Scorer, tie_breaker::TieBreaker};
+use crate::{
+    decider::Decider,
+    profile::{CandidateId, Profile},
+    scorer::Scorer,
+    tie_breaker::TieBreaker,
+};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -25,7 +30,7 @@ pub struct VotingRule<S: Scorer, D: Decider, T: TieBreaker> {
 }
 
 type VotingRuleResult<S, D, T> = Result<
-    usize,
+    CandidateId,
     VotingRuleError<<S as Scorer>::Error, <D as Decider>::Error, <T as TieBreaker>::Error>,
 >;
 

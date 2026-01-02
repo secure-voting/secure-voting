@@ -15,9 +15,9 @@ impl Decider for PluralityDecider {
         for (idx, &score) in scores.iter().enumerate() {
             if score > cur_max {
                 cur_max = score;
-                winners = vec![idx];
+                winners = vec![CandidateId::new(idx)];
             } else if score == cur_max {
-                winners.push(idx);
+                winners.push(CandidateId::new(idx));
             }
         }
 
@@ -33,14 +33,30 @@ mod tests {
     fn test_one_winner() {
         let scores = vec![0, 1, 0, 2];
 
-        assert_eq!(vec![3], PluralityDecider.decide(&scores).unwrap());
+        assert_eq!(
+            vec![3],
+            PluralityDecider
+                .decide(&scores)
+                .unwrap()
+                .iter()
+                .map(|x| x.into_inner())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
     fn test_several_winners() {
         let scores = vec![0, 1, 0, 1];
 
-        assert_eq!(vec![1, 3], PluralityDecider.decide(&scores).unwrap());
+        assert_eq!(
+            vec![1, 3],
+            PluralityDecider
+                .decide(&scores)
+                .unwrap()
+                .iter()
+                .map(|x| x.into_inner())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -49,7 +65,12 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 3, 4],
-            PluralityDecider.decide(&scores).unwrap()
+            PluralityDecider
+                .decide(&scores)
+                .unwrap()
+                .iter()
+                .map(|x| x.into_inner())
+                .collect::<Vec<_>>()
         );
     }
 }

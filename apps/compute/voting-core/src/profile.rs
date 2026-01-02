@@ -1,7 +1,9 @@
+use nutype::nutype;
 use std::ops::Index;
 use thiserror::Error;
 
-pub type CandidateId = usize;
+#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display))]
+pub struct CandidateId(usize);
 
 #[derive(Debug, Clone)]
 pub struct Profile {
