@@ -1,12 +1,21 @@
 use std::ops::Index;
-
-use crate::errors::ProfileError;
+use thiserror::Error;
 
 pub type CandidateId = usize;
 
 #[derive(Debug, Clone)]
 pub struct Profile {
     votes: Vec<Vec<usize>>,
+}
+
+#[derive(Debug, Error)]
+pub enum ProfileError {
+    #[error("Votes have different numbers of candidates")]
+    DifferentVoteLengths,
+    #[error("Candidate ID {0} was incorrect")]
+    InvalidCandidateId(usize),
+    #[error("Candidate ID {0} was voted at least twice")]
+    DoubleVote(usize),
 }
 
 impl Profile {
