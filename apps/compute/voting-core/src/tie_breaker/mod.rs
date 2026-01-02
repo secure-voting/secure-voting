@@ -1,5 +1,11 @@
-use crate::types::{CandidateId, Profile};
+use crate::profile::{CandidateId, Profile};
 
 pub trait TieBreaker {
-    fn tie_break(candidates: &[CandidateId], profile: &Profile) -> CandidateId;
+    type Error;
+
+    fn tie_break(
+        &self,
+        candidates: &[CandidateId],
+        profile: &Profile,
+    ) -> Result<CandidateId, Self::Error>;
 }
