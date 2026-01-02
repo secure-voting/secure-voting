@@ -1,10 +1,20 @@
+//! Plurality scorer implementation.
+//!
+//! Votes are counted only for the first candidate.
+
 use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
+/// Plurality scorer.
+///
+/// Gives one point to the top candidate.
 pub struct PluralityScorer;
 
+/// Plurality scorer error type.
+///
+/// Can only fail if the ballot is empty.
 #[derive(Debug, Error)]
 #[error("Empty ballot")]
 pub struct PluralityScorerError;
@@ -25,9 +35,7 @@ impl Scorer for PluralityScorer {
             .into_par_iter()
             .map(|i| {
                 let mut tmp = vec![0; n_candidates];
-                if !tmp.is_empty() {
-                    tmp[profile[i][0]] = 1;
-                }
+                tmp[profile[i][0]] = 1;
 
                 tmp
             })
@@ -54,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    fn test_incorrect_empty_ballots() {
+    fn test_incorrect_when_no_candidates() {
         let votes = vec![vec![]];
         let scorer = PluralityScorer;
 

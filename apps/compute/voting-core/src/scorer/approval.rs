@@ -1,12 +1,23 @@
+//! Approval scorer implementation.
+//!
+//! Scores the first Q candidates
+
 use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
+/// Q-Approval scorer.
+///
+/// Gives one point to the first Q-candidates.
+/// This type is a zero-sized marker implementing [`Scorer`].
 pub struct ApprovalScorer<const Q: usize>;
 
+/// Approval error type.
+///
+/// Approval scoring has only one way to fail: not enough candidates to score the first Q.
 #[derive(Debug, Error)]
-#[error("Too little candidates for this Q")]
+#[error("Not enough candidates for this Q")]
 pub struct ApprovalScorerError;
 
 impl<const Q: usize> Scorer for ApprovalScorer<Q> {
@@ -44,7 +55,7 @@ mod tests {
 
     #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], vec![3, 3]; "count all")]
     #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]], vec![3, 1, 2]; "count top 2")]
-    fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    fn test_correct_approval_scoring(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
         let scorer = ApprovalScorer::<2>;
 
         assert_eq!(
