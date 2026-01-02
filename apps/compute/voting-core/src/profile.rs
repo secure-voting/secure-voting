@@ -1,30 +1,58 @@
+//! Voting profile implementation.
+//!
+//! A [`Profile`] represents a validated collection of voters' ballots.
+//! Each ballot is a ranking of candidates.
+
 use nutype::nutype;
 use std::ops::Index;
 use thiserror::Error;
 
+/// Strongly-typed Candidate ID.
 #[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display))]
 pub struct CandidateId(usize);
 
+/// Profile type.
+///
+/// Wraps the votes as a newtype.
+/// Upholds these invariants:
+///
+/// - All ballots have the same length
+/// - All candidates' IDs are valid
+/// - Each ballot has no duplicate votes
+///
+/// The order of candidates in each ballot represents the preference of chosen voter.
+/// Closer to the beginning means more preferable.
+///
+/// Only constructed through the [`TryFrom`] trait to enforce invariants.
 #[derive(Debug, Clone)]
 pub struct Profile {
+    /// A list of ranking ballots.
     votes: Vec<Vec<usize>>,
 }
 
+/// Profile's error type.
+///
+/// Is returned upon construction using the [`TryFrom`] trait.
 #[derive(Debug, Error)]
 pub enum ProfileError {
+    /// Returned if ballots from the same profile have different lengths.
     #[error("Votes have different numbers of candidates")]
     DifferentVoteLengths,
+    /// Returned if there is a candidate with an ID too big for the current length (they should be 0..len).
     #[error("Candidate ID {0} was incorrect")]
     InvalidCandidateId(usize),
+    /// Returned if the ballot contains a duplicate vote.
     #[error("Candidate ID {0} was voted at least twice")]
     DoubleVote(usize),
 }
 
 impl Profile {
+    /// Number of candidates in the current profile.
     pub fn n_candidates(&self) -> usize {
         self.votes[0].len()
     }
 
+    /// Number of voters in the current profile.
     pub fn n_voters(&self) -> usize {
         self.votes.len()
     }
