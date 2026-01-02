@@ -1,3 +1,9 @@
+//! Voting rule helper type.
+//!
+//! Allows to modularly combine a scorer, decider and tie-breaker of choice.
+//!
+//! This module defines the [`VotingRule`] struct as well as its [`VotingRuleError`] error type.
+
 use std::fmt::Debug;
 
 use crate::{
@@ -8,6 +14,12 @@ use crate::{
 };
 use thiserror::Error;
 
+/// VotingRule error type.
+///
+/// A voting rule can fail in each of its 3 steps, hence
+/// this error type has 3 variants, one for each step.
+///
+/// Errors are propagated transparently, without adding new information.
 #[derive(Error, Debug)]
 pub enum VotingRuleError<SE, DE, TE>
 where
@@ -15,21 +27,37 @@ where
     DE: Debug,
     TE: Debug,
 {
+    /// Returned when an error occurs in the scoring step.
     #[error(transparent)]
     ScoringError(SE),
+    /// Returned when an error occurs in the decision step.
     #[error(transparent)]
     DecisionError(DE),
+    /// Returned when an error occurs in the tie-break step.
     #[error(transparent)]
     TieBreakError(TE),
 }
 
+/// Voting rule type.
+///
+/// Represents the full pipeline of voting:
+///
+/// 1. Scorer - transforms the raw vote data into score data for further analysis
+/// 2. Decider - chooses a set of winners depending on the score information
+/// 3. TieBreaker - chooses an absolute winner from the selected set
 pub struct VotingRule<S: Scorer, D: Decider, T: TieBreaker> {
+    /// A scorer instance.
     scorer: S,
+    /// A decider instance.
     decider: D,
+    /// A tie-breaker instance.
     tiebreaker: T,
 }
 
-type VotingRuleResult<S, D, T> = Result<
+/// Helper result type returned from the [`run`] method of [`VotingRule`] struct.
+///
+/// Allows the method to fail in each of 3 steps, propagating the returned error up.
+pub type VotingRuleResult<S, D, T> = Result<
     CandidateId,
     VotingRuleError<<S as Scorer>::Error, <D as Decider>::Error, <T as TieBreaker>::Error>,
 >;
@@ -43,6 +71,7 @@ where
     <D as Decider>::Error: Debug,
     <T as TieBreaker>::Error: Debug,
 {
+    /// Construct a new VotingRule from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
         Self {
             scorer,
@@ -51,6 +80,9 @@ where
         }
     }
 
+    /// Run the constructed pipeline.
+    ///
+    /// Returns an error if any of the steps didn't succeed.
     pub fn run(&self, profile: &Profile) -> VotingRuleResult<S, D, T> {
         let scores = self
             .scorer
