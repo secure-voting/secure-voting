@@ -1,7 +1,7 @@
 //! Anti-plurality voting rule implementation.
 
 use crate::{
-    decider::plurality::PluralityDecider, scorer::anti_plurality::AntiPluralityScorer,
+    decider::majority::MajorityDecider, scorer::anti_plurality::AntiPluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -11,4 +11,4 @@ use crate::{
 /// Winners are selected by the plurality among their score sums.
 /// If there are several winners, the result is left undecided.
 pub type AntiPluralityRule =
-    VotingRule<AntiPluralityScorer, PluralityDecider, FallthroughTieBreaker>;
+    VotingRule<AntiPluralityScorer, MajorityDecider, FallthroughTieBreaker>;

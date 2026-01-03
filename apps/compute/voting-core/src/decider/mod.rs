@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use crate::profile::CandidateId;
 
 pub mod condorcet;
-pub mod plurality;
+pub mod majority;
 
 /// Chooses a winner or a set of winners from computed scores.
 pub trait Decider {

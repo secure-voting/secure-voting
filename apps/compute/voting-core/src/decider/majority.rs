@@ -1,16 +1,16 @@
-//! Plurality Decider implementation
+//! Majority Decider implementation
 
 use std::convert::Infallible;
 
 use crate::{decider::Decider, profile::CandidateId};
 
-/// Plurality decider.
+/// Majority decider.
 ///
 /// Selects all candidates whose score is equal to the maximum score.
 /// This type is a zero-sized marker implementing [`Decider`].
-pub struct PluralityDecider;
+pub struct MajorityDecider;
 
-impl Decider for PluralityDecider {
+impl Decider for MajorityDecider {
     type Input = Vec<usize>;
     type Error = Infallible;
 
@@ -43,14 +43,14 @@ mod tests {
     fn test_one_winner() {
         let scores = vec![0, 1, 0, 2];
 
-        assert_eq!(vec![3], ids(PluralityDecider.decide(&scores).unwrap()));
+        assert_eq!(vec![3], ids(MajorityDecider.decide(&scores).unwrap()));
     }
 
     #[test]
     fn test_several_winners() {
         let scores = vec![0, 1, 0, 1];
 
-        assert_eq!(vec![1, 3], ids(PluralityDecider.decide(&scores).unwrap()));
+        assert_eq!(vec![1, 3], ids(MajorityDecider.decide(&scores).unwrap()));
     }
 
     #[test]
@@ -59,7 +59,7 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 3, 4],
-            ids(PluralityDecider.decide(&scores).unwrap())
+            ids(MajorityDecider.decide(&scores).unwrap())
         );
     }
 }
