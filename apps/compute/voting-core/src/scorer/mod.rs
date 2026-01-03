@@ -6,6 +6,7 @@ use std::fmt::Debug;
 
 use crate::profile::Profile;
 
+pub mod anti_plurality;
 pub mod approval;
 pub mod plurality;
 
