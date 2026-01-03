@@ -2,16 +2,11 @@
 //!
 //! Calculates all head-to-head candidates' scores.
 
-pub mod matrix;
-
 use std::convert::Infallible;
 
 use rayon::prelude::*;
 
-use crate::{
-    profile::Profile,
-    scorer::{Scorer, condorcet::matrix::CondorcetMatrix},
-};
+use crate::{matrix::CondorcetMatrix, profile::Profile, scorer::Scorer};
 
 /// Condorcet Scorer type.
 ///

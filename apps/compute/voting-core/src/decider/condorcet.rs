@@ -2,7 +2,7 @@
 
 use std::convert::Infallible;
 
-use crate::{decider::Decider, profile::CandidateId, scorer::condorcet::matrix::CondorcetMatrix};
+use crate::{decider::Decider, matrix::CondorcetMatrix, profile::CandidateId};
 
 /// Condorcet decider.
 ///

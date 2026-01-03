@@ -8,6 +8,7 @@
 #![warn(clippy::missing_docs_in_private_items)]
 
 pub mod decider;
+pub mod matrix;
 pub mod prelude;
 pub mod profile;
 pub mod scorer;
