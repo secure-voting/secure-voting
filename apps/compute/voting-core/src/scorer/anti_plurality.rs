@@ -2,8 +2,9 @@
 //!
 //! Votes are counted for all candidates except the last one.
 
+use std::convert::Infallible;
+
 use rayon::prelude::*;
-use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
@@ -12,24 +13,13 @@ use crate::{profile::Profile, scorer::Scorer};
 /// Gives one point to everyone except the bottom candidate.
 pub struct AntiPluralityScorer;
 
-/// Anti-plurality scorer error type.
-///
-/// Can only fail if the ballot is empty.
-#[derive(Debug, Error)]
-#[error("Empty ballot")]
-pub struct AntiPluralityScorerError;
-
 impl Scorer for AntiPluralityScorer {
-    type Error = AntiPluralityScorerError;
+    type Error = Infallible;
     type Output = Vec<usize>;
 
     fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
-
-        if n_candidates == 0 {
-            return Err(AntiPluralityScorerError);
-        }
 
         Ok((0..n_voters)
             .into_par_iter()
@@ -63,16 +53,5 @@ mod tests {
             answer,
             scorer.compute_score(&votes.try_into().unwrap()).unwrap()
         );
-    }
-
-    #[test]
-    fn test_incorrect_when_no_candidates() {
-        let votes = vec![vec![]];
-        let scorer = AntiPluralityScorer;
-
-        assert!(matches!(
-            scorer.compute_score(&votes.try_into().unwrap()),
-            Err(AntiPluralityScorerError)
-        ));
     }
 }

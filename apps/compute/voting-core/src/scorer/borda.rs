@@ -2,8 +2,9 @@
 //!
 //! Scores each candidate depending on its rank. The last one gets 0 points, the next one gets one more and so on.
 
+use std::convert::Infallible;
+
 use rayon::prelude::*;
-use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
@@ -12,25 +13,14 @@ use crate::{profile::Profile, scorer::Scorer};
 /// Gives n-1 points to the first candiate, n-2 to the second, ..., 1 to (n-1)th and 0 to the last.
 pub struct BordaScorer;
 
-/// Borda scorer error.
-///
-/// Returned only when the ballot scored is empty.
-#[derive(Error, Debug)]
-#[error("Empty ballots")]
-pub struct BordaScorerError;
-
 impl Scorer for BordaScorer {
     type Output = Vec<usize>;
 
-    type Error = BordaScorerError;
+    type Error = Infallible;
 
     fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
-
-        if n_candidates == 0 {
-            return Err(BordaScorerError);
-        }
 
         Ok((0..n_voters)
             .into_par_iter()
@@ -54,16 +44,6 @@ impl Scorer for BordaScorer {
 mod tests {
     use super::*;
     use test_case::test_case;
-
-    #[test]
-    fn test_incorrect_no_candidates() {
-        let votes = vec![vec![], vec![]];
-
-        assert!(matches!(
-            BordaScorer.compute_score(&votes.try_into().unwrap()),
-            Err(BordaScorerError)
-        ))
-    }
 
     #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3], vec![1, 2, 3, 0]], vec![6, 7, 4, 1]; "simple example")]
     fn test_correct_borda_ranking(votes: Vec<Vec<usize>>, answer: Vec<usize>) {

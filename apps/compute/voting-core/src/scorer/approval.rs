@@ -64,7 +64,6 @@ mod tests {
         );
     }
 
-    #[test_case(vec![vec![]]; "empty votes")]
     #[test_case(vec![vec![0, 1], vec![1, 0], vec![0, 1]]; "less than q")]
     fn test_incorrect_too_little_candidates_for_this_q(votes: Vec<Vec<usize>>) {
         let scorer = ApprovalScorer::<3>;

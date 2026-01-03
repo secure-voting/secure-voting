@@ -2,8 +2,9 @@
 //!
 //! Votes are counted only for the first candidate.
 
+use std::convert::Infallible;
+
 use rayon::prelude::*;
-use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
@@ -12,24 +13,13 @@ use crate::{profile::Profile, scorer::Scorer};
 /// Gives one point to the top candidate.
 pub struct PluralityScorer;
 
-/// Plurality scorer error type.
-///
-/// Can only fail if the ballot is empty.
-#[derive(Debug, Error)]
-#[error("Empty ballot")]
-pub struct PluralityScorerError;
-
 impl Scorer for PluralityScorer {
-    type Error = PluralityScorerError;
+    type Error = Infallible;
     type Output = Vec<usize>;
 
     fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
-
-        if n_candidates == 0 {
-            return Err(PluralityScorerError);
-        }
 
         Ok((0..n_voters)
             .into_par_iter()
@@ -59,16 +49,5 @@ mod tests {
             answer,
             scorer.compute_score(&votes.try_into().unwrap()).unwrap()
         );
-    }
-
-    #[test]
-    fn test_incorrect_when_no_candidates() {
-        let votes = vec![vec![]];
-        let scorer = PluralityScorer;
-
-        assert!(matches!(
-            scorer.compute_score(&votes.try_into().unwrap()),
-            Err(PluralityScorerError)
-        ));
     }
 }
