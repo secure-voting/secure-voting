@@ -35,7 +35,7 @@ impl Scorer for PluralityScorer {
             .into_par_iter()
             .map(|i| {
                 let mut tmp = vec![0; n_candidates];
-                tmp[profile[i][0]] = 1;
+                tmp[profile[i][0].into_inner()] = 1;
 
                 tmp
             })

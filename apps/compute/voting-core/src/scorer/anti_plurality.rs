@@ -37,7 +37,7 @@ impl Scorer for AntiPluralityScorer {
                 let mut tmp = vec![0; n_candidates];
 
                 for j in 0..n_candidates - 1 {
-                    tmp[profile[i][j]] += 1;
+                    tmp[profile[i][j].into_inner()] += 1;
                 }
 
                 tmp

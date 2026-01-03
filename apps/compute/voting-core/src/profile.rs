@@ -27,7 +27,7 @@ pub struct CandidateId(usize);
 #[derive(Debug, Clone)]
 pub struct Profile {
     /// A list of ranking ballots.
-    votes: Vec<Vec<usize>>,
+    votes: Vec<Vec<CandidateId>>,
 }
 
 /// Profile's error type.
@@ -35,6 +35,12 @@ pub struct Profile {
 /// Is returned upon construction using the [`TryFrom`] trait.
 #[derive(Debug, Error)]
 pub enum ProfileError {
+    /// Returned if there are no voters in the profile
+    #[error("No voters")]
+    NoVoters,
+    /// Returned if there are no candidates in the profile
+    #[error("No candidates")]
+    NoCandidates,
     /// Returned if ballots from the same profile have different lengths.
     #[error("Votes have different numbers of candidates")]
     DifferentVoteLengths,
@@ -59,7 +65,7 @@ impl Profile {
 }
 
 impl Index<usize> for Profile {
-    type Output = Vec<usize>;
+    type Output = Vec<CandidateId>;
 
     fn index(&self, index: usize) -> &Self::Output {
         &self.votes[index]
@@ -70,6 +76,14 @@ impl TryFrom<Vec<Vec<usize>>> for Profile {
     type Error = ProfileError;
 
     fn try_from(value: Vec<Vec<usize>>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err(ProfileError::NoVoters);
+        }
+
+        if value[0].is_empty() {
+            return Err(ProfileError::NoCandidates);
+        }
+
         if (1..value.len()).any(|row| value[row].len() != value[0].len()) {
             return Err(ProfileError::DifferentVoteLengths);
         }
@@ -89,13 +103,43 @@ impl TryFrom<Vec<Vec<usize>>> for Profile {
             }
         }
 
-        Ok(Profile { votes: value })
+        Ok(Profile {
+            votes: value
+                .iter()
+                .map(|voter_info| {
+                    voter_info
+                        .iter()
+                        .map(|&cand_id| CandidateId::new(cand_id))
+                        .collect()
+                })
+                .collect(),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_incorrect_no_voters() {
+        let votes = vec![];
+
+        assert!(matches!(
+            TryInto::<Profile>::try_into(votes),
+            Err(ProfileError::NoVoters)
+        ));
+    }
+
+    #[test]
+    fn test_incorrect_no_candidates() {
+        let votes = vec![vec![]];
+
+        assert!(matches!(
+            TryInto::<Profile>::try_into(votes),
+            Err(ProfileError::NoCandidates)
+        ));
+    }
 
     #[test]
     fn test_incorrect_different_vote_lenghts() {

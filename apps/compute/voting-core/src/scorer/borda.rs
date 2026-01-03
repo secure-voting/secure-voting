@@ -38,7 +38,7 @@ impl Scorer for BordaScorer {
                 let mut tmp = vec![0; n_candidates];
 
                 for j in 0..n_candidates {
-                    tmp[profile[i][j]] = n_candidates - j - 1;
+                    tmp[profile[i][j].into_inner()] = n_candidates - j - 1;
                 }
 
                 tmp
