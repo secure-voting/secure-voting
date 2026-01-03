@@ -20,4 +20,4 @@ unwrap_used = "warn"
 expect_used = "warn"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "warn"
