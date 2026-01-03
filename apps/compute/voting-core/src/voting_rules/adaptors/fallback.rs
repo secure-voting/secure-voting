@@ -49,8 +49,8 @@ where
 
     fn execute(&self, profile: &crate::profile::Profile) -> Result<RuleOutcome, Self::Error> {
         match self.primary.execute(profile) {
-            Ok(RuleOutcome::Winner(winner)) => Ok(RuleOutcome::Winner(winner)),
-            Ok(RuleOutcome::Undecided) => self
+            Ok(RuleOutcome::UniqueWinner(winner)) => Ok(RuleOutcome::UniqueWinner(winner)),
+            Ok(RuleOutcome::MultipleWinners(_)) => self
                 .fallback
                 .execute(profile)
                 .map_err(FallbackError::FallbackError),

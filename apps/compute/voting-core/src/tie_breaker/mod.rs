@@ -11,9 +11,9 @@ pub mod fallthrough;
 /// The outcome of performing a tie-breaker.
 pub enum RuleOutcome {
     /// A single winner is chosen.
-    Winner(CandidateId),
+    UniqueWinner(CandidateId),
     /// This tie-breaker can't decide a winner
-    Undecided,
+    MultipleWinners(Vec<CandidateId>),
 }
 
 /// Resolves ties between selected winners to determine a single absolute winner.

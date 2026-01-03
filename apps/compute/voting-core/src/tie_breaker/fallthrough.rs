@@ -7,6 +7,12 @@ use crate::{
     tie_breaker::{RuleOutcome, TieBreaker},
 };
 
+/// Fallthrough Tie breaker.
+///
+/// Does nothing:
+///
+/// - If there is a single winner, returns [`RuleOutcome::UniqueWinner`] with a chosen winner.
+/// - If there are multiple winners, returns [`RuleOutcome::MultipleWinners`] with all of the winners.
 pub struct FallthroughTieBreaker;
 
 impl TieBreaker for FallthroughTieBreaker {
@@ -18,8 +24,8 @@ impl TieBreaker for FallthroughTieBreaker {
         _profile: &Profile,
     ) -> Result<RuleOutcome, Self::Error> {
         match candidates.len() {
-            1 => Ok(RuleOutcome::Winner(candidates[0])),
-            _ => Ok(RuleOutcome::Undecided),
+            1 => Ok(RuleOutcome::UniqueWinner(candidates[0])),
+            _ => Ok(RuleOutcome::MultipleWinners(candidates.to_vec())),
         }
     }
 }

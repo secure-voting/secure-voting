@@ -9,6 +9,7 @@ use crate::{profile::Profile, tie_breaker::RuleOutcome};
 pub mod adaptors;
 pub mod voting_rule;
 
+pub mod approval;
 pub mod plurality;
 
 /// Trait for all the voting rules, simple and complex ones.
