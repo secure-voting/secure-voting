@@ -8,6 +8,8 @@ use crate::profile::Profile;
 
 pub mod anti_plurality;
 pub mod approval;
+pub mod borda;
+pub mod condorcet;
 pub mod plurality;
 
 /// Computes the scores for the profile of voters.

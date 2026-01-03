@@ -3,6 +3,7 @@
 //! Scores each candidate depending on its rank. The last one gets 0 points, the next one gets one more and so on.
 
 use rayon::prelude::*;
+use thiserror::Error;
 
 use crate::{profile::Profile, scorer::Scorer};
 
@@ -37,7 +38,7 @@ impl Scorer for BordaScorer {
                 let mut tmp = vec![0; n_candidates];
 
                 for j in 0..n_candidates {
-                    tmp[profile[i][j]] = n - j - 1;
+                    tmp[profile[i][j]] = n_candidates - j - 1;
                 }
 
                 tmp
@@ -52,6 +53,7 @@ impl Scorer for BordaScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn test_incorrect_no_candidates() {
@@ -63,11 +65,13 @@ mod tests {
         ))
     }
 
-    #[test_case(vec![vec![3, 2, 1, 0], vec![3, 2, 1, 0], vec![0, 3, 2, 1]], vec![6, 7, 4, 1]; "simple example")]
+    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3], vec![1, 2, 3, 0]], vec![6, 7, 4, 1]; "simple example")]
     fn test_correct_borda_ranking(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
         assert_eq!(
             answer,
-            BordaScorer.compute_score(&votes.try_into().unwrap())
+            BordaScorer
+                .compute_score(&votes.try_into().unwrap())
+                .unwrap()
         );
     }
 }
