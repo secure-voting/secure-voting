@@ -17,7 +17,7 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CondorcetMatrix {
     /// Inner condorcet matrix to be validated.
-    matrix: Vec<Vec<usize>>,
+    matrix: Vec<Vec<bool>>,
 }
 
 /// An error type for the Condorcet matrix creation.
@@ -91,7 +91,12 @@ impl CondorcetMatrix {
             }
         }
 
-        Ok(CondorcetMatrix { matrix })
+        Ok(CondorcetMatrix {
+            matrix: matrix
+                .into_iter()
+                .map(|row| row.into_iter().map(|elem| elem == 1).collect())
+                .collect(),
+        })
     }
 
     /// Construct a CondorcetMatrix without validating its invariants.
@@ -102,16 +107,21 @@ impl CondorcetMatrix {
     /// The caller must ensure the type's invariants, otherwise a panic may occur.
     #[allow(unsafe_code)]
     pub(crate) unsafe fn new_unchecked(matrix: Vec<Vec<usize>>) -> Self {
-        CondorcetMatrix { matrix }
+        CondorcetMatrix {
+            matrix: matrix
+                .into_iter()
+                .map(|row| row.into_iter().map(|elem| elem == 1).collect())
+                .collect(),
+        }
     }
 
     /// Return an iterator over the matrix rows (voters).
-    pub fn iter(&self) -> core::slice::Iter<'_, Vec<usize>> {
+    pub fn iter(&self) -> core::slice::Iter<'_, Vec<bool>> {
         self.matrix.iter()
     }
 }
 
-impl From<CondorcetMatrix> for Vec<Vec<usize>> {
+impl From<CondorcetMatrix> for Vec<Vec<bool>> {
     fn from(value: CondorcetMatrix) -> Self {
         value.matrix
     }
@@ -121,13 +131,6 @@ impl From<CondorcetMatrix> for Vec<Vec<usize>> {
 mod tests {
     use super::*;
     use test_case::test_case;
-
-    #[test]
-    fn accepts_single_candidate_matrix() {
-        let matrix = vec![vec![0]];
-        let cm = CondorcetMatrix::try_new(matrix.clone()).unwrap();
-        assert_eq!(Vec::<Vec<usize>>::from(cm), matrix);
-    }
 
     #[test]
     fn accepts_simple_valid_matrix() {

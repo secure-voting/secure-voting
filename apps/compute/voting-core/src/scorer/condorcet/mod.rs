@@ -105,16 +105,16 @@ mod tests {
     fn test_correct_condorcet_matrix_single_vote() {
         let votes = vec![vec![1, 2, 0, 3]];
         let answer = vec![
-            vec![0, 0, 0, 1],
-            vec![1, 0, 1, 1],
-            vec![1, 0, 0, 1],
-            vec![0, 0, 0, 0],
+            vec![false, false, false, true],
+            vec![true, false, true, true],
+            vec![true, false, false, true],
+            vec![false, false, false, false],
         ];
         let profile = votes.try_into().unwrap();
 
         assert_eq!(
             answer,
-            Into::<Vec<Vec<usize>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
+            Into::<Vec<Vec<bool>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
         );
     }
 
@@ -122,16 +122,16 @@ mod tests {
     fn test_correct_condorcet_matrix_multiple_votes() {
         let votes = vec![vec![1, 2, 0, 3], vec![3, 0, 2, 1], vec![0, 2, 1, 3]];
         let answer = vec![
-            vec![0, 1, 1, 1],
-            vec![0, 0, 0, 1],
-            vec![0, 1, 0, 1],
-            vec![0, 0, 0, 0],
+            vec![false, true, true, true],
+            vec![false, false, false, true],
+            vec![false, true, false, true],
+            vec![false, false, false, false],
         ];
         let profile = votes.try_into().unwrap();
 
         assert_eq!(
             answer,
-            Into::<Vec<Vec<usize>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
+            Into::<Vec<Vec<bool>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
         );
     }
 }

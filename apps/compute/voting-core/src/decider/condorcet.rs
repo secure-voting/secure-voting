@@ -17,7 +17,7 @@ impl Decider for CondorcetDecider {
 
     fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error> {
         for (idx, row) in scores.iter().enumerate() {
-            if row.iter().sum::<usize>() + 1 == row.len() {
+            if row.iter().map(|&elem| elem as usize).sum::<usize>() + 1 == row.len() {
                 return Ok(vec![CandidateId::new(idx)]);
             }
         }
