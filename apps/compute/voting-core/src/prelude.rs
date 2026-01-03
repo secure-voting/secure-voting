@@ -18,4 +18,5 @@
 //! 16. Nanson
 //! 17. Coombs
 
+pub use crate::voting_rules::approval::ApprovalRule;
 pub use crate::voting_rules::plurality::PluralityRule;
