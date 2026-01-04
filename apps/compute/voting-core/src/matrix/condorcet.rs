@@ -48,7 +48,6 @@ impl CondorcetMatrix {
     /// Construct a validated Condorcet Matrix.
     ///
     /// Validates all the type invariants. See [`CondorcetMatrix`] docs.
-    #[allow(clippy::needless_range_loop)]
     pub fn try_new(matrix: Vec<Vec<usize>>) -> Result<CondorcetMatrix, CondorcetMatrixError> {
         if matrix.is_empty() {
             return Err(CondorcetMatrixError::EmptyMatrix);
@@ -84,6 +83,7 @@ impl CondorcetMatrix {
             return Err(CondorcetMatrixError::NonBinaryElement);
         }
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..rows {
             for j in i + 1..rows {
                 if matrix[i][j] + matrix[j][i] != 1 {
