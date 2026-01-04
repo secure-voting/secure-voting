@@ -3,6 +3,7 @@
 //! This module defines the [`PairwiseMatrix`] type and its [`PairwiseMatrixError`] error type.
 
 use rayon::prelude::*;
+use thiserror::Error;
 
 use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
 
@@ -18,12 +19,88 @@ use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
 pub struct PairwiseMatrix {
     /// Underlying voting result matrix type
     matrix: Vec<Vec<usize>>,
+    /// The count of voters in this result
+    n_voters: usize,
+}
+
+/// Pairwise matrix error type.
+///
+/// Returned when some invariants are not upheld when creating the matrix.
+#[derive(Error, Debug)]
+pub enum PairwiseMatrixError {
+    /// If the matrix has 0 rows.
+    #[error("Matrix is empty")]
+    EmptyMatrix,
+    /// Matrix has rows of different lengths.
+    #[error("Some rows have different lengths")]
+    NonMatrix,
+    /// Matrix is not square.
+    #[error("Matrix is not square")]
+    NonSquareMatrix,
+    /// Some diagonal elements are not zero.
+    #[error("Diagonal element is not zero")]
+    NonZeroDiagonal,
+    /// matrix\[i\]\[j\] + matrix\[j\]\[i\] = n doesn't hold.
+    #[error("Matrix is not anti-symmetric")]
+    NonAntiSymmetric,
 }
 
 impl PairwiseMatrix {
+    /// Create a validatied pairwise matrix.
+    ///
+    /// Ensures the invariants of the type are upheld. Otherwise [`PairwiseMatrixError`] is returned.
+    pub fn try_new(matrix: Vec<Vec<usize>>, n_voters: usize) -> Result<Self, PairwiseMatrixError> {
+        if matrix.is_empty() {
+            return Err(PairwiseMatrixError::EmptyMatrix);
+        }
+
+        let row_0_len = matrix[0].len();
+
+        if matrix
+            .iter()
+            .skip(1)
+            .map(|row| row.len())
+            .any(|row_len| row_len != row_0_len)
+        {
+            return Err(PairwiseMatrixError::NonMatrix);
+        }
+
+        let rows = matrix.len();
+        let cols = row_0_len;
+
+        if rows != cols {
+            return Err(PairwiseMatrixError::NonSquareMatrix);
+        }
+
+        if matrix
+            .iter()
+            .enumerate()
+            .map(|(idx, row)| row[idx])
+            .any(|elem| elem != 0)
+        {
+            return Err(PairwiseMatrixError::NonZeroDiagonal);
+        }
+
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..rows {
+            for j in i + 1..rows {
+                if matrix[i][j] + matrix[j][i] != n_voters {
+                    return Err(PairwiseMatrixError::NonAntiSymmetric);
+                }
+            }
+        }
+
+        Ok(Self { matrix, n_voters })
+    }
+
     /// Return the square matrix's row/col count.
     pub fn n(&self) -> usize {
         self.matrix.len()
+    }
+
+    /// Return the voter count.
+    pub fn n_voters(&self) -> usize {
+        self.n_voters
     }
 
     /// Check whether the i-th candidate strongly beats the j-th candidate
@@ -80,6 +157,7 @@ impl From<&Profile> for PairwiseMatrix {
 
         PairwiseMatrix {
             matrix: vote_counts,
+            n_voters: profile.n_voters(),
         }
     }
 }
