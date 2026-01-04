@@ -22,9 +22,76 @@ impl Scorer for CopelandIIIScorer {
         let n_candidates = profile.n_candidates();
 
         let scores = (0..n_candidates)
-            .map(|i| (0..n_candidates).map(|j| pairwise.margin(i, j)).sum())
+            .map(|i| {
+                (0..n_candidates)
+                    .filter(|&j| j != i)
+                    .map(|j| pairwise.margin(i, j))
+                    .sum()
+            })
             .collect();
 
         Ok(scores)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copeland_single_vote_linear_order() {
+        let votes = vec![vec![0, 1, 2, 3]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![3, 1, -1, -3]);
+    }
+
+    #[test]
+    fn copeland_condorcet_winner() {
+        let votes = vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![6, -2, -4]);
+    }
+
+    #[test]
+    fn copeland_cycle() {
+        let votes = vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn copeland_two_candidates() {
+        let votes = vec![vec![0, 1], vec![0, 1], vec![1, 0]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![1, -1]);
+    }
+
+    #[test]
+    fn copeland_all_tied() {
+        let votes = vec![
+            vec![0, 1, 2],
+            vec![1, 2, 0],
+            vec![2, 0, 1],
+            vec![0, 2, 1],
+            vec![1, 0, 2],
+            vec![2, 1, 0],
+        ];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![0, 0, 0]);
     }
 }
