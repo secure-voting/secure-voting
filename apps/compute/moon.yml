@@ -38,3 +38,8 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
+  coverage:
+    command: 'cargo tarpaulin'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
