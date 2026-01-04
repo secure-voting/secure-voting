@@ -40,19 +40,17 @@ impl PairwiseMatrix {
 /// Matrices should be non-empty and same sized.
 /// Otherwise an Out-of-bounds panic can occur.
 #[allow(unsafe_code)]
-unsafe fn sum_matrix(matrix_a: Vec<Vec<usize>>, matrix_b: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+unsafe fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
     assert_eq!(matrix_a.len(), matrix_b.len());
     assert_eq!(matrix_a[0].len(), matrix_b[0].len());
 
-    let mut result = vec![vec![0; matrix_a.len()]; matrix_a.len()];
-
     for i in 0..matrix_a.len() {
         for j in 0..matrix_b[0].len() {
-            result[i][j] = matrix_a[i][j] + matrix_b[i][j];
+            matrix_a[i][j] += matrix_b[i][j];
         }
     }
 
-    result
+    matrix_a
 }
 
 impl From<&Profile> for PairwiseMatrix {
