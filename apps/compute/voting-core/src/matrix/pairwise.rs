@@ -16,6 +16,7 @@ use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
 /// 3. It is a square-matrix
 /// 4. The diagonal is zero-ed out
 /// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n, if i != j and n is the number of voters.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PairwiseMatrix {
     /// Underlying voting result matrix type
     matrix: Vec<Vec<usize>>,
@@ -26,7 +27,7 @@ pub struct PairwiseMatrix {
 /// Pairwise matrix error type.
 ///
 /// Returned when some invariants are not upheld when creating the matrix.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum PairwiseMatrixError {
     /// If the matrix has 0 rows.
     #[error("Matrix is empty")]
@@ -182,5 +183,39 @@ impl From<PairwiseMatrix> for CondorcetMatrix {
         unsafe {
             CondorcetMatrix::new_unchecked(result)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test]
+    fn accepts_simple_valid_matrix() {
+        let matrix = vec![vec![0, 1], vec![0, 0]];
+        assert!(PairwiseMatrix::try_new(matrix, 1).is_ok());
+    }
+
+    #[test]
+    fn accepts_larger_valid_matrix() {
+        let matrix = vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]];
+
+        assert!(PairwiseMatrix::try_new(matrix, 1).is_ok());
+    }
+
+    use PairwiseMatrixError::*;
+
+    #[test_case(vec![], 0, EmptyMatrix; "empty matrix")]
+    #[test_case(vec![vec![0, 1], vec![0]], 0, NonMatrix; "non matrix")]
+    #[test_case(vec![vec![0, 1, 0], vec![1, 0, 0]], 0, NonSquareMatrix; "non sqaure matrix")]
+    #[test_case(vec![vec![0, 1], vec![1, 1]], 0, NonZeroDiagonal; "non zero diagonal")]
+    #[test_case(vec![vec![0, 1], vec![1, 0]], 1, NonAntiSymmetric; "non-antisymmetric pair")]
+    fn test_incorrect_invariant_violated(
+        input: Vec<Vec<usize>>,
+        n_voters: usize,
+        error: PairwiseMatrixError,
+    ) {
+        assert_eq!(PairwiseMatrix::try_new(input, n_voters).unwrap_err(), error);
     }
 }
