@@ -9,7 +9,10 @@ use crate::{matrix::PairwiseMatrix, prelude::Profile, scorer::Scorer};
 /// Copeland II scorer.
 ///
 /// The score of each candidate is equal to the
-/// difference in strict wins and strict losses.
+/// difference in strict wins and strict losses
+/// in eacah head-to-head.
+///
+/// Ties contribute 0.
 pub struct CopelandIIScorer;
 
 impl Scorer for CopelandIIScorer {
@@ -24,6 +27,7 @@ impl Scorer for CopelandIIScorer {
         let scores = (0..n_candidates)
             .map(|i| {
                 (0..n_candidates)
+                    .filter(|&j| i != j)
                     .map(|j| {
                         if pairwise.beats(i, j) {
                             1
@@ -38,5 +42,67 @@ impl Scorer for CopelandIIScorer {
             .collect();
 
         Ok(scores)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copeland_single_vote_linear_order() {
+        let votes = vec![vec![0, 1, 2, 3]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![3, 1, -1, -3]);
+    }
+
+    #[test]
+    fn copeland_condorcet_winner() {
+        let votes = vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![2, 0, -2]);
+    }
+
+    #[test]
+    fn copeland_cycle() {
+        let votes = vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn copeland_two_candidates() {
+        let votes = vec![vec![0, 1], vec![0, 1], vec![1, 0]];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![1, -1]);
+    }
+
+    #[test]
+    fn copeland_all_tied() {
+        let votes = vec![
+            vec![0, 1, 2],
+            vec![1, 2, 0],
+            vec![2, 0, 1],
+            vec![0, 2, 1],
+            vec![1, 0, 2],
+            vec![2, 1, 0],
+        ];
+        let profile = votes.try_into().unwrap();
+
+        let scores = CopelandIIScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![0, 0, 0]);
     }
 }
