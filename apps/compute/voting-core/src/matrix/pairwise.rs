@@ -109,6 +109,11 @@ impl PairwiseMatrix {
     pub fn beats(&self, i: usize, j: usize) -> bool {
         self.matrix[i][j] > self.matrix[j][i]
     }
+
+    /// Return the margin of win/loss between candidates i and j.
+    pub fn margin(&self, i: usize, j: usize) -> isize {
+        self.matrix[i][j] as isize - self.matrix[j][i] as isize
+    }
 }
 
 /// Helper function to sum 2 matrices of the same size.
