@@ -3,7 +3,6 @@
 //! This module defines the [`CondorcetMatrix`] type and its [`CondorcetMatrixError`] error type.
 
 use std::fmt::Debug;
-use thiserror::Error;
 
 /// Wrapper type over the matrix.
 ///
