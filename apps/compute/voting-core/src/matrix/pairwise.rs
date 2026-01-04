@@ -35,9 +35,12 @@ impl PairwiseMatrix {
 
 /// Helper function to sum 2 matrices of the same size.
 ///
-/// Assumes that matrices actually have the same size.
-/// Panics if they are different sizes.
-fn sum_matrix(matrix_a: Vec<Vec<usize>>, matrix_b: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+/// SAFETY:
+///
+/// Matrices should be non-empty and same sized.
+/// Otherwise an Out-of-bounds panic can occur.
+#[allow(unsafe_code)]
+unsafe fn sum_matrix(matrix_a: Vec<Vec<usize>>, matrix_b: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
     assert_eq!(matrix_a.len(), matrix_b.len());
     assert_eq!(matrix_a[0].len(), matrix_b[0].len());
 
@@ -71,7 +74,11 @@ impl From<&Profile> for PairwiseMatrix {
 
                 matrix
             })
-            .reduce(|| vec![vec![0; n_candidates]; n_candidates], sum_matrix);
+            .reduce(
+                || vec![vec![0; n_candidates]; n_candidates],
+                #[allow(unsafe_code)]
+                |a, b| unsafe { sum_matrix(a, b) },
+            );
 
         PairwiseMatrix {
             matrix: vote_counts,
