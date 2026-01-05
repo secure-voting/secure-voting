@@ -8,9 +8,9 @@ use crate::{
 };
 
 /// Helper Condorcet Voting rule type.
-type CondorcetRule = VotingRule<CondorcetScorer, CondorcetDecider, FallthroughTieBreaker>;
+type CondorcetRule<TB = FallthroughTieBreaker> = VotingRule<CondorcetScorer, CondorcetDecider, TB>;
 
 /// Black Voting rule type.
 ///
 /// If there is a Condorcet Winner, choose them, otherwise use Borda as fallback.
-pub type BlackRule = Fallback<CondorcetRule, BordaRule>;
+pub type BlackRule<TB> = Fallback<CondorcetRule<TB>, BordaRule>;

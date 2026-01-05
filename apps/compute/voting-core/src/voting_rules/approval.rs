@@ -10,5 +10,5 @@ use crate::{
 /// Each voter gives one point to their top `Q` candidates.
 /// Winners are selected using plurality over the aggregated approval scores.
 /// If multiple winners remain, the result is left undecided.
-pub type ApprovalRule<const Q: usize> =
-    VotingRule<ApprovalScorer<Q>, MajorityDecider, FallthroughTieBreaker>;
+pub type ApprovalRule<const Q: usize, TB = FallthroughTieBreaker> =
+    VotingRule<ApprovalScorer<Q>, MajorityDecider, TB>;
