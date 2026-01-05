@@ -22,9 +22,10 @@ where
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         let outcome = self.voting_rule.execute(profile)?;
 
-        match (self.predicate)(&outcome) {
-            true => Ok(outcome),
-            false => Ok(RuleOutcome::MultipleWinners(outcome.candidates())),
+        if (self.predicate)(&outcome) {
+            Ok(outcome)
+        } else {
+            Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
         }
     }
 }
