@@ -25,7 +25,11 @@
 // 16. Nanson
 // 17. Coombs
 pub use crate::voting_rules::{
-    anti_plurality::AntiPluralityRule, approval::ApprovalRule, black::BlackRule, borda::BordaRule,
+    anti_plurality::AntiPluralityRule,
+    approval::ApprovalRule,
+    black::BlackRule,
+    borda::BordaRule,
+    copeland::{CopelandIIIRule, CopelandIIRule, CopelandIRule},
     plurality::PluralityRule,
 };
 

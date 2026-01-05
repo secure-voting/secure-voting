@@ -13,6 +13,7 @@ pub mod anti_plurality;
 pub mod approval;
 pub mod black;
 pub mod borda;
+pub mod copeland;
 pub mod plurality;
 
 /// Trait for all the voting rules, simple and complex ones.
