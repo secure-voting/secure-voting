@@ -16,6 +16,15 @@ pub enum RuleOutcome {
     MultipleWinners(Vec<CandidateId>),
 }
 
+impl RuleOutcome {
+    pub fn candidates(&self) -> Vec<CandidateId> {
+        match self {
+            RuleOutcome::UniqueWinner(candidate_id) => vec![*candidate_id],
+            RuleOutcome::MultipleWinners(candidate_ids) => candidate_ids.clone(),
+        }
+    }
+}
+
 /// Resolves ties between selected winners to determine a single absolute winner.
 pub trait TieBreaker {
     /// Error returned when the tie break can't be performed.
