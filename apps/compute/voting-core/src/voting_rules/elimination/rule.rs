@@ -101,7 +101,7 @@ where
                 .tie_break(&candidates, &current_profile)
                 .map_err(EliminationRuleError::TieBreakError)?;
 
-            if outcome.is_unique() || self.stop.should_stop(&scores, &outcome, &profile) {
+            if outcome.is_unique() || self.stop.should_stop(&scores, &outcome, profile) {
                 return Ok(outcome);
             }
 

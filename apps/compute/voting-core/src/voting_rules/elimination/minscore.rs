@@ -15,6 +15,7 @@ impl EliminationCriterion for MinScoreElimination {
     type Score = Vec<usize>;
 
     fn eliminate(&self, scores: &Self::Score) -> Vec<CandidateId> {
+        #[allow(clippy::unwrap_used)]
         let min_score = scores.iter().min().copied().unwrap();
         scores
             .iter()

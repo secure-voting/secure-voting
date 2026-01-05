@@ -85,6 +85,7 @@ impl Profile {
         let mut mapping = vec![None; self.n_candidates()];
         let mut new_id = 0;
 
+        #[allow(clippy::needless_range_loop)]
         for old_id in 0..self.n_candidates() {
             let cur_id = CandidateId::new(old_id);
             if !to_remove.contains(&cur_id) {
@@ -106,6 +107,8 @@ impl Profile {
                     continue;
                 }
 
+                // Guaranteed to be fine because the mapping is created this way.
+                #[allow(clippy::unwrap_used)]
                 new_ranking.push(CandidateId::new(mapping[rank.into_inner()].unwrap()));
             }
 
