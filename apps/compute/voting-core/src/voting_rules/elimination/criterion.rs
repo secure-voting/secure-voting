@@ -2,7 +2,7 @@
 //!
 //! This module defines the [`EliminationCriterion`] trait.
 
-use crate::prelude::CandidateId;
+use crate::profile::CandidateId;
 
 /// Criterion on which to eliminate a candidate(-s) from the score.
 pub trait EliminationCriterion {

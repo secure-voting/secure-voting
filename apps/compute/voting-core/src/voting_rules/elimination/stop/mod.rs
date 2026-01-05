@@ -2,7 +2,8 @@
 //!
 //! This module defines the [`EliminationStopCondition`] trait.
 
-use crate::prelude::{Profile, RuleOutcome};
+use crate::profile::Profile;
+use crate::tie_breaker::RuleOutcome;
 
 pub mod majority_stop;
 pub mod no_early_stop;

@@ -1,6 +1,8 @@
 //! AcceptIf adaptor module.
 
-use crate::prelude::{Profile, RuleOutcome, VotingRuleExec};
+use crate::profile::Profile;
+use crate::tie_breaker::RuleOutcome;
+use crate::voting_rules::VotingRuleExec;
 
 /// AcceptIf adaptor.
 ///
