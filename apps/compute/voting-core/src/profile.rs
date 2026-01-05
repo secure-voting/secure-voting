@@ -4,11 +4,11 @@
 //! Each ballot is a ranking of candidates.
 
 use nutype::nutype;
-use std::ops::Index;
+use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 /// Strongly-typed Candidate ID.
-#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display))]
+#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash))]
 pub struct CandidateId(usize);
 
 /// Profile type.
@@ -53,7 +53,7 @@ pub enum ProfileError {
 }
 
 /// An error returned if the candidate removed is not present in the profile.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 #[error("Can't remove the candidate {0}")]
 pub struct CandidateRemovalError(CandidateId);
 
@@ -68,9 +68,51 @@ impl Profile {
         self.votes.len()
     }
 
-    /// Remove the candidate from the profile.
-    pub fn remove_candidate(&self, candidate: CandidateId) -> Result<Self, CandidateRemovalError> {
-        unimplemented!()
+    /// Remove the candidates from the profile.
+    pub fn remove_candidates(
+        self,
+        candidates: Vec<CandidateId>,
+    ) -> Result<Self, CandidateRemovalError> {
+        if let Some(&wrong_id) = candidates
+            .iter()
+            .find(|candidate_id| candidate_id.into_inner() >= self.n_candidates())
+        {
+            return Err(CandidateRemovalError(wrong_id));
+        }
+
+        let to_remove = candidates.into_iter().collect::<HashSet<_>>();
+
+        let mut mapping = vec![None; self.n_candidates()];
+        let mut new_id = 0;
+
+        for old_id in 0..self.n_candidates() {
+            let cur_id = CandidateId::new(old_id);
+            if !to_remove.contains(&cur_id) {
+                mapping[old_id] = Some(new_id);
+                new_id += 1;
+            }
+        }
+
+        let mut new_votes = Vec::with_capacity(self.n_voters());
+        let n_candidates = self.n_candidates();
+
+        let votes = self.votes;
+
+        for voter_ranking in votes {
+            let mut new_ranking = Vec::with_capacity(n_candidates - to_remove.len());
+
+            for rank in voter_ranking {
+                if to_remove.contains(&rank) {
+                    continue;
+                }
+
+                new_ranking.push(CandidateId::new(mapping[rank.into_inner()].unwrap()));
+            }
+
+            new_votes.push(new_ranking);
+        }
+
+        Ok(Self { votes: new_votes })
     }
 }
 
@@ -131,6 +173,13 @@ impl TryFrom<Vec<Vec<usize>>> for Profile {
 mod tests {
     use super::*;
 
+    fn ids(votes: Vec<Vec<CandidateId>>) -> Vec<Vec<usize>> {
+        votes
+            .iter()
+            .map(|line| line.iter().map(|item| item.into_inner()).collect())
+            .collect()
+    }
+
     #[test]
     fn test_incorrect_no_voters() {
         let votes = vec![];
@@ -189,5 +238,121 @@ mod tests {
             TryInto::<Profile>::try_into(votes),
             Err(ProfileError::DoubleVote(_))
         ));
+    }
+
+    #[test]
+    fn remove_single_candidate_middle() {
+        let votes = vec![vec![0, 1, 2, 3], vec![3, 2, 1, 0]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let result = profile
+            .remove_candidates(vec![CandidateId::new(1)])
+            .unwrap();
+
+        let expected_votes = vec![
+            vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+                CandidateId::new(2),
+            ],
+            vec![
+                CandidateId::new(2),
+                CandidateId::new(1),
+                CandidateId::new(0),
+            ],
+        ];
+
+        assert_eq!(result.votes, expected_votes);
+    }
+
+    #[test]
+    fn remove_multiple_candidates() {
+        let votes = vec![vec![0, 1, 2, 3]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let result = profile
+            .remove_candidates(vec![CandidateId::new(1), CandidateId::new(3)])
+            .unwrap();
+
+        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(1)]];
+
+        assert_eq!(result.votes, expected_votes);
+    }
+
+    #[test]
+    fn remove_first_and_last_candidate() {
+        let votes = vec![vec![0, 1, 2, 3]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let result = profile
+            .remove_candidates(vec![CandidateId::new(0), CandidateId::new(3)])
+            .unwrap();
+
+        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(1)]];
+
+        assert_eq!(result.votes, expected_votes);
+    }
+
+    #[test]
+    fn remove_all_candidates() {
+        let votes = vec![vec![0, 1, 2]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let result = profile
+            .remove_candidates(vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+                CandidateId::new(2),
+            ])
+            .unwrap();
+
+        assert_eq!(result.votes, vec![vec![]]);
+    }
+
+    #[test]
+    fn remove_no_candidates_returns_same_profile() {
+        let votes = vec![vec![0, 1, 2]];
+        let profile: Profile = votes.clone().try_into().unwrap();
+
+        let result = profile.remove_candidates(vec![]).unwrap();
+
+        assert_eq!(ids(result.votes), votes);
+    }
+
+    #[test]
+    fn remove_candidate_invalid_id_returns_error() {
+        let votes = vec![vec![0, 1, 2]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let err = profile
+            .remove_candidates(vec![CandidateId::new(3)])
+            .unwrap_err();
+
+        assert_eq!(err, CandidateRemovalError(CandidateId::new(3)));
+    }
+
+    #[test]
+    fn remove_candidates_preserves_order() {
+        let votes = vec![vec![0, 2, 1, 3], vec![3, 1, 2, 0]];
+        let profile: Profile = votes.try_into().unwrap();
+
+        let result = profile
+            .remove_candidates(vec![CandidateId::new(2)])
+            .unwrap();
+
+        let expected_votes = vec![
+            vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+                CandidateId::new(2),
+            ],
+            vec![
+                CandidateId::new(2),
+                CandidateId::new(1),
+                CandidateId::new(0),
+            ],
+        ];
+
+        assert_eq!(result.votes, expected_votes);
     }
 }
