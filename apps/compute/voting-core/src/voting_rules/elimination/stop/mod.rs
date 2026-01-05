@@ -1,0 +1,14 @@
+//! Elimination stop condition module.
+//!
+//! This module defines the [`EliminationStopCondition`] trait.
+
+use crate::prelude::{Profile, RuleOutcome};
+
+pub mod majority_stop;
+pub mod no_early_stop;
+
+/// Trait that encodes whether to stop the elimination process here.
+pub trait EliminationStopCondition<S> {
+    /// Checks whether it is already time to stop the elimination process.
+    fn should_stop(&self, scores: &S, outcome: &RuleOutcome, profile: &Profile) -> bool;
+}

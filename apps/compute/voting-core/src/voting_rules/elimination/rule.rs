@@ -11,7 +11,13 @@ use crate::{
     profile::{CandidateRemovalError, Profile},
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
-    voting_rules::{VotingRuleExec, elimination::criterion::EliminationCriterion},
+    voting_rules::{
+        VotingRuleExec,
+        elimination::{
+            criterion::EliminationCriterion,
+            stop::{EliminationStopCondition, no_early_stop::NoEarlyStop},
+        },
+    },
 };
 
 /// Elimination strategy.
@@ -19,7 +25,7 @@ use crate::{
 /// If the the whole pipeline can't decide a unique winner,
 /// then the lowest candidate is eliminated and the process
 /// is rerun until the winner is unique.
-pub struct Elimination<S, E, D, T> {
+pub struct Elimination<S, E, D, T, Stop = NoEarlyStop> {
     /// The scorer step of the pipeline.
     scorer: S,
     /// The eliminator step of the pipeline.
@@ -28,16 +34,19 @@ pub struct Elimination<S, E, D, T> {
     decider: D,
     /// The tie breaker step of the pipeline.
     tiebreaker: T,
+    /// The elimination stop checker.
+    stop: Stop,
 }
 
-impl<S, E, D, T> Elimination<S, E, D, T> {
+impl<S, E, D, T, Stop> Elimination<S, E, D, T, Stop> {
     /// Construct an eliminator rule instance.
-    pub fn new(scorer: S, eliminator: E, decider: D, tiebreaker: T) -> Self {
+    pub fn new(scorer: S, eliminator: E, decider: D, tiebreaker: T, stop: Stop) -> Self {
         Self {
             scorer,
             eliminator,
             decider,
             tiebreaker,
+            stop,
         }
     }
 }
@@ -65,12 +74,13 @@ where
     TieBreakError(TE),
 }
 
-impl<S, E, D, T> VotingRuleExec for Elimination<S, E, D, T>
+impl<S, E, D, T, Stop> VotingRuleExec for Elimination<S, E, D, T, Stop>
 where
     S: Scorer<Output = D::Input>,
     E: EliminationCriterion<Score = S::Output>,
     D: Decider,
     T: TieBreaker,
+    Stop: EliminationStopCondition<S::Output>,
 {
     type Error = EliminationRuleError<S::Error, D::Error, T::Error, CandidateRemovalError>;
 
@@ -91,7 +101,7 @@ where
                 .tie_break(&candidates, &current_profile)
                 .map_err(EliminationRuleError::TieBreakError)?;
 
-            if outcome.is_unique() {
+            if outcome.is_unique() || self.stop.should_stop(&scores, &outcome, &profile) {
                 return Ok(outcome);
             }
 

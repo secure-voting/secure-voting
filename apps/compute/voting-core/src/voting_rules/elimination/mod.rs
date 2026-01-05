@@ -3,3 +3,4 @@
 pub mod criterion;
 pub mod minscore;
 pub mod rule;
+pub mod stop;
