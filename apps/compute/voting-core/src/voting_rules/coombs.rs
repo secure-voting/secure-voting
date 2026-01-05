@@ -11,7 +11,7 @@ use crate::{
 
 /// The Coombs' voting rule.
 ///
-/// Do a regular plurality voting step.
+/// Do a regular antiplurality voting step.
 /// If there is a candidate with a strict majority of votes, they are the winner.
 /// Otherwise, eliminate the candidate with the *most* last-place votes and repeat until the winner is chosen.
 pub type CoombsRule<TB = FallthroughTieBreaker> =
