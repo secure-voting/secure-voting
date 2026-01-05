@@ -29,7 +29,9 @@ pub use crate::voting_rules::{
     approval::ApprovalRule,
     black::BlackRule,
     borda::BordaRule,
+    coombs::CoombsRule,
     copeland::{CopelandIIIRule, CopelandIIRule, CopelandIRule},
+    hare::HareRule,
     plurality::PluralityRule,
 };
 
