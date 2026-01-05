@@ -24,3 +24,38 @@ impl EliminationCriterion for MinScoreElimination {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_single_lowest_score() {
+        let scores = vec![0, 1, 2, 1];
+
+        assert_eq!(
+            vec![CandidateId::new(0)],
+            MinScoreElimination.eliminate(&scores)
+        );
+    }
+
+    #[test]
+    fn test_multiple_lowest_scores() {
+        let scores = vec![3, 1, 2, 1];
+
+        assert_eq!(
+            vec![CandidateId::new(1), CandidateId::new(3)],
+            MinScoreElimination.eliminate(&scores)
+        );
+    }
+
+    #[test]
+    fn test_all_lowest_scores() {
+        let scores = vec![1, 1, 1, 1, 1];
+
+        assert_eq!(
+            (0..5).map(|x| CandidateId::new(x)).collect::<Vec<_>>(),
+            MinScoreElimination.eliminate(&scores)
+        );
+    }
+}
