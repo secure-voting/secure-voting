@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use crate::{profile::Profile, tie_breaker::RuleOutcome};
 
 pub mod adaptors;
+pub mod elimination;
 pub mod voting_rule;
 
 pub mod anti_plurality;
