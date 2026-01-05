@@ -52,6 +52,11 @@ pub enum ProfileError {
     DoubleVote(usize),
 }
 
+/// An error returned if the candidate removed is not present in the profile.
+#[derive(Error, Debug)]
+#[error("Can't remove the candidate {0}")]
+pub struct CandidateRemovalError(CandidateId);
+
 impl Profile {
     /// Number of candidates in the current profile.
     pub fn n_candidates(&self) -> usize {
@@ -61,6 +66,11 @@ impl Profile {
     /// Number of voters in the current profile.
     pub fn n_voters(&self) -> usize {
         self.votes.len()
+    }
+
+    /// Remove the candidate from the profile.
+    pub fn remove_candidate(&self, candidate: CandidateId) -> Result<Self, CandidateRemovalError> {
+        unimplemented!()
     }
 }
 
