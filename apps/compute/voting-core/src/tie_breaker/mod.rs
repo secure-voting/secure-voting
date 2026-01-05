@@ -17,10 +17,19 @@ pub enum RuleOutcome {
 }
 
 impl RuleOutcome {
+    /// Return the candidates of this outcome.
     pub fn candidates(&self) -> Vec<CandidateId> {
         match self {
             RuleOutcome::UniqueWinner(candidate_id) => vec![*candidate_id],
             RuleOutcome::MultipleWinners(candidate_ids) => candidate_ids.clone(),
+        }
+    }
+
+    /// Check whether the winner is unique.
+    pub fn is_unique(&self) -> bool {
+        match self {
+            RuleOutcome::UniqueWinner(_) => true,
+            RuleOutcome::MultipleWinners(_) => false,
         }
     }
 }
