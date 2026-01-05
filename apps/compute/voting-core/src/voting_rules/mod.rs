@@ -14,6 +14,7 @@ pub mod anti_plurality;
 pub mod approval;
 pub mod black;
 pub mod borda;
+pub mod coombs;
 pub mod copeland;
 pub mod plurality;
 
