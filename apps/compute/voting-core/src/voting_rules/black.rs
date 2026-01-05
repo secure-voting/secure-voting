@@ -2,10 +2,9 @@
 
 use crate::{
     decider::condorcet::CondorcetDecider,
-    prelude::BordaRule,
     scorer::condorcet::CondorcetScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
-    voting_rules::{adaptors::fallback::Fallback, voting_rule::VotingRule},
+    voting_rules::{adaptors::fallback::Fallback, borda::BordaRule, voting_rule::VotingRule},
 };
 
 /// Helper Condorcet Voting rule type.
