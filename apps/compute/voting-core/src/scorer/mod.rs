@@ -12,6 +12,7 @@ pub mod borda;
 pub mod condorcet;
 pub mod copeland;
 pub mod plurality;
+pub mod simpson;
 
 /// Computes the scores for the profile of voters.
 pub trait Scorer {
