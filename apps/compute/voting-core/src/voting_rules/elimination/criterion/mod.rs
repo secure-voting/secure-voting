@@ -4,6 +4,9 @@
 
 use crate::profile::CandidateId;
 
+pub mod below_average_score;
+pub mod minscore;
+
 /// Criterion on which to eliminate a candidate(-s) from the score.
 pub trait EliminationCriterion {
     /// Scoring type to choose the candidate(-s) from.

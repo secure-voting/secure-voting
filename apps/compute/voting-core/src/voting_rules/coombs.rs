@@ -5,7 +5,8 @@ use crate::{
     scorer::anti_plurality::AntiPluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::elimination::{
-        minscore::MinScoreElimination, rule::Elimination, stop::majority_stop::MajorityStop,
+        criterion::minscore::MinScoreElimination, rule::Elimination,
+        stop::majority_stop::MajorityStop,
     },
 };
 

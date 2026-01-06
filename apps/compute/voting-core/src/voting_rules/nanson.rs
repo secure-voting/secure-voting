@@ -5,7 +5,7 @@ use crate::{
     scorer::borda::BordaScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::elimination::{
-        below_average_score::BelowAverageElimination, rule::Elimination,
+        criterion::below_average_score::BelowAverageElimination, rule::Elimination,
         stop::no_early_stop::NoEarlyStop,
     },
 };
