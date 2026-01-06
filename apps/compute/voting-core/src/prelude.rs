@@ -32,6 +32,7 @@ pub use crate::voting_rules::{
     coombs::CoombsRule,
     copeland::{CopelandIIIRule, CopelandIIRule, CopelandIRule},
     hare::HareRule,
+    minmax::MinmaxRule,
     nanson::NansonRule,
     plurality::PluralityRule,
     practical_condorcet::CondorcetPracticalRule,
