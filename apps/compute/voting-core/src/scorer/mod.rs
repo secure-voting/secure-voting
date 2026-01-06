@@ -11,6 +11,7 @@ pub mod approval;
 pub mod borda;
 pub mod condorcet;
 pub mod copeland;
+pub mod minmax;
 pub mod plurality;
 pub mod simpson;
 
