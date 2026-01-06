@@ -9,7 +9,7 @@ use crate::{matrix::PairwiseMatrix, prelude::Profile, scorer::Scorer};
 /// Copeland III scorer.
 ///
 /// The score of each candidate is equal to the
-/// number of wins in each head-to-head.
+/// total margin between the chosen candidates and alternatives.
 pub struct CopelandIIIScorer;
 
 impl Scorer for CopelandIIIScorer {
