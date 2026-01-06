@@ -95,6 +95,7 @@ victories using boolean values.
 
 ## Module structure
 
+```
 src/
 ├── decider # Decider trait
 ├── scorer # Scorer trait
@@ -108,6 +109,7 @@ src/
 │     └── stop
 ├── prelude.rs # Public re-exports
 └── lib.rs # Crate entry point
+```
 
 Module internals are intentionally kept private where possible to avoid
 leaking implementation details into the public API.
