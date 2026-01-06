@@ -16,6 +16,8 @@ pub struct CandidateId(usize);
 /// Wraps the votes as a newtype.
 /// Upholds these invariants:
 ///
+/// - At least one voter
+/// - At least one candidate
 /// - All ballots have the same length
 /// - All candidates' IDs are valid
 /// - Each ballot has no duplicate votes
