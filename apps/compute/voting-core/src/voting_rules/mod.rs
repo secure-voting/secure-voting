@@ -19,6 +19,7 @@ pub mod copeland;
 pub mod hare;
 pub mod nanson;
 pub mod plurality;
+pub mod practical_condorcet;
 
 /// Trait for all the voting rules, simple and complex ones.
 pub trait VotingRuleExec {

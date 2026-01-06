@@ -34,6 +34,7 @@ pub use crate::voting_rules::{
     hare::HareRule,
     nanson::NansonRule,
     plurality::PluralityRule,
+    practical_condorcet::CondorcetPracticalRule,
 };
 
 // Voting traits.
