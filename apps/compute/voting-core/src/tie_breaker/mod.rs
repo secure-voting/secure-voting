@@ -9,6 +9,7 @@ use crate::profile::{CandidateId, Profile};
 pub mod fallthrough;
 
 /// The outcome of performing a tie-breaker.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuleOutcome {
     /// A single winner is chosen.
     UniqueWinner(CandidateId),

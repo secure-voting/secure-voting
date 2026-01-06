@@ -29,3 +29,34 @@ impl TieBreaker for FallthroughTieBreaker {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unique_winner_fallthrough() {
+        let fake_profile = (vec![vec![0]]).try_into().unwrap();
+        let candidates = vec![CandidateId::new(0)];
+
+        assert_eq!(
+            RuleOutcome::UniqueWinner(CandidateId::new(0)),
+            FallthroughTieBreaker
+                .tie_break(&candidates, &fake_profile)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn test_multiple_winner_fallthrough() {
+        let fake_profile = (vec![vec![0]]).try_into().unwrap();
+        let candidates = vec![CandidateId::new(0), CandidateId::new(42)];
+
+        assert_eq!(
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(42)]),
+            FallthroughTieBreaker
+                .tie_break(&candidates, &fake_profile)
+                .unwrap()
+        );
+    }
+}
