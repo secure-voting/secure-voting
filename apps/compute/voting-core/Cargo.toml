@@ -12,4 +12,5 @@ thiserror = "2.0.17"
 workspace=true
 
 [dev-dependencies]
+mockall = "0.14.0"
 test-case = "3.3.1"
