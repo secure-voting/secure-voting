@@ -114,6 +114,11 @@ impl PairwiseMatrix {
     pub fn margin(&self, i: usize, j: usize) -> isize {
         self.matrix[i][j] as isize - self.matrix[j][i] as isize
     }
+
+    /// Return an iterator over the rows of the matrix.
+    pub fn iter(&self) -> core::slice::Iter<'_, Vec<usize>> {
+        self.matrix.iter()
+    }
 }
 
 /// Helper function to sum 2 matrices of the same size.
