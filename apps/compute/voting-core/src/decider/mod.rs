@@ -8,6 +8,7 @@ use crate::profile::CandidateId;
 
 pub mod condorcet;
 pub mod majority;
+pub mod minority;
 
 /// Chooses a winner or a set of winners from computed scores.
 pub trait Decider {
