@@ -47,3 +47,69 @@ impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::profile::CandidateId;
+    use mockall::mock;
+
+    mock! {
+        pub VotingRule {
+
+        }
+
+        impl VotingRuleExec for VotingRule {
+            type Error = ();
+
+            fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+        }
+    }
+
+    fn fake_profile() -> Profile {
+        Profile::try_from(vec![vec![0, 2, 1]]).unwrap()
+    }
+
+    #[test]
+    fn test_unique_winner_propagation() {
+        let mut mock = MockVotingRule::new();
+
+        mock.expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+
+        assert_eq!(
+            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RequireUnique::new(mock).execute(&fake_profile()).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_error_propagation_from_rule() {
+        let mut mock = MockVotingRule::new();
+
+        mock.expect_execute().times(1).return_const(Err(()));
+
+        assert!(matches!(
+            RequireUnique::new(mock).execute(&fake_profile()),
+            Err(RequireUniqueError::RuleError(()))
+        ));
+    }
+
+    #[test]
+    fn test_error_non_unique() {
+        let mut mock = MockVotingRule::new();
+
+        mock.expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+            ])));
+
+        assert!(matches!(
+            RequireUnique::new(mock).execute(&fake_profile()),
+            Err(RequireUniqueError::NotUnique)
+        ));
+    }
+}
