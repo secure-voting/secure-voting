@@ -17,6 +17,7 @@ pub mod borda;
 pub mod coombs;
 pub mod copeland;
 pub mod hare;
+pub mod nanson;
 pub mod plurality;
 
 /// Trait for all the voting rules, simple and complex ones.
