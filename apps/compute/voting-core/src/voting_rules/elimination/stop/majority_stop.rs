@@ -17,3 +17,22 @@ impl EliminationStopCondition<Vec<usize>> for MajorityStop {
         scores.iter().any(|&s| s * 2 > total)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(vec![1, 1, 1], vec![vec![0, 1, 2], vec![2, 0, 1], vec![1, 2, 0]], false; "no majority winner")]
+    #[test_case(vec![2, 1, 0], vec![vec![0, 1, 2], vec![0, 1, 2], vec![1, 2, 0]], true; "majority winner")]
+    fn test_majority_stop(scores: Vec<usize>, votes: Vec<Vec<usize>>, result: bool) {
+        assert_eq!(
+            result,
+            MajorityStop.should_stop(
+                &scores,
+                &RuleOutcome::MultipleWinners(vec![]),
+                &votes.try_into().unwrap()
+            )
+        );
+    }
+}
