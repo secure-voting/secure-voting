@@ -58,3 +58,127 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        profile::CandidateId, profile::Profile, tie_breaker::RuleOutcome,
+        voting_rules::VotingRuleExec,
+    };
+    use mockall::mock;
+
+    mock! {
+        pub VotingRule {}
+
+        impl VotingRuleExec for VotingRule {
+            type Error = &'static str;
+
+            fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+        }
+    }
+
+    fn fake_profile() -> Profile {
+        Profile::try_from(vec![vec![0, 1]]).unwrap()
+    }
+
+    #[test]
+    fn primary_unique_winner_short_circuits() {
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
+
+        primary
+            .expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(0))));
+
+        fallback.expect_execute().times(0);
+
+        let rule = Fallback::new(primary, fallback);
+
+        let result = rule.execute(&fake_profile());
+
+        assert_eq!(
+            result.unwrap(),
+            RuleOutcome::UniqueWinner(CandidateId::new(0))
+        );
+    }
+
+    #[test]
+    fn primary_multiple_winners_triggers_fallback() {
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
+
+        primary
+            .expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+            ])));
+
+        fallback
+            .expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+
+        let rule = Fallback::new(primary, fallback);
+
+        let result = rule.execute(&fake_profile());
+
+        assert_eq!(
+            result.unwrap(),
+            RuleOutcome::UniqueWinner(CandidateId::new(1))
+        );
+    }
+
+    #[test]
+    fn primary_error_is_propagated_and_fallback_not_called() {
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
+
+        primary
+            .expect_execute()
+            .times(1)
+            .return_const(Err("primary failed"));
+
+        fallback.expect_execute().times(0);
+
+        let rule = Fallback::new(primary, fallback);
+
+        let result = rule.execute(&fake_profile());
+
+        assert!(matches!(
+            result,
+            Err(FallbackError::PrimaryError("primary failed"))
+        ));
+    }
+
+    #[test]
+    fn fallback_error_is_wrapped_correctly() {
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
+
+        primary
+            .expect_execute()
+            .times(1)
+            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+            ])));
+
+        fallback
+            .expect_execute()
+            .times(1)
+            .return_const(Err("fallback failed"));
+
+        let rule = Fallback::new(primary, fallback);
+
+        let result = rule.execute(&fake_profile());
+
+        assert!(matches!(
+            result,
+            Err(FallbackError::FallbackError("fallback failed"))
+        ));
+    }
+}
