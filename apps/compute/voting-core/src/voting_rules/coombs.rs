@@ -15,4 +15,4 @@ use crate::{
 /// If there is a candidate with a strict majority of votes, they are the winner.
 /// Otherwise, eliminate the candidate with the *most* last-place votes and repeat until the winner is chosen.
 pub type CoombsRule<TB = FallthroughTieBreaker> =
-    Elimination<AntiPluralityScorer, MinScoreElimination, MajorityDecider, TB, MajorityStop>;
+    Elimination<AntiPluralityScorer, MinScoreElimination, MajorityDecider<usize>, TB, MajorityStop>;

@@ -16,4 +16,4 @@ use crate::{
 /// If there is a single winner, the voting round ends with them a winner.
 /// Else, eliminate all the candidates with below average scoring and repeat
 pub type NansonRule<TB = FallthroughTieBreaker> =
-    Elimination<BordaScorer, BelowAverageElimination, MajorityDecider, TB, NoEarlyStop>;
+    Elimination<BordaScorer, BelowAverageElimination, MajorityDecider<usize>, TB, NoEarlyStop>;

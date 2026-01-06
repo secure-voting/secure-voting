@@ -11,4 +11,5 @@ use crate::{
 /// first place gets most points, second place gets one less and so on until the last place gets 0.
 /// Winners are selected by the plurality among their score sums.
 /// If there are several winners, the result is left undecided.
-pub type BordaRule<TB = FallthroughTieBreaker> = VotingRule<BordaScorer, MajorityDecider, TB>;
+pub type BordaRule<TB = FallthroughTieBreaker> =
+    VotingRule<BordaScorer, MajorityDecider<usize>, TB>;

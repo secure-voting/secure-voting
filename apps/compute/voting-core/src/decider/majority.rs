@@ -1,6 +1,6 @@
 //! Majority Decider implementation
 
-use std::convert::Infallible;
+use std::{convert::Infallible, marker::PhantomData};
 
 use crate::{decider::Decider, profile::CandidateId};
 
@@ -8,21 +8,39 @@ use crate::{decider::Decider, profile::CandidateId};
 ///
 /// Selects all candidates whose score is equal to the maximum score.
 /// This type is a zero-sized marker implementing [`Decider`].
-pub struct MajorityDecider;
+pub struct MajorityDecider<T> {
+    _marker: PhantomData<T>,
+}
 
-impl Decider for MajorityDecider {
-    type Input = Vec<usize>;
+impl<T> MajorityDecider<T> {
+    pub fn new() -> Self {
+        Self {
+            _marker: PhantomData::<T>,
+        }
+    }
+}
+
+impl<T> Decider for MajorityDecider<T>
+where
+    T: PartialOrd + Default + Copy,
+{
+    type Input = Vec<T>;
     type Error = Infallible;
 
     fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error> {
-        let mut cur_max = 0;
+        let mut cur_max = None;
         let mut winners = vec![];
 
         for (idx, &score) in scores.iter().enumerate() {
-            if score > cur_max {
-                cur_max = score;
+            if cur_max.is_none() {
+                cur_max = Some(score);
                 winners = vec![CandidateId::new(idx)];
-            } else if score == cur_max {
+            } else if let Some(cur_max_inner) = cur_max
+                && cur_max_inner < score
+            {
+                cur_max = Some(score);
+                winners = vec![CandidateId::new(idx)];
+            } else if Some(score) == cur_max {
                 winners.push(CandidateId::new(idx));
             }
         }
@@ -43,14 +61,20 @@ mod tests {
     fn test_one_winner() {
         let scores = vec![0, 1, 0, 2];
 
-        assert_eq!(vec![3], ids(MajorityDecider.decide(&scores).unwrap()));
+        assert_eq!(
+            vec![3],
+            ids(MajorityDecider::new().decide(&scores).unwrap())
+        );
     }
 
     #[test]
     fn test_several_winners() {
         let scores = vec![0, 1, 0, 1];
 
-        assert_eq!(vec![1, 3], ids(MajorityDecider.decide(&scores).unwrap()));
+        assert_eq!(
+            vec![1, 3],
+            ids(MajorityDecider::new().decide(&scores).unwrap())
+        );
     }
 
     #[test]
@@ -59,7 +83,7 @@ mod tests {
 
         assert_eq!(
             vec![0, 1, 2, 3, 4],
-            ids(MajorityDecider.decide(&scores).unwrap())
+            ids(MajorityDecider::new().decide(&scores).unwrap())
         );
     }
 }
