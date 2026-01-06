@@ -17,6 +17,7 @@ pub mod borda;
 pub mod coombs;
 pub mod copeland;
 pub mod hare;
+pub mod minmax;
 pub mod nanson;
 pub mod plurality;
 pub mod practical_condorcet;
