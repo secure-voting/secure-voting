@@ -39,7 +39,13 @@ pub use crate::voting_rules::{
 
 // Voting traits.
 pub use crate::{
-    decider::Decider, scorer::Scorer, tie_breaker::TieBreaker, voting_rules::VotingRuleExec,
+    decider::Decider,
+    scorer::Scorer,
+    tie_breaker::TieBreaker,
+    voting_rules::{
+        VotingRuleExec,
+        elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
+    },
 };
 
 // Voting adaptors.
