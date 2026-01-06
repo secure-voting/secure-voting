@@ -34,3 +34,79 @@ impl Scorer for SimpsonScorer {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::profile::Profile;
+
+    #[test]
+    fn simpson_single_vote_linear_order() {
+        let profile = Profile::try_from(vec![vec![0, 1, 2, 3]]).unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![1, -1, -1, -1]);
+    }
+
+    #[test]
+    fn simpson_condorcet_winner() {
+        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]]).unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![3, -3, -3]);
+    }
+
+    #[test]
+    fn simpson_condorcet_cycle() {
+        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]]).unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![-1, -1, -1]);
+    }
+
+    #[test]
+    fn simpson_two_candidates() {
+        let profile = Profile::try_from(vec![vec![0, 1], vec![0, 1], vec![1, 0]]).unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![1, -1]);
+    }
+
+    #[test]
+    fn simpson_all_pairwise_tied() {
+        let profile = Profile::try_from(vec![
+            vec![0, 1, 2],
+            vec![0, 2, 1],
+            vec![1, 0, 2],
+            vec![1, 2, 0],
+            vec![2, 0, 1],
+            vec![2, 1, 0],
+        ])
+        .unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn simpson_worst_loss_dominates() {
+        // Candidate 0 wins big against 1, but loses badly to 2
+        let profile = Profile::try_from(vec![
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            vec![0, 1, 2],
+            vec![2, 0, 1],
+            vec![2, 0, 1],
+        ])
+        .unwrap();
+
+        let scores = SimpsonScorer.compute_score(&profile).unwrap();
+
+        assert_eq!(scores, vec![1, -5, -1]);
+    }
+}
