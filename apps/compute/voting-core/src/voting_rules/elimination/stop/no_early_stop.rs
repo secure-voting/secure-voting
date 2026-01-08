@@ -2,6 +2,7 @@
 
 use crate::{
     prelude::{Profile, RuleOutcome},
+    scorer::Score,
     voting_rules::elimination::stop::EliminationStopCondition,
 };
 
@@ -9,7 +10,7 @@ use crate::{
 pub struct NoEarlyStop;
 
 impl<S> EliminationStopCondition<S> for NoEarlyStop {
-    fn should_stop(&self, _: &S, _: &RuleOutcome, _: &Profile) -> bool {
+    fn should_stop(&self, _: &Score<S>, _: &RuleOutcome, _: &Profile) -> bool {
         false
     }
 }

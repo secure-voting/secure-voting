@@ -5,7 +5,10 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::{profile::Profile, scorer::Scorer};
+use crate::{
+    profile::Profile,
+    scorer::{Score, Scorer},
+};
 
 /// Q-Approval scorer.
 ///
@@ -24,7 +27,7 @@ impl<const Q: usize> Scorer for ApprovalScorer<Q> {
     type Output = Vec<usize>;
     type Error = ApprovalScorerError;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
@@ -32,19 +35,22 @@ impl<const Q: usize> Scorer for ApprovalScorer<Q> {
             return Err(ApprovalScorerError);
         }
 
-        Ok((0..n_voters)
-            .into_par_iter()
-            .map(|i| {
-                let mut tmp = vec![0; n_candidates];
+        Ok(Score::new(
+            (0..n_voters)
+                .into_par_iter()
+                .map(|i| {
+                    let mut tmp = vec![0; n_candidates];
 
-                (0..Q).for_each(|x| tmp[profile[i][x].into_inner()] = 1);
+                    (0..Q).for_each(|x| tmp[profile.get_candidate_id(&profile[i][x]).unwrap()] = 1);
 
-                tmp
-            })
-            .reduce(
-                || vec![0; n_candidates],
-                |a, b| a.iter().zip(b.iter()).map(|(x, y)| x + y).collect(),
-            ))
+                    tmp
+                })
+                .reduce(
+                    || vec![0; n_candidates],
+                    |a, b| a.iter().zip(b.iter()).map(|(x, y)| x + y).collect(),
+                ),
+            profile.active_candidates(),
+        ))
     }
 }
 
@@ -60,7 +66,11 @@ mod tests {
 
         assert_eq!(
             answer,
-            scorer.compute_score(&votes.try_into().unwrap()).unwrap()
+            scorer
+                .compute_score(&votes.try_into().unwrap())
+                .unwrap()
+                .score()
+                .clone()
         );
     }
 

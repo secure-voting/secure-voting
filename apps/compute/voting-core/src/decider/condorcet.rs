@@ -2,7 +2,7 @@
 
 use std::convert::Infallible;
 
-use crate::{decider::Decider, matrix::CondorcetMatrix, profile::CandidateId};
+use crate::{decider::Decider, matrix::CondorcetMatrix, profile::CandidateId, scorer::Score};
 
 /// Condorcet decider.
 ///
@@ -15,10 +15,10 @@ impl Decider for CondorcetDecider {
 
     type Error = Infallible;
 
-    fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error> {
-        for (idx, row) in scores.iter().enumerate() {
+    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
+        for (row, &cand_id) in scores.iter() {
             if row.iter().map(|&elem| elem as usize).sum::<usize>() + 1 == row.len() {
-                return Ok(vec![CandidateId::new(idx)]);
+                return Ok(vec![cand_id]);
             }
         }
 
@@ -35,21 +35,35 @@ mod tests {
 
     #[test]
     fn test_condorcet_winner() {
-        let scores = unsafe {
-            CondorcetMatrix::new_unchecked(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]])
-        };
+        let scores = Score::new(
+            unsafe {
+                CondorcetMatrix::new_unchecked(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]])
+            },
+            &vec![
+                CandidateId::new(42),
+                CandidateId::new(1),
+                CandidateId::new(87),
+            ],
+        );
 
         assert_eq!(
-            vec![CandidateId::new(0)],
+            vec![CandidateId::new(42)],
             CondorcetDecider.decide(&scores).unwrap()
         );
     }
 
     #[test]
     fn test_condorcet_cycle() {
-        let scores = unsafe {
-            CondorcetMatrix::new_unchecked(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]])
-        };
+        let scores = Score::new(
+            unsafe {
+                CondorcetMatrix::new_unchecked(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]])
+            },
+            &vec![
+                CandidateId::new(4),
+                CandidateId::new(2),
+                CandidateId::new(67),
+            ],
+        );
         let answer: Vec<CandidateId> = vec![];
 
         assert_eq!(answer, CondorcetDecider.decide(&scores).unwrap());

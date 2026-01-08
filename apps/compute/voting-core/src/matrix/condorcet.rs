@@ -48,3 +48,9 @@ impl From<CondorcetMatrix> for Vec<Vec<bool>> {
         value.matrix
     }
 }
+
+impl AsRef<[Vec<bool>]> for CondorcetMatrix {
+    fn as_ref(&self) -> &[Vec<bool>] {
+        &self.matrix
+    }
+}
