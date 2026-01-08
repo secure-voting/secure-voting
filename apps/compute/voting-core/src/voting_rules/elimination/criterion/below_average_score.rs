@@ -1,6 +1,8 @@
 //! BelowAverageElimination module.
 
-use crate::{prelude::CandidateId, voting_rules::elimination::criterion::EliminationCriterion};
+use crate::{
+    prelude::CandidateId, scorer::Score, voting_rules::elimination::criterion::EliminationCriterion,
+};
 
 /// Chooses candidates with scores below the average across the scoring results.
 pub struct BelowAverageElimination;
@@ -8,16 +10,19 @@ pub struct BelowAverageElimination;
 impl EliminationCriterion for BelowAverageElimination {
     type Score = Vec<usize>;
 
-    fn eliminate(&self, scores: &Self::Score) -> Vec<CandidateId> {
-        let score_len = scores.len();
-        let score_sum = scores.iter().sum();
+    fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
+        let score_len = scores.score().len();
+        let score_sum = scores.iter().map(|(score, _)| score).sum();
 
         scores
             .iter()
-            .enumerate()
-            .filter(|(_, score)| **score * score_len < score_sum)
-            .map(|(idx, _)| CandidateId::new(idx))
+            .filter(|(score, _)| *score * score_len < score_sum)
+            .map(|(_, &cand_id)| cand_id)
             .collect()
+    }
+
+    fn new() -> Self {
+        todo!()
     }
 }
 
@@ -34,6 +39,16 @@ mod tests {
     #[test_case(vec![0, 2, 1], vec![0]; "no clear winner")]
     #[test_case(vec![1, 1, 1], vec![]; "even distribution")]
     fn test(scores: Vec<usize>, answer: Vec<usize>) {
-        assert_eq!(answer, ids(BelowAverageElimination.eliminate(&scores)));
+        assert_eq!(
+            answer,
+            ids(BelowAverageElimination.eliminate(&Score::new(
+                scores,
+                &[
+                    CandidateId::new(0),
+                    CandidateId::new(1),
+                    CandidateId::new(2)
+                ]
+            )))
+        );
     }
 }

@@ -2,6 +2,7 @@
 
 use crate::{
     prelude::{Profile, RuleOutcome},
+    scorer::Score,
     voting_rules::elimination::stop::EliminationStopCondition,
 };
 
@@ -11,15 +12,17 @@ use crate::{
 pub struct MajorityStop;
 
 impl EliminationStopCondition<Vec<usize>> for MajorityStop {
-    fn should_stop(&self, scores: &Vec<usize>, _: &RuleOutcome, profile: &Profile) -> bool {
+    fn should_stop(&self, scores: &Score<Vec<usize>>, _: &RuleOutcome, profile: &Profile) -> bool {
         let total = profile.n_voters();
 
-        scores.iter().any(|&s| s * 2 > total)
+        scores.iter().any(|(s, _)| s * 2 > total)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::prelude::CandidateId;
+
     use super::*;
     use test_case::test_case;
 
@@ -29,7 +32,10 @@ mod tests {
         assert_eq!(
             result,
             MajorityStop.should_stop(
-                &scores,
+                &Score::new(
+                    scores,
+                    &(0..3).map(|x| CandidateId::new(x)).collect::<Vec<_>>()
+                ),
                 &RuleOutcome::MultipleWinners(vec![]),
                 &votes.try_into().unwrap()
             )
