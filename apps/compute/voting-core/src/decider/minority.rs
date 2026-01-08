@@ -8,7 +8,9 @@ use crate::{decider::Decider, profile::CandidateId, scorer::Score};
 ///
 /// Selects all candidates whose score is equal to the minimum score.
 /// This type is a zero-sized marker implementing [`Decider`].
+#[derive(Default)]
 pub struct MinorityDecider<T> {
+    /// PhantomData type marker to allow generics inside this struct.
     _marker: PhantomData<T>,
 }
 

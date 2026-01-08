@@ -24,6 +24,9 @@ impl Scorer for AntiPluralityScorer {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
+        // The unwrap is used on a get_candidate_id return value,
+        // which is called with a profile-related value, so is safe.
+        #[allow(clippy::unwrap_used)]
         Ok(Score::new(
             (0..n_voters)
                 .into_par_iter()
