@@ -49,12 +49,8 @@ impl From<CondorcetMatrix> for Vec<Vec<bool>> {
     }
 }
 
-impl IntoIterator for CondorcetMatrix {
-    type Item = Vec<bool>;
-
-    type IntoIter = std::vec::IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.matrix.into_iter()
+impl AsRef<[Vec<bool>]> for CondorcetMatrix {
+    fn as_ref(&self) -> &[Vec<bool>] {
+        &self.matrix
     }
 }
