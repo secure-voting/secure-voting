@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::profile::CandidateId;
+use crate::{profile::CandidateId, scorer::Score};
 
 pub mod condorcet;
 pub mod majority;
@@ -21,5 +21,5 @@ pub trait Decider {
     type Error: Debug;
 
     /// Decides the winner or a set of winners from the scores provided.
-    fn decide(&self, scores: &Self::Input) -> Result<Vec<CandidateId>, Self::Error>;
+    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error>;
 }
