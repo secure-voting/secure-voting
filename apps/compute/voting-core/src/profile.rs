@@ -96,18 +96,6 @@ impl Profile {
 
         let to_remove = candidates.into_iter().collect::<HashSet<_>>();
 
-        let mut mapping = vec![None; self.n_candidates()];
-        let mut new_id = 0;
-
-        #[allow(clippy::needless_range_loop)]
-        for old_id in 0..self.n_candidates() {
-            let cur_id = CandidateId::new(old_id);
-            if !to_remove.contains(&cur_id) {
-                mapping[old_id] = Some(new_id);
-                new_id += 1;
-            }
-        }
-
         let mut new_votes = Vec::with_capacity(self.n_voters());
         let n_candidates = self.n_candidates();
 
@@ -121,9 +109,7 @@ impl Profile {
                     continue;
                 }
 
-                // Guaranteed to be fine because the mapping is created this way.
-                #[allow(clippy::unwrap_used)]
-                new_ranking.push(CandidateId::new(mapping[rank.into_inner()].unwrap()));
+                new_ranking.push(rank);
             }
 
             new_votes.push(new_ranking);
@@ -276,12 +262,12 @@ mod tests {
         let expected_votes = vec![
             vec![
                 CandidateId::new(0),
-                CandidateId::new(1),
                 CandidateId::new(2),
+                CandidateId::new(3),
             ],
             vec![
+                CandidateId::new(3),
                 CandidateId::new(2),
-                CandidateId::new(1),
                 CandidateId::new(0),
             ],
         ];
@@ -298,7 +284,7 @@ mod tests {
             .remove_candidates(vec![CandidateId::new(1), CandidateId::new(3)])
             .unwrap();
 
-        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(1)]];
+        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(2)]];
 
         assert_eq!(result.votes, expected_votes);
     }
@@ -312,7 +298,7 @@ mod tests {
             .remove_candidates(vec![CandidateId::new(0), CandidateId::new(3)])
             .unwrap();
 
-        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(1)]];
+        let expected_votes = vec![vec![CandidateId::new(1), CandidateId::new(2)]];
 
         assert_eq!(result.votes, expected_votes);
     }
@@ -368,10 +354,10 @@ mod tests {
             vec![
                 CandidateId::new(0),
                 CandidateId::new(1),
-                CandidateId::new(2),
+                CandidateId::new(3),
             ],
             vec![
-                CandidateId::new(2),
+                CandidateId::new(3),
                 CandidateId::new(1),
                 CandidateId::new(0),
             ],
