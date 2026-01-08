@@ -10,8 +10,8 @@ fileGroups:
     - '*/Cargo.toml'
     - 'Cargo.toml'
   tests:
-    - '*/*/benches/**/*'
-    - '*/*/tests/**/*'
+    - '*/benches/**/*'
+    - '*/tests/**/*'
 
 tasks:
   build:
