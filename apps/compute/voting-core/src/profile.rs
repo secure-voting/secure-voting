@@ -8,7 +8,7 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 /// Strongly-typed Candidate ID.
-#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash))]
+#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash, PartialOrd, Ord))]
 pub struct CandidateId(usize);
 
 /// Profile type.
@@ -30,6 +30,8 @@ pub struct CandidateId(usize);
 pub struct Profile {
     /// A list of ranking ballots.
     votes: Vec<Vec<CandidateId>>,
+    /// Candidates that participate.
+    active_candidates: Vec<CandidateId>,
 }
 
 /// Profile's error type.
@@ -68,6 +70,16 @@ impl Profile {
     /// Number of voters in the current profile.
     pub fn n_voters(&self) -> usize {
         self.votes.len()
+    }
+
+    /// Participating candidates.
+    pub fn active_candidates(&self) -> &[CandidateId] {
+        &self.active_candidates
+    }
+
+    /// Get candidate's position in a sorted list.
+    pub fn get_candidate_id(&self, candidate: &CandidateId) -> Result<usize, usize> {
+        self.active_candidates.binary_search(candidate)
     }
 
     /// Remove the candidates from the profile.
@@ -117,7 +129,13 @@ impl Profile {
             new_votes.push(new_ranking);
         }
 
-        Ok(Self { votes: new_votes })
+        let mut first_ballot = new_votes.first().cloned().unwrap();
+        first_ballot.sort();
+
+        Ok(Self {
+            votes: new_votes,
+            active_candidates: first_ballot,
+        })
     }
 }
 
@@ -170,6 +188,7 @@ impl TryFrom<Vec<Vec<usize>>> for Profile {
                         .collect()
                 })
                 .collect(),
+            active_candidates: (0..value[0].len()).map(|id| CandidateId::new(id)).collect(),
         })
     }
 }
