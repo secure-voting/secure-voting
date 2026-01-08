@@ -8,7 +8,10 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 /// Strongly-typed Candidate ID.
-#[nutype(derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash, PartialOrd, Ord))]
+#[nutype(
+    derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash, PartialOrd, Ord),
+    const_fn
+)]
 pub struct CandidateId(usize);
 
 /// Profile type.
