@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::profile::Profile;
+use crate::profile::{CandidateId, Profile};
 
 pub mod anti_plurality;
 pub mod approval;
@@ -14,6 +14,29 @@ pub mod copeland;
 pub mod minmax;
 pub mod plurality;
 pub mod simpson;
+
+/// The score type to be used by Scorers.
+pub struct Score<T> {
+    scores: T,
+    candidates: Vec<CandidateId>,
+}
+
+impl<T> Score<T> {
+    pub fn new(scores: T, candidates: &[CandidateId]) -> Self {
+        Self {
+            scores,
+            candidates: candidates.to_vec(),
+        }
+    }
+
+    pub fn score(&self) -> &T {
+        &self.scores
+    }
+
+    pub fn candidates(&self) -> &[CandidateId] {
+        &self.candidates
+    }
+}
 
 /// Computes the scores for the profile of voters.
 pub trait Scorer {
@@ -28,5 +51,5 @@ pub trait Scorer {
     type Error: Debug;
 
     /// Scores the voting profile.
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error>;
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error>;
 }
