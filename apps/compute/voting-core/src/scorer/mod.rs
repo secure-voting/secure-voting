@@ -22,6 +22,7 @@ pub struct Score<T> {
 }
 
 impl<T> Score<T> {
+    /// Return a new Score instance.
     pub fn new(scores: T, candidates: &[CandidateId]) -> Self {
         Self {
             scores,
@@ -29,18 +30,27 @@ impl<T> Score<T> {
         }
     }
 
+    /// Get a non-owning view of the scores.
     pub fn score(&self) -> &T {
         &self.scores
     }
 
+    /// Get a non-owning view of the candidates.
     pub fn candidates(&self) -> &[CandidateId] {
         &self.candidates
     }
 }
 
-impl<T: IntoIterator<Item = U> + Clone, U> Score<T> {
-    pub fn iter(&self) -> impl Iterator<Item = (U, &CandidateId)> {
-        self.scores.clone().into_iter().zip(self.candidates.iter())
+impl<T> Score<T> {
+    /// Get an iterator over pairs of (score, candidate) in the scores.
+    pub fn iter<'a, U: 'a>(&'a self) -> impl Iterator<Item = (&'a U, &'a CandidateId)>
+    where
+        T: AsRef<[U]>,
+    {
+        let scores = self.score().as_ref();
+        debug_assert_eq!(scores.len(), self.candidates.len());
+
+        scores.iter().zip(self.candidates.iter())
     }
 }
 
