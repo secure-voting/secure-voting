@@ -115,6 +115,9 @@ impl Profile {
             new_votes.push(new_ranking);
         }
 
+        // Is safe, because new_votes is a non-empty
+        // list of voters, as per type's invariants.
+        #[allow(clippy::unwrap_used)]
         let mut first_ballot = new_votes.first().cloned().unwrap();
         first_ballot.sort();
 
@@ -174,7 +177,7 @@ impl TryFrom<Vec<Vec<usize>>> for Profile {
                         .collect()
                 })
                 .collect(),
-            active_candidates: (0..value[0].len()).map(|id| CandidateId::new(id)).collect(),
+            active_candidates: (0..value[0].len()).map(CandidateId::new).collect(),
         })
     }
 }
