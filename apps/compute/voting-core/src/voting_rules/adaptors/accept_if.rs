@@ -1,5 +1,7 @@
 //! AcceptIf adaptor module.
 
+use tracing::instrument;
+
 use crate::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
 use crate::voting_rules::VotingRuleExec;
@@ -31,12 +33,16 @@ where
 {
     type Error = V::Error;
 
+    #[instrument(skip(self, profile))]
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         let outcome = self.voting_rule.execute(profile)?;
+        tracing::debug!(?outcome, "Calculated outcome");
 
         if (self.predicate)(&outcome) {
+            tracing::debug!("Predicate is true, accepting outcome");
             Ok(outcome)
         } else {
+            tracing::debug!("Predicate is false, rejecting outcome");
             Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
         }
     }

@@ -42,8 +42,14 @@ impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
 
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         match self.rule.execute(profile)? {
-            outcome @ RuleOutcome::UniqueWinner(_) => Ok(outcome),
-            RuleOutcome::MultipleWinners(_) => Err(RequireUniqueError::NotUnique),
+            outcome @ RuleOutcome::UniqueWinner(_) => {
+                tracing::debug!("Rule returned a unique winner");
+                Ok(outcome)
+            }
+            RuleOutcome::MultipleWinners(_) => {
+                tracing::error!("Multiple winners detected, returning error");
+                Err(RequireUniqueError::NotUnique)
+            }
         }
     }
 }

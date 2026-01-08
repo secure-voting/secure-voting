@@ -2,8 +2,9 @@
 
 use std::fmt::Debug;
 use thiserror::Error;
+use tracing::instrument;
 
-use crate::{tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
 
 /// A fallback adaptor.
 ///
@@ -47,13 +48,19 @@ where
 {
     type Error = FallbackError<R1::Error, R2::Error>;
 
-    fn execute(&self, profile: &crate::profile::Profile) -> Result<RuleOutcome, Self::Error> {
+    #[instrument(skip(self, profile))]
+    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         match self.primary.execute(profile) {
-            Ok(RuleOutcome::UniqueWinner(winner)) => Ok(RuleOutcome::UniqueWinner(winner)),
-            Ok(RuleOutcome::MultipleWinners(_)) => self
-                .fallback
-                .execute(profile)
-                .map_err(FallbackError::FallbackError),
+            Ok(RuleOutcome::UniqueWinner(winner)) => {
+                tracing::debug!("Primary rule returned a unique winner");
+                Ok(RuleOutcome::UniqueWinner(winner))
+            }
+            Ok(RuleOutcome::MultipleWinners(_)) => {
+                tracing::debug!("Primary rule can't decide winner, running fallback");
+                self.fallback
+                    .execute(profile)
+                    .map_err(FallbackError::FallbackError)
+            }
             Err(e) => Err(FallbackError::PrimaryError(e)),
         }
     }
