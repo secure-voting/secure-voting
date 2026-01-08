@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use crate::{
     matrix::{CondorcetMatrix, PairwiseMatrix},
     profile::Profile,
-    scorer::Scorer,
+    scorer::{Score, Scorer},
 };
 
 /// Condorcet Scorer type.
@@ -25,10 +25,13 @@ impl Scorer for CondorcetScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
         let vote_counts = PairwiseMatrix::from(profile);
         // The construction process ensures the invariants of the matrix are upheld
-        Ok(CondorcetMatrix::from(vote_counts))
+        Ok(Score::new(
+            CondorcetMatrix::from(vote_counts),
+            profile.active_candidates(),
+        ))
     }
 }
 
@@ -49,7 +52,13 @@ mod tests {
 
         assert_eq!(
             answer,
-            Into::<Vec<Vec<bool>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
+            Into::<Vec<Vec<bool>>>::into(
+                CondorcetScorer
+                    .compute_score(&profile)
+                    .unwrap()
+                    .score()
+                    .clone()
+            )
         );
     }
 
@@ -66,7 +75,13 @@ mod tests {
 
         assert_eq!(
             answer,
-            Into::<Vec<Vec<bool>>>::into(CondorcetScorer.compute_score(&profile).unwrap())
+            Into::<Vec<Vec<bool>>>::into(
+                CondorcetScorer
+                    .compute_score(&profile)
+                    .unwrap()
+                    .score()
+                    .clone()
+            )
         );
     }
 }

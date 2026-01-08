@@ -4,7 +4,11 @@
 
 use std::convert::Infallible;
 
-use crate::{matrix::PairwiseMatrix, prelude::Profile, scorer::Scorer};
+use crate::{
+    matrix::PairwiseMatrix,
+    prelude::Profile,
+    scorer::{Score, Scorer},
+};
 
 /// Copeland I scorer.
 ///
@@ -17,7 +21,7 @@ impl Scorer for CopelandIScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise = PairwiseMatrix::from(profile);
         let n_candidates = profile.n_candidates();
 
@@ -29,7 +33,7 @@ impl Scorer for CopelandIScorer {
             })
             .collect();
 
-        Ok(scores)
+        Ok(Score::new(scores, profile.active_candidates()))
     }
 }
 
@@ -44,7 +48,7 @@ mod tests {
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![3, 2, 1, 0]);
+        assert_eq!(scores.score().clone(), vec![3, 2, 1, 0]);
     }
 
     #[test]
@@ -54,7 +58,7 @@ mod tests {
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![2, 1, 0]);
+        assert_eq!(scores.score().clone(), vec![2, 1, 0]);
     }
 
     #[test]
@@ -64,7 +68,7 @@ mod tests {
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![1, 1, 1]);
+        assert_eq!(scores.score().clone(), vec![1, 1, 1]);
     }
 
     #[test]
@@ -74,7 +78,7 @@ mod tests {
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![1, 0]);
+        assert_eq!(scores.score().clone(), vec![1, 0]);
     }
 
     #[test]
@@ -91,6 +95,6 @@ mod tests {
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![0, 0, 0]);
+        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
     }
 }

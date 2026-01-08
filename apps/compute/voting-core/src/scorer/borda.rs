@@ -6,7 +6,10 @@ use std::convert::Infallible;
 
 use rayon::prelude::*;
 
-use crate::{profile::Profile, scorer::Scorer};
+use crate::{
+    profile::Profile,
+    scorer::{Score, Scorer},
+};
 
 /// Borda scorer.
 ///
@@ -18,25 +21,29 @@ impl Scorer for BordaScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
-        Ok((0..n_voters)
-            .into_par_iter()
-            .map(|i| {
-                let mut tmp = vec![0; n_candidates];
+        Ok(Score::new(
+            (0..n_voters)
+                .into_par_iter()
+                .map(|i| {
+                    let mut tmp = vec![0; n_candidates];
 
-                for j in 0..n_candidates {
-                    tmp[profile[i][j].into_inner()] = n_candidates - j - 1;
-                }
+                    for j in 0..n_candidates {
+                        tmp[profile.get_candidate_id(&profile[i][j]).unwrap()] =
+                            n_candidates - j - 1;
+                    }
 
-                tmp
-            })
-            .reduce(
-                || vec![0; n_candidates],
-                |a, b| a.iter().zip(b.iter()).map(|(x, y)| x + y).collect(),
-            ))
+                    tmp
+                })
+                .reduce(
+                    || vec![0; n_candidates],
+                    |a, b| a.iter().zip(b.iter()).map(|(x, y)| x + y).collect(),
+                ),
+            profile.active_candidates(),
+        ))
     }
 }
 
@@ -52,6 +59,8 @@ mod tests {
             BordaScorer
                 .compute_score(&votes.try_into().unwrap())
                 .unwrap()
+                .score()
+                .clone()
         );
     }
 }

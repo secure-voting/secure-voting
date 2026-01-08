@@ -38,6 +38,12 @@ impl<T> Score<T> {
     }
 }
 
+impl<T: IntoIterator<Item = U> + Clone, U> Score<T> {
+    pub fn iter(&self) -> impl Iterator<Item = (U, &CandidateId)> {
+        self.scores.clone().into_iter().zip(self.candidates.iter())
+    }
+}
+
 /// Computes the scores for the profile of voters.
 pub trait Scorer {
     /// Output type produced by this scorer.

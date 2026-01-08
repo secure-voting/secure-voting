@@ -2,7 +2,11 @@
 
 use std::convert::Infallible;
 
-use crate::{matrix::PairwiseMatrix, prelude::Profile, scorer::Scorer};
+use crate::{
+    matrix::PairwiseMatrix,
+    prelude::Profile,
+    scorer::{Score, Scorer},
+};
 
 /// Simpson scorer type.
 ///
@@ -16,22 +20,25 @@ impl Scorer for SimpsonScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Self::Output, Self::Error> {
+    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise_matrix = PairwiseMatrix::from(profile);
         let n = pairwise_matrix.n();
 
         // unwrap is justified because the pairwise matrix
         // can't be empty per its invariants
         #[allow(clippy::unwrap_used)]
-        Ok((0..n)
-            .map(|i| {
-                (0..n)
-                    .filter(|j| *j != i)
-                    .map(|j| pairwise_matrix.margin(i, j))
-                    .min()
-                    .unwrap()
-            })
-            .collect())
+        Ok(Score::new(
+            (0..n)
+                .map(|i| {
+                    (0..n)
+                        .filter(|j| *j != i)
+                        .map(|j| pairwise_matrix.margin(i, j))
+                        .min()
+                        .unwrap()
+                })
+                .collect(),
+            profile.active_candidates(),
+        ))
     }
 }
 
@@ -46,7 +53,7 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![1, -1, -1, -1]);
+        assert_eq!(scores.score().clone(), vec![1, -1, -1, -1]);
     }
 
     #[test]
@@ -55,7 +62,7 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![3, -3, -3]);
+        assert_eq!(scores.score().clone(), vec![3, -3, -3]);
     }
 
     #[test]
@@ -64,7 +71,7 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![-1, -1, -1]);
+        assert_eq!(scores.score().clone(), vec![-1, -1, -1]);
     }
 
     #[test]
@@ -73,7 +80,7 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![1, -1]);
+        assert_eq!(scores.score().clone(), vec![1, -1]);
     }
 
     #[test]
@@ -90,7 +97,7 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![0, 0, 0]);
+        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
     }
 
     #[test]
@@ -107,6 +114,6 @@ mod tests {
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores, vec![1, -5, -1]);
+        assert_eq!(scores.score().clone(), vec![1, -5, -1]);
     }
 }
