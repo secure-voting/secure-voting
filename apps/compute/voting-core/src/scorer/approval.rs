@@ -35,6 +35,9 @@ impl<const Q: usize> Scorer for ApprovalScorer<Q> {
             return Err(ApprovalScorerError);
         }
 
+        // The unwrap is used on a get_candidate_id return value,
+        // which is called with a profile-related value, so is safe.
+        #[allow(clippy::unwrap_used)]
         Ok(Score::new(
             (0..n_voters)
                 .into_par_iter()

@@ -17,7 +17,9 @@ pub mod simpson;
 
 /// The score type to be used by Scorers.
 pub struct Score<T> {
+    /// Scores of the candidates.
     scores: T,
+    /// A list of candidates in this scoring.
     candidates: Vec<CandidateId>,
 }
 
