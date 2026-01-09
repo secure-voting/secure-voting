@@ -24,7 +24,7 @@ pub mod practical_condorcet;
 pub mod simpson;
 
 /// Trait for all the voting rules, simple and complex ones.
-pub trait VotingRuleExec {
+pub trait VotingRuleExec: Default {
     /// Returned if the voting pipeline can't be completed.
     type Error: Debug;
 

@@ -126,3 +126,22 @@ where
         }
     }
 }
+
+impl<S, E, D, T, Stop> Default for Elimination<S, E, D, T, Stop>
+where
+    S: Scorer<Output = D::Input>,
+    E: EliminationCriterion<Score = S::Output>,
+    D: Decider,
+    T: TieBreaker,
+    Stop: EliminationStopCondition<S::Output>,
+{
+    fn default() -> Self {
+        Self {
+            scorer: S::new(),
+            eliminator: E::new(),
+            decider: D::new(),
+            tiebreaker: T::new(),
+            stop: Stop::new(),
+        }
+    }
+}
