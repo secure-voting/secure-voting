@@ -17,6 +17,10 @@ impl EliminationStopCondition<Vec<usize>> for MajorityStop {
 
         scores.iter().any(|(s, _)| s * 2 > total)
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]
