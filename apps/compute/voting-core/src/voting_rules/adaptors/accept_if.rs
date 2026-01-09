@@ -8,28 +8,27 @@ use crate::voting_rules::VotingRuleExec;
 
 /// AcceptIf adaptor.
 ///
-/// Accepts the candidate set if it meets a predicate F.
-pub struct AcceptIf<V, F> {
+/// Accepts the candidate set if it meets a predicate.
+pub struct AcceptIf<V> {
     /// Voting rule to get the candidate set from.
     voting_rule: V,
     /// Predicate the would accept or reject the candidate set as a whole.
-    predicate: F,
+    predicate: Box<dyn Fn(&RuleOutcome) -> bool>,
 }
 
-impl<V, F> AcceptIf<V, F> {
+impl<V> AcceptIf<V> {
     /// Construct a new AcceptIf instance.
-    pub fn new(voting_rule: V, predicate: F) -> Self {
+    pub fn new(voting_rule: V, predicate: impl Fn(&RuleOutcome) -> bool + 'static) -> Self {
         Self {
             voting_rule,
-            predicate,
+            predicate: Box::new(predicate),
         }
     }
 }
 
-impl<V, F> VotingRuleExec for AcceptIf<V, F>
+impl<V> VotingRuleExec for AcceptIf<V>
 where
     V: VotingRuleExec,
-    F: Fn(&RuleOutcome) -> bool,
 {
     type Error = V::Error;
 
@@ -44,6 +43,18 @@ where
         } else {
             tracing::debug!("Predicate is false, rejecting outcome");
             Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
+        }
+    }
+}
+
+impl<V> Default for AcceptIf<V>
+where
+    V: VotingRuleExec,
+{
+    fn default() -> Self {
+        Self {
+            voting_rule: Default::default(),
+            predicate: Box::new(|_| true),
         }
     }
 }
