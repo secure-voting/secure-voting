@@ -49,4 +49,7 @@ pub trait TieBreaker {
         candidates: &[CandidateId],
         profile: &Profile,
     ) -> Result<RuleOutcome, Self::Error>;
+
+    /// Construct a new TieBreaker instance.
+    fn new() -> Self;
 }
