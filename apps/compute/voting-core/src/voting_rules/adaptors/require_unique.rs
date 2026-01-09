@@ -56,6 +56,14 @@ impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
     }
 }
 
+impl<R: VotingRuleExec> Default for RequireUnique<R> {
+    fn default() -> Self {
+        Self {
+            rule: Default::default(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

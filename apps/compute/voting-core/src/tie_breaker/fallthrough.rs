@@ -28,6 +28,10 @@ impl TieBreaker for FallthroughTieBreaker {
             _ => Ok(RuleOutcome::MultipleWinners(candidates.to_vec())),
         }
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]

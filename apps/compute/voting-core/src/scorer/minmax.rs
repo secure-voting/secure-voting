@@ -37,4 +37,8 @@ impl Scorer for MinmaxScorer {
             profile.active_candidates(),
         ))
     }
+
+    fn new() -> Self {
+        Self
+    }
 }

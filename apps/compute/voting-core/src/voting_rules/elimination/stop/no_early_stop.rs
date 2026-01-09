@@ -13,4 +13,8 @@ impl<S> EliminationStopCondition<S> for NoEarlyStop {
     fn should_stop(&self, _: &Score<S>, _: &RuleOutcome, _: &Profile) -> bool {
         false
     }
+
+    fn new() -> Self {
+        Self
+    }
 }

@@ -22,4 +22,7 @@ pub trait Decider {
 
     /// Decides the winner or a set of winners from the scores provided.
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error>;
+
+    /// Construct a new Decider instance.
+    fn new() -> Self;
 }

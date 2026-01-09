@@ -66,6 +66,19 @@ where
     }
 }
 
+impl<R1, R2> Default for Fallback<R1, R2>
+where
+    R1: VotingRuleExec,
+    R2: VotingRuleExec,
+{
+    fn default() -> Self {
+        Self {
+            primary: Default::default(),
+            fallback: Default::default(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

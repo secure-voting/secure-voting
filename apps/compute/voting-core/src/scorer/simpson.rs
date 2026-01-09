@@ -40,6 +40,10 @@ impl Scorer for SimpsonScorer {
             profile.active_candidates(),
         ))
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]

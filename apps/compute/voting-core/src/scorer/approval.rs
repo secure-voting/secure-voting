@@ -55,6 +55,10 @@ impl<const Q: usize> Scorer for ApprovalScorer<Q> {
             profile.active_candidates(),
         ))
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]
