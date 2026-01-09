@@ -70,4 +70,7 @@ pub trait Scorer {
 
     /// Scores the voting profile.
     fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error>;
+
+    /// Construct a new scorer.
+    fn new() -> Self;
 }

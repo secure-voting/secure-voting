@@ -33,6 +33,10 @@ impl Scorer for CondorcetScorer {
             profile.active_candidates(),
         ))
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]

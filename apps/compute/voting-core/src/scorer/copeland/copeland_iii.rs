@@ -36,6 +36,10 @@ impl Scorer for CopelandIIIScorer {
 
         Ok(Score::new(scores, profile.active_candidates()))
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 #[cfg(test)]
