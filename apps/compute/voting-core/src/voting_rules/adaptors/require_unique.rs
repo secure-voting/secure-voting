@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
 
@@ -40,6 +41,7 @@ pub enum RequireUniqueError<RE: Debug> {
 impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
     type Error = RequireUniqueError<R::Error>;
 
+    #[instrument(skip(self, profile))]
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         match self.rule.execute(profile)? {
             outcome @ RuleOutcome::UniqueWinner(_) => {
