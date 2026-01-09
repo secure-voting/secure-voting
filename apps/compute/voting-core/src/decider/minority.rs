@@ -14,15 +14,6 @@ pub struct MinorityDecider<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T> MinorityDecider<T> {
-    /// Construct a new minority decider.
-    pub fn new() -> Self {
-        Self {
-            _marker: PhantomData::<T>,
-        }
-    }
-}
-
 impl<T> Decider for MinorityDecider<T>
 where
     T: PartialOrd + Default + Copy,
@@ -49,6 +40,12 @@ where
         }
 
         Ok(winners)
+    }
+
+    fn new() -> Self {
+        Self {
+            _marker: PhantomData,
+        }
     }
 }
 

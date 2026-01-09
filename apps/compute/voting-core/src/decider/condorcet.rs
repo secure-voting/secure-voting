@@ -24,6 +24,10 @@ impl Decider for CondorcetDecider {
 
         Ok(vec![])
     }
+
+    fn new() -> Self {
+        Self
+    }
 }
 
 // Unsafe code because CondorcetMatrix is constructed from a Vec<Vec<usize>>
