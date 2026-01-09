@@ -5,6 +5,7 @@
 use std::fmt::Debug;
 
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
     decider::Decider,
@@ -84,6 +85,7 @@ where
 {
     type Error = EliminationRuleError<S::Error, D::Error, T::Error, CandidateRemovalError>;
 
+    #[instrument(skip(self, profile), ret)]
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         let mut current_profile = profile.clone();
 
@@ -92,22 +94,29 @@ where
                 .scorer
                 .compute_score(&current_profile)
                 .map_err(EliminationRuleError::ScoringError)?;
+
             let candidates = self
                 .decider
                 .decide(&scores)
                 .map_err(EliminationRuleError::DecisionError)?;
+            tracing::debug!(?candidates, "Elected a set of candidates");
+
             let outcome = self
                 .tiebreaker
                 .tie_break(&candidates, &current_profile)
                 .map_err(EliminationRuleError::TieBreakError)?;
+            tracing::debug!(?outcome, "Calculated a final outcome");
 
             if self.stop.should_stop(&scores, &outcome, profile) {
+                tracing::debug!("Stopping condition met, finishing elimination rounds");
                 return Ok(outcome);
             }
 
             let to_remove = self.eliminator.eliminate(&scores);
+            tracing::debug!(?to_remove, "Removing candidates");
 
             if to_remove.is_empty() {
+                tracing::debug!("Removed candidate set is empty, stopping on undecided state");
                 return Ok(RuleOutcome::MultipleWinners(vec![]));
             }
 

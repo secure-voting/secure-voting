@@ -6,6 +6,7 @@
 
 use std::fmt::Debug;
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
     decider::Decider,
@@ -81,26 +82,27 @@ where
     /// Run the constructed pipeline.
     ///
     /// Returns an error if any of the steps didn't succeed.
+    #[instrument(skip(self, profile), ret)]
     fn run(&self, profile: &Profile) -> VotingRuleResult<S, D, T> {
         let scores = self
             .scorer
             .compute_score(profile)
             .map_err(VotingRuleError::ScoringError)?;
+
         let candidates = self
             .decider
             .decide(&scores)
             .map_err(VotingRuleError::DecisionError)?;
+        tracing::debug!(?candidates, "Calculated a set of winners");
+
         self.tiebreaker
             .tie_break(&candidates, profile)
             .map_err(VotingRuleError::TieBreakError)
     }
 }
 
-impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec for VotingRule<S, D, T>
-where
-    <S as Scorer>::Error: Debug,
-    <D as Decider>::Error: Debug,
-    <T as TieBreaker>::Error: Debug,
+impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec
+    for VotingRule<S, D, T>
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
