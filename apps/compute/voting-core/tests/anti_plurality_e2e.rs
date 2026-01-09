@@ -1,5 +1,6 @@
 mod common;
 
+use rayon::iter::MultiZip;
 use voting_core::{
     prelude::{AntiPluralityRule, RuleOutcome, VotingRuleExec},
     profile::CandidateId,
@@ -18,6 +19,32 @@ fn test_wiki_example() {
             CandidateId::new(NASHVILLE),
             CandidateId::new(CHATTANOOGA)
         ]),
+        scorer.execute(&profile).unwrap()
+    );
+}
+
+#[test]
+fn test_simple_antiplurality() {
+    let profile = vec![vec![0, 2, 1], vec![0, 1, 2], vec![2, 0, 1]]
+        .try_into()
+        .unwrap();
+    let scorer = AntiPluralityRule::<FallthroughTieBreaker>::default();
+
+    assert_eq!(
+        RuleOutcome::UniqueWinner(CandidateId::new(0)),
+        scorer.execute(&profile).unwrap()
+    );
+}
+
+#[test]
+fn test_multiple_winners() {
+    let profile = vec![vec![0, 2, 1], vec![0, 1, 2], vec![2, 1, 0]]
+        .try_into()
+        .unwrap();
+    let scorer = AntiPluralityRule::<FallthroughTieBreaker>::default();
+
+    assert_eq!(
+        RuleOutcome::MultipleWinners((0..3).map(CandidateId::new).collect()),
         scorer.execute(&profile).unwrap()
     );
 }
