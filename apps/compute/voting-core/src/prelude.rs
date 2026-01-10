@@ -60,4 +60,8 @@ pub use crate::{
     matrix::{CondorcetMatrix, PairwiseMatrix},
     profile::{CandidateId, Profile},
     tie_breaker::RuleOutcome,
+    voting_rules::{
+        elimination::rule::{Elimination, EliminationRuleError},
+        voting_rule::{VotingRule, VotingRuleError},
+    },
 };
