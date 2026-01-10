@@ -81,18 +81,20 @@ impl Profile {
     }
 
     /// Get candidate's position in a sorted list.
-    pub fn get_candidate_id(&self, candidate: &CandidateId) -> Result<usize, usize> {
-        self.active_candidates.binary_search(candidate)
+    pub fn index_of(&self, candidate: &CandidateId) -> Option<usize> {
+        self.active_candidates.binary_search(candidate).ok()
     }
 
     /// Remove the candidates from the profile.
-    pub fn remove_candidates(
+    ///
+    /// Returns error if one of the to-be-removed candidates doesn't exist.
+    pub(crate) fn remove_candidates(
         self,
         candidates: Vec<CandidateId>,
     ) -> Result<Self, CandidateRemovalError> {
         if let Some(&wrong_id) = candidates
             .iter()
-            .find(|candidate_id| self.active_candidates.binary_search(&candidate_id).is_err())
+            .find(|candidate_id| self.active_candidates.binary_search(candidate_id).is_err())
         {
             return Err(CandidateRemovalError(wrong_id));
         }
