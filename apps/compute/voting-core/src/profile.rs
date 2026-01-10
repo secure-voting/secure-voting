@@ -8,9 +8,31 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 /// Strongly-typed Candidate ID.
-#[nutype(
-    derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash, PartialOrd, Ord),
-    const_fn
+#[cfg_attr(
+    feature = "serde",
+    nutype(
+        derive(
+            Debug,
+            PartialEq,
+            Eq,
+            Clone,
+            Copy,
+            Display,
+            Hash,
+            PartialOrd,
+            Ord,
+            Serialize,
+            Deserialize
+        ),
+        const_fn
+    )
+)]
+#[cfg_attr(
+    not(feature = "serde"),
+    nutype(
+        derive(Debug, PartialEq, Eq, Clone, Copy, Display, Hash, PartialOrd, Ord,),
+        const_fn
+    )
 )]
 pub struct CandidateId(usize);
 
@@ -30,6 +52,7 @@ pub struct CandidateId(usize);
 ///
 /// Only constructed through the [`TryFrom`] trait to enforce invariants.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Profile {
     /// A list of ranking ballots.
     votes: Vec<Vec<CandidateId>>,

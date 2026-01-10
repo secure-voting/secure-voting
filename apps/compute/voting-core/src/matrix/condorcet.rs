@@ -15,6 +15,7 @@ use std::fmt::Debug;
 /// 5. All non-diagonal elements are 0/1.
 /// 6. For all i != j: matrix[i][j] + matrix[j][i] = 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CondorcetMatrix {
     /// Inner condorcet matrix to be validated.
     matrix: Vec<Vec<bool>>,
