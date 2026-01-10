@@ -118,7 +118,7 @@ It enforces several invariants at construction time:
 ## Project status and scope
 
 This crate focuses on **correctness, composability, and clarity**.
-Performance optimizations, UI layers, and election-specific constraints
+UI layers, and election-specific constraints
 are intentionally out of scope.
 
 For internal design details and architectural rationale, see
