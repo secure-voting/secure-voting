@@ -18,6 +18,7 @@ pub mod simpson;
 pub mod zip;
 
 /// The score type to be used by Scorers.
+#[derive(Debug)]
 pub struct Score<T> {
     /// Scores of the candidates.
     scores: T,

@@ -11,7 +11,9 @@ use crate::{
 ///
 /// Runs two scorer and returns a tuple of their computed scores.
 pub struct ZipScorer<S1, S2> {
+    /// The first scorer.
     scorer1: S1,
+    /// The second scorer.
     scorer2: S2,
 }
 
