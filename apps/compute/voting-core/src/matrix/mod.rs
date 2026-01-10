@@ -1,4 +1,4 @@
-//! Condorcet Matrix type implementation.
+//! Pairwise Matrix type implementation.
 //!
 //! This module defines the [`PairwiseMatrix`] type and a derived type [`CondorcetMatrix`].
 
