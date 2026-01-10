@@ -28,6 +28,8 @@ pub fn init_tracing() {
         let subscriber = fmt()
             .with_env_filter(EnvFilter::from_default_env())
             .with_test_writer()
+            .with_line_number(true)
+            .with_file(true)
             .finish();
         let _ = tracing::subscriber::set_global_default(subscriber);
     });
