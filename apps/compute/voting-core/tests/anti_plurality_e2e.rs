@@ -1,6 +1,5 @@
 mod common;
 
-use rayon::iter::MultiZip;
 use voting_core::{
     prelude::{AntiPluralityRule, RuleOutcome, VotingRuleExec},
     profile::CandidateId,

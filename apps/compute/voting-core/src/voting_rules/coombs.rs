@@ -16,7 +16,10 @@ use crate::{
 /// Do a regular antiplurality voting step.
 /// If there is a candidate with a strict majority of votes, they are the winner.
 /// Otherwise, eliminate the candidate with the *most* last-place votes and repeat until the winner is chosen.
-pub type CoombsRule<TB = FallthroughTieBreaker> = Elimination<
+pub type CoombsRule = CoombsRuleWith<FallthroughTieBreaker>;
+
+/// The Coombs' voting rule type with a custom tie-breaker.
+pub type CoombsRuleWith<TB> = Elimination<
     ZipScorer<PluralityScorer, AntiPluralityScorer>,
     ZipSelector<1, MaxScoreElimination, Vec<usize>, Vec<usize>>,
     ZipSelector<0, MajorityDecider<usize>, Vec<usize>, Vec<usize>>,
