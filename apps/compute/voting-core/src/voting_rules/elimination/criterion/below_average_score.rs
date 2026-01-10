@@ -22,7 +22,7 @@ impl EliminationCriterion for BelowAverageElimination {
     }
 
     fn new() -> Self {
-        todo!()
+        Self
     }
 }
 
