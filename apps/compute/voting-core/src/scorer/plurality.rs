@@ -14,6 +14,7 @@ use crate::{
 /// Plurality scorer.
 ///
 /// Gives one point to the top candidate.
+#[derive(Debug, Clone, Copy)]
 pub struct PluralityScorer;
 
 impl Scorer for PluralityScorer {

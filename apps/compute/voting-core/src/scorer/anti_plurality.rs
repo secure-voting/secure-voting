@@ -14,6 +14,7 @@ use crate::{
 /// Anti-plurality scorer.
 ///
 /// Gives one point to everyone except the bottom candidate.
+#[derive(Debug, Clone, Copy)]
 pub struct AntiPluralityScorer;
 
 impl Scorer for AntiPluralityScorer {

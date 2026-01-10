@@ -13,6 +13,7 @@ use crate::{
 ///
 /// - If there is a single winner, returns [`RuleOutcome::UniqueWinner`] with a chosen winner.
 /// - If there are multiple winners, returns [`RuleOutcome::MultipleWinners`] with all of the winners.
+#[derive(Debug, Clone, Copy)]
 pub struct FallthroughTieBreaker;
 
 impl TieBreaker for FallthroughTieBreaker {

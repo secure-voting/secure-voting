@@ -5,6 +5,7 @@ use crate::{
 };
 
 /// Chooses candidates with scores below the average across the scoring results.
+#[derive(Debug, Clone, Copy)]
 pub struct BelowAverageElimination;
 
 impl EliminationCriterion for BelowAverageElimination {

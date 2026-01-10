@@ -13,6 +13,7 @@ use crate::{
 /// Condorcet Scorer type.
 ///
 /// Gives points only of the candidate wins in a head-to-head.
+#[derive(Debug, Clone, Copy)]
 pub struct CondorcetScorer;
 
 impl Scorer for CondorcetScorer {

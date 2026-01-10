@@ -9,6 +9,7 @@ use crate::{
 /// Majority elimination stop condition type.
 ///
 /// Checks whether to stop if any candidate has a strict majority of votes.
+#[derive(Debug, Clone, Copy)]
 pub struct MajorityStop;
 
 impl EliminationStopCondition<Vec<usize>> for MajorityStop {

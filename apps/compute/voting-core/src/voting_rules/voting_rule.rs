@@ -47,6 +47,7 @@ where
 /// 1. Scorer - transforms the raw vote data into score data for further analysis
 /// 2. Decider - chooses a set of winners depending on the score information
 /// 3. TieBreaker - chooses an absolute winner from the selected set
+#[derive(Debug, Clone, Copy)]
 pub struct VotingRule<S, D, T> {
     /// A scorer instance.
     scorer: S,

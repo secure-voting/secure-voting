@@ -14,6 +14,7 @@ use crate::{
 ///
 /// Gives one point to the first Q-candidates.
 /// This type is a zero-sized marker implementing [`Scorer`].
+#[derive(Debug, Clone, Copy)]
 pub struct ApprovalScorer<const Q: usize>;
 
 /// Approval error type.

@@ -14,6 +14,7 @@ use crate::{
 ///
 /// The score of each candidate is equal to the
 /// total margin between the chosen candidates and alternatives.
+#[derive(Debug, Clone, Copy)]
 pub struct CopelandIIIScorer;
 
 impl Scorer for CopelandIIIScorer {

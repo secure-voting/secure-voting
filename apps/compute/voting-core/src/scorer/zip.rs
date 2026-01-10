@@ -10,6 +10,7 @@ use crate::{
 /// Zip scorer.
 ///
 /// Runs two scorer and returns a tuple of their computed scores.
+#[derive(Debug, Clone, Copy)]
 pub struct ZipScorer<S1, S2> {
     /// The first scorer.
     scorer1: S1,

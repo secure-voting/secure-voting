@@ -9,6 +9,7 @@ use crate::{
 };
 
 /// Wrapper over an action to decide which part of the tuple to act on.
+#[derive(Debug, Clone, Copy)]
 pub struct ZipSelector<const I: usize, A, T1, T2> {
     /// Action to perform on a tuple's element.
     action: A,

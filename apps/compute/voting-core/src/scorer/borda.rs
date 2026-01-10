@@ -14,6 +14,7 @@ use crate::{
 /// Borda scorer.
 ///
 /// Gives n-1 points to the first candiate, n-2 to the second, ..., 1 to (n-1)th and 0 to the last.
+#[derive(Debug, Clone, Copy)]
 pub struct BordaScorer;
 
 impl Scorer for BordaScorer {

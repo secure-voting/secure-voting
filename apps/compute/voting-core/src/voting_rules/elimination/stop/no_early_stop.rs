@@ -7,6 +7,7 @@ use crate::{
 };
 
 /// Don't stop early. Just returns false if asked whether to stop the elimination process.
+#[derive(Debug, Clone, Copy)]
 pub struct NoEarlyStop;
 
 impl<S> EliminationStopCondition<S> for NoEarlyStop {

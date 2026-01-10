@@ -26,6 +26,7 @@ use crate::{
 /// If the the whole pipeline can't decide a unique winner,
 /// then the lowest candidate is eliminated and the process
 /// is rerun until the winner is unique.
+#[derive(Debug)]
 pub struct Elimination<S, E, D, T, Stop = NoEarlyStop> {
     /// The scorer step of the pipeline.
     scorer: S,

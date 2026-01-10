@@ -10,6 +10,7 @@ use crate::{profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRule
 /// Require unique adaptor.
 ///
 /// Explicitly ensure that there is a single winner.
+#[derive(Debug, Clone, Copy)]
 pub struct RequireUnique<R> {
     /// The rule to ensure a single winner in.
     rule: R,

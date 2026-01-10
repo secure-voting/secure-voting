@@ -14,6 +14,7 @@ use crate::{
 ///
 /// The score of each candidate is equal to the
 /// number of wins in each head-to-head.
+#[derive(Debug, Clone, Copy)]
 pub struct CopelandIScorer;
 
 impl Scorer for CopelandIScorer {
