@@ -9,6 +9,7 @@ use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRule
 /// A fallback adaptor.
 ///
 /// If the primary rule can't decide a single winner, a fallback rule will be used to determine the winner instead.
+#[derive(Debug, Clone, Copy)]
 pub struct Fallback<R1, R2> {
     /// Primary voting Rule
     primary: R1,

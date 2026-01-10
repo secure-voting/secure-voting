@@ -8,6 +8,7 @@ use crate::{decider::Decider, matrix::CondorcetMatrix, profile::CandidateId, sco
 ///
 /// Chooses a Condorcet winner from the table, if there is one.
 /// Returns an empty winner set otherwise.
+#[derive(Debug, Clone, Copy)]
 pub struct CondorcetDecider;
 
 impl Decider for CondorcetDecider {

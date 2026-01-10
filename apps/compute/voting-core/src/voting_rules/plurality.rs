@@ -10,5 +10,7 @@ use crate::{
 /// Each voter gives one point to their top candidate.
 /// Winners are selected by the plurality among their score sums.
 /// If there are several winners, the result is left undecided.
-pub type PluralityRule<TB = FallthroughTieBreaker> =
-    VotingRule<PluralityScorer, MajorityDecider<usize>, TB>;
+pub type PluralityRule = PluralityRuleWith<FallthroughTieBreaker>;
+
+/// Plurality Voting rule type with a custom tie-breaker.
+pub type PluralityRuleWith<TB> = VotingRule<PluralityScorer, MajorityDecider<usize>, TB>;

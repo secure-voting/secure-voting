@@ -14,6 +14,7 @@ use crate::{
 ///
 /// Gives one point to the first Q-candidates.
 /// This type is a zero-sized marker implementing [`Scorer`].
+#[derive(Debug, Clone, Copy)]
 pub struct ApprovalScorer<const Q: usize>;
 
 /// Approval error type.
@@ -44,7 +45,7 @@ impl<const Q: usize> Scorer for ApprovalScorer<Q> {
                 .map(|i| {
                     let mut tmp = vec![0; n_candidates];
 
-                    (0..Q).for_each(|x| tmp[profile.get_candidate_id(&profile[i][x]).unwrap()] = 1);
+                    (0..Q).for_each(|x| tmp[profile.index_of(&profile[i][x]).unwrap()] = 1);
 
                     tmp
                 })

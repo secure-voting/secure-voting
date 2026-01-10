@@ -17,6 +17,7 @@ use crate::{
 /// in eacah head-to-head.
 ///
 /// Ties contribute 0.
+#[derive(Debug, Clone, Copy)]
 pub struct CopelandIIScorer;
 
 impl Scorer for CopelandIIScorer {

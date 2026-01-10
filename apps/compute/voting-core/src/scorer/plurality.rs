@@ -14,6 +14,7 @@ use crate::{
 /// Plurality scorer.
 ///
 /// Gives one point to the top candidate.
+#[derive(Debug, Clone, Copy)]
 pub struct PluralityScorer;
 
 impl Scorer for PluralityScorer {
@@ -32,7 +33,7 @@ impl Scorer for PluralityScorer {
                 .into_par_iter()
                 .map(|i| {
                     let mut tmp = vec![0; n_candidates];
-                    tmp[profile.get_candidate_id(&profile[i][0]).unwrap()] = 1;
+                    tmp[profile.index_of(&profile[i][0]).unwrap()] = 1;
 
                     tmp
                 })

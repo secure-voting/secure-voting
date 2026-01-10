@@ -13,4 +13,7 @@ type CondorcetRule<TB = FallthroughTieBreaker> = VotingRule<CondorcetScorer, Con
 /// Black Voting rule type.
 ///
 /// If there is a Condorcet Winner, choose them, otherwise use Borda as fallback.
-pub type BlackRule<TB> = Fallback<CondorcetRule<TB>, BordaRule>;
+pub type BlackRule = BlackRuleWith<FallthroughTieBreaker>;
+
+/// Black Voting rule type with a custom tie-breaker.
+pub type BlackRuleWith<TB> = Fallback<CondorcetRule<TB>, BordaRule>;

@@ -9,5 +9,7 @@ use crate::{
 ///
 /// Each candidate's score is the maximum margin of them against opponents.
 /// The candidate(-s) with the minimum score are winners.
-pub type MinmaxRule<TB = FallthroughTieBreaker> =
-    VotingRule<MinmaxScorer, MinorityDecider<isize>, TB>;
+pub type MinmaxRule = MinmaxRuleWith<FallthroughTieBreaker>;
+
+/// The minmax voting rule type with a custom tie-breaker.
+pub type MinmaxRuleWith<TB> = VotingRule<MinmaxScorer, MinorityDecider<isize>, TB>;

@@ -14,6 +14,7 @@ use crate::{
 /// Borda scorer.
 ///
 /// Gives n-1 points to the first candiate, n-2 to the second, ..., 1 to (n-1)th and 0 to the last.
+#[derive(Debug, Clone, Copy)]
 pub struct BordaScorer;
 
 impl Scorer for BordaScorer {
@@ -35,8 +36,7 @@ impl Scorer for BordaScorer {
                     let mut tmp = vec![0; n_candidates];
 
                     for j in 0..n_candidates {
-                        tmp[profile.get_candidate_id(&profile[i][j]).unwrap()] =
-                            n_candidates - j - 1;
+                        tmp[profile.index_of(&profile[i][j]).unwrap()] = n_candidates - j - 1;
                     }
 
                     tmp

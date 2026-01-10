@@ -67,7 +67,7 @@ pub struct CandidateRemovalError(CandidateId);
 impl Profile {
     /// Number of candidates in the current profile.
     pub fn n_candidates(&self) -> usize {
-        self.votes[0].len()
+        self.active_candidates.len()
     }
 
     /// Number of voters in the current profile.
@@ -81,18 +81,20 @@ impl Profile {
     }
 
     /// Get candidate's position in a sorted list.
-    pub fn get_candidate_id(&self, candidate: &CandidateId) -> Result<usize, usize> {
-        self.active_candidates.binary_search(candidate)
+    pub fn index_of(&self, candidate: &CandidateId) -> Option<usize> {
+        self.active_candidates.binary_search(candidate).ok()
     }
 
     /// Remove the candidates from the profile.
-    pub fn remove_candidates(
+    ///
+    /// Returns error if one of the to-be-removed candidates doesn't exist.
+    pub(crate) fn remove_candidates(
         self,
         candidates: Vec<CandidateId>,
     ) -> Result<Self, CandidateRemovalError> {
         if let Some(&wrong_id) = candidates
             .iter()
-            .find(|candidate_id| candidate_id.into_inner() >= self.n_candidates())
+            .find(|candidate_id| self.active_candidates.binary_search(candidate_id).is_err())
         {
             return Err(CandidateRemovalError(wrong_id));
         }
@@ -279,6 +281,14 @@ mod tests {
         ];
 
         assert_eq!(result.votes, expected_votes);
+        assert_eq!(
+            result.active_candidates,
+            vec![
+                CandidateId::new(0),
+                CandidateId::new(2),
+                CandidateId::new(3)
+            ]
+        );
     }
 
     #[test]
@@ -293,6 +303,10 @@ mod tests {
         let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(2)]];
 
         assert_eq!(result.votes, expected_votes);
+        assert_eq!(
+            result.active_candidates,
+            vec![CandidateId::new(0), CandidateId::new(2)]
+        );
     }
 
     #[test]
@@ -307,6 +321,10 @@ mod tests {
         let expected_votes = vec![vec![CandidateId::new(1), CandidateId::new(2)]];
 
         assert_eq!(result.votes, expected_votes);
+        assert_eq!(
+            result.active_candidates,
+            vec![CandidateId::new(1), CandidateId::new(2)]
+        );
     }
 
     #[test]
@@ -323,6 +341,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.votes, vec![vec![]]);
+        assert_eq!(result.active_candidates, vec![]);
     }
 
     #[test]
@@ -333,6 +352,14 @@ mod tests {
         let result = profile.remove_candidates(vec![]).unwrap();
 
         assert_eq!(ids(result.votes), votes);
+        assert_eq!(
+            result.active_candidates,
+            vec![
+                CandidateId::new(0),
+                CandidateId::new(1),
+                CandidateId::new(2)
+            ]
+        );
     }
 
     #[test]
@@ -348,27 +375,26 @@ mod tests {
     }
 
     #[test]
-    fn remove_candidates_preserves_order() {
+    fn remove_candidates_preserves_order_multiple_removals() {
         let votes = vec![vec![0, 2, 1, 3], vec![3, 1, 2, 0]];
         let profile: Profile = votes.try_into().unwrap();
 
-        let result = profile
+        let profile = profile
             .remove_candidates(vec![CandidateId::new(2)])
+            .unwrap();
+        let result = profile
+            .remove_candidates(vec![CandidateId::new(0)])
             .unwrap();
 
         let expected_votes = vec![
-            vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-                CandidateId::new(3),
-            ],
-            vec![
-                CandidateId::new(3),
-                CandidateId::new(1),
-                CandidateId::new(0),
-            ],
+            vec![CandidateId::new(1), CandidateId::new(3)],
+            vec![CandidateId::new(3), CandidateId::new(1)],
         ];
 
         assert_eq!(result.votes, expected_votes);
+        assert_eq!(
+            result.active_candidates,
+            vec![CandidateId::new(1), CandidateId::new(3),]
+        );
     }
 }

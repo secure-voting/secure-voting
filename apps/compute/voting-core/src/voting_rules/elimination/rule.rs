@@ -26,6 +26,7 @@ use crate::{
 /// If the the whole pipeline can't decide a unique winner,
 /// then the lowest candidate is eliminated and the process
 /// is rerun until the winner is unique.
+#[derive(Debug)]
 pub struct Elimination<S, E, D, T, Stop = NoEarlyStop> {
     /// The scorer step of the pipeline.
     scorer: S,
@@ -99,13 +100,13 @@ where
                 .decider
                 .decide(&scores)
                 .map_err(EliminationRuleError::DecisionError)?;
-            tracing::debug!(?candidates, "Elected a set of candidates");
+            tracing::debug!(?candidates, "Elected a set of");
 
             let outcome = self
                 .tiebreaker
                 .tie_break(&candidates, &current_profile)
                 .map_err(EliminationRuleError::TieBreakError)?;
-            tracing::debug!(?outcome, "Calculated a final outcome");
+            tracing::debug!(?outcome, "Calculated an");
 
             if self.stop.should_stop(&scores, &outcome, profile) {
                 tracing::debug!("Stopping condition met, finishing elimination rounds");
@@ -123,6 +124,13 @@ where
             current_profile = current_profile
                 .remove_candidates(to_remove)
                 .map_err(EliminationRuleError::CandidateRemovalError)?;
+            tracing::debug!("Candidates left: {:?}", current_profile.active_candidates());
+
+            if current_profile.active_candidates().len() == 1 {
+                tracing::debug!("Unique winner found, stopping elimination");
+                let winner = current_profile.active_candidates()[0];
+                return Ok(RuleOutcome::UniqueWinner(winner));
+            }
         }
     }
 }

@@ -15,7 +15,10 @@ pub mod minmax;
 pub mod plurality;
 pub mod simpson;
 
+pub mod zip;
+
 /// The score type to be used by Scorers.
+#[derive(Debug)]
 pub struct Score<T> {
     /// Scores of the candidates.
     scores: T,
@@ -35,6 +38,11 @@ impl<T> Score<T> {
     /// Get a non-owning view of the scores.
     pub fn score(&self) -> &T {
         &self.scores
+    }
+
+    /// Consume self and get scores.
+    pub fn consume_score(self) -> T {
+        self.scores
     }
 
     /// Get a non-owning view of the candidates.

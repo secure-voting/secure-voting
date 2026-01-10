@@ -14,6 +14,7 @@ use crate::{
 /// Anti-plurality scorer.
 ///
 /// Gives one point to everyone except the bottom candidate.
+#[derive(Debug, Clone, Copy)]
 pub struct AntiPluralityScorer;
 
 impl Scorer for AntiPluralityScorer {
@@ -33,9 +34,7 @@ impl Scorer for AntiPluralityScorer {
                 .map(|i| {
                     let mut tmp = vec![0; n_candidates];
 
-                    tmp[profile
-                        .get_candidate_id(profile[i].last().unwrap())
-                        .unwrap()] = 1;
+                    tmp[profile.index_of(profile[i].last().unwrap()).unwrap()] = 1;
 
                     tmp
                 })
