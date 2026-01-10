@@ -1,8 +1,6 @@
 mod common;
 
-use voting_core::{
-    prelude::*, profile::CandidateId, tie_breaker::fallthrough::FallthroughTieBreaker,
-};
+use voting_core::{prelude::*, profile::CandidateId};
 
 use crate::common::{MEMPHIS, construct_tennessee_wiki_example};
 
