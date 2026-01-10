@@ -57,7 +57,7 @@ pub struct VotingRule<S, D, T> {
     tiebreaker: T,
 }
 
-/// Helper result type returned from the [`run`] method of [`SimpleVotingRule`] struct.
+/// Helper result type returned from the [`super::VotingRuleExec::execute`] method of [`VotingRule`] struct.
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
 pub type VotingRuleResult<S, D, T> = Result<

@@ -1,6 +1,6 @@
 //! Condorcet matrix type module.
 //!
-//! This module defines the [`CondorcetMatrix`] type and its [`CondorcetMatrixError`] error type.
+//! This module defines the [`CondorcetMatrix`] type.
 
 use std::fmt::Debug;
 
@@ -13,7 +13,7 @@ use std::fmt::Debug;
 /// 3. Matrix is square.
 /// 4. All diagonal elements are 0.
 /// 5. All non-diagonal elements are 0/1.
-/// 6. For all i != j: matrix[i][j] + matrix[j][i] = 1.
+/// 6. For all i != j: matrix\[i\]\[j\] + matrix\[j\]\[i\] = 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CondorcetMatrix {

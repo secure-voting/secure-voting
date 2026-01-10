@@ -1,6 +1,6 @@
 //! Condorcet Matrix type implementation.
 //!
-//! This module defines the [`CondorcetMatrix`] type as well as its error type [`CondorcetMatrixError`].
+//! This module defines the [`PairwiseMatrix`] type and a derived type [`CondorcetMatrix`].
 
 pub mod condorcet;
 pub mod pairwise;

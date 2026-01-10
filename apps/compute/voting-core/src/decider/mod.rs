@@ -12,7 +12,7 @@ pub mod minority;
 
 /// Chooses a winner or a set of winners from computed scores.
 pub trait Decider {
-    /// Input produced by a [`Scorer`] and consumed by this decider.
+    /// Input produced by a [`super::scorer::Scorer`] and consumed by this decider.
     type Input;
 
     /// Error returned when a decision cannot be made.
