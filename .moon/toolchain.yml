@@ -6,10 +6,10 @@ unstable_rust:
     - 'cargo-deny'
     - 'cargo-geiger'
     - 'cargo-llvm-cov'
+    - 'cargo-machete'
     - 'cargo-nextest'
     - 'cargo-outdated'
     - 'cargo-public-api'
-    - 'cargo-udeps'
   components:
     - 'clippy'
     - 'rustfmt'
