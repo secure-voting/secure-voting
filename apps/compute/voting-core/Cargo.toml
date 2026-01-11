@@ -26,3 +26,6 @@ serde = ["dep:serde", "nutype/serde"]
 
 [lib]
 path = "src/lib.rs"
+
+[package.metadata.clippy]
+config-file = "../../clippy.toml"
