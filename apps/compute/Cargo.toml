@@ -2,6 +2,9 @@
 resolver = "3"
 members = ["compute-service","voting-core"]
 
+[workspace.package]
+license = "MIT or Apache-2.0"
+
 [workspace.lints.clippy]
 single_match = "warn"
 single_match_else = "warn"
