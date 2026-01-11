@@ -15,39 +15,71 @@ fileGroups:
 
 tasks:
   build:
+    description: 'Build the project in release mode'
     command: 'cargo build --release'
     inputs:
       - '@globs(sources)'
   test:
-    command: 'nextest run --workspace'
+    description: 'Run the test suite for all crates'
+    command: 'cargo nextest run --workspace'
     toolchain: 'rust'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   lint:
+    description: 'Check clippy suggestions in formatting'
     command: "cargo clippy --workspace"
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   check:
+    description: 'Check for compilation errors'
     command: 'cargo check --workspace'
     inputs:
       - '@globs(sources)'
   format:
+    description: 'Check formatting'
     command: 'cargo fmt --all --check'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   coverage:
-    command: 'cargo tarpaulin'
+    description: 'Produce a coverage report'
+    command: 'cargo llvm-cov --workspace --all-features --lcov --output-path target/coverage.lcov'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+  coverage-html:
+    description: 'Produce a coverage report and open in browser'
+    command: 'cargo llvm-cov --workspace --all-features --open'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   audit:
+    description: 'Check dependency crates for known vulnerabilities'
     command: 'cargo audit'
     inputs:
       - '@globs(sources)'
   deny-check:
+    description: 'Check dependency crates for licensing issues or unknown sources'
     command: 'cargo deny check'
+    inputs:
+      - '@globs(sources)'
+  profile:
+    description: 'Run the main binary and profile it, outputting a flamegraph'
+    command: 'cargo flamegraph'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: 'true'
+  bloat:
+    description: 'Check what dependency is taking the most space in the executable'
+    command: 'cargo bloat --release --crates'
+    inputs:
+      - '@globs(sources)'
+  geiger-core:
+    description: 'Check the library codebase for unsafe usage'
+    command: 'cargo geiger --manifest-path $MOON_WORKSPACE_ROOT/apps/compute/voting-core/Cargo.toml --all-features'
     inputs:
       - '@globs(sources)'
