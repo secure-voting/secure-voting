@@ -17,12 +17,13 @@
 // 10. Hare
 // 11. Nanson
 // 12. Coombs
+// 13. Inverse Borda
 //
 // TBD:
 //
-// 13. Strong q-Paretian simple majority
-// 14. Strong q-Paretian plurality
-// 15. Strongest q-Paretian simple majority
+// 1. Strong q-Paretian simple majority
+// 2. Strong q-Paretian plurality
+// 3. Strongest q-Paretian simple majority
 pub use crate::voting_rules::{
     anti_plurality::AntiPluralityRule,
     approval::ApprovalRule,
@@ -31,6 +32,7 @@ pub use crate::voting_rules::{
     coombs::CoombsRule,
     copeland::{CopelandIIIRule, CopelandIIRule, CopelandIRule},
     hare::HareRule,
+    inverse_borda::InverseBordaRule,
     minmax::MinmaxRule,
     nanson::NansonRule,
     plurality::PluralityRule,
