@@ -4,6 +4,7 @@ unstable_rust:
     - 'cargo-nextest'
     - 'cargo-tarpaulin'
     - 'cargo-bloat'
+    - 'cargo-audit'
   components:
     - 'clippy'
     - 'rustfmt'

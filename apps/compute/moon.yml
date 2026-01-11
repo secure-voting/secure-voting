@@ -43,3 +43,7 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
+  audit:
+    command: 'cargo audit'
+    inputs:
+      - '@globs(sources)'
