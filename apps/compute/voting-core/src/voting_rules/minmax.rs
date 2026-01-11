@@ -1,7 +1,7 @@
 //! Minmax voting rule type.
 
 use crate::{
-    decider::minority::MinorityDecider, scorer::minmax::MinmaxScorer,
+    decider::minority::MinScoreDecider, scorer::minmax::MinmaxScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -12,4 +12,4 @@ use crate::{
 pub type MinmaxRule = MinmaxRuleWith<FallthroughTieBreaker>;
 
 /// The minmax voting rule type with a custom tie-breaker.
-pub type MinmaxRuleWith<TB> = VotingRule<MinmaxScorer, MinorityDecider<isize>, TB>;
+pub type MinmaxRuleWith<TB> = VotingRule<MinmaxScorer, MinScoreDecider<isize>, TB>;

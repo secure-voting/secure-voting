@@ -9,12 +9,12 @@ use crate::{decider::Decider, profile::CandidateId, scorer::Score};
 /// Selects all candidates whose score is equal to the maximum score.
 /// This type is a zero-sized marker implementing [`Decider`].
 #[derive(Default, Debug, Clone, Copy)]
-pub struct MajorityDecider<T> {
+pub struct MaxScoreDecider<T> {
     /// PhantomData type marker to allow generics inside this struct.
     _marker: PhantomData<T>,
 }
 
-impl<T> Decider for MajorityDecider<T>
+impl<T> Decider for MaxScoreDecider<T>
 where
     T: PartialOrd + Default + Copy,
 {
@@ -71,7 +71,7 @@ mod tests {
 
         assert_eq!(
             vec![0],
-            ids(MajorityDecider::new().decide(&scores).unwrap())
+            ids(MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -89,7 +89,7 @@ mod tests {
 
         assert_eq!(
             vec![2, 0],
-            ids(MajorityDecider::new().decide(&scores).unwrap())
+            ids(MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -108,7 +108,7 @@ mod tests {
 
         assert_eq!(
             vec![42, 1, 2, 9, 0],
-            ids(MajorityDecider::new().decide(&scores).unwrap())
+            ids(MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 }

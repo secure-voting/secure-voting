@@ -1,7 +1,7 @@
 //! Hare's voting rule type.
 
 use crate::{
-    decider::majority::MajorityDecider,
+    decider::majority::MaxScoreDecider,
     scorer::plurality::PluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::elimination::{
@@ -18,11 +18,11 @@ use crate::{
 pub type HareRule = Elimination<
     PluralityScorer,
     MinScoreElimination,
-    MajorityDecider<usize>,
+    MaxScoreDecider<usize>,
     FallthroughTieBreaker,
     MajorityStop,
 >;
 
 /// The Hare's voting rule with a custom tie-breaker.
 pub type HareRuleWith<TB> =
-    Elimination<PluralityScorer, MinScoreElimination, MajorityDecider<usize>, TB, MajorityStop>;
+    Elimination<PluralityScorer, MinScoreElimination, MaxScoreDecider<usize>, TB, MajorityStop>;
