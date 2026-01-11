@@ -23,3 +23,6 @@ test-case = "3.3.1"
 [features]
 default = []
 serde = ["dep:serde", "nutype/serde"]
+
+[lib]
+path = "src/lib.rs"
