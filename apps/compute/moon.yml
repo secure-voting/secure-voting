@@ -9,6 +9,8 @@ fileGroups:
     - '*/src/**/*'
     - '*/Cargo.toml'
     - 'Cargo.toml'
+    - 'clippy.toml'
+    - 'deny.toml'
   tests:
     - '*/benches/**/*'
     - '*/tests/**/*'
