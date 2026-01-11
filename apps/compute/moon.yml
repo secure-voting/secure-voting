@@ -47,3 +47,7 @@ tasks:
     command: 'cargo audit'
     inputs:
       - '@globs(sources)'
+  deny-check:
+    command: 'cargo deny check'
+    inputs:
+      - '@globs(sources)'
