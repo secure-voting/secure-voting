@@ -61,7 +61,7 @@ mod tests {
     fn test_one_winner() {
         let scores = Score::new(
             vec![0, 1, 0, 2],
-            &vec![
+            &[
                 CandidateId::new(1),
                 CandidateId::new(2),
                 CandidateId::new(9),
@@ -79,7 +79,7 @@ mod tests {
     fn test_several_winners() {
         let scores = Score::new(
             vec![0, 1, 0, 1],
-            &vec![
+            &[
                 CandidateId::new(1),
                 CandidateId::new(2),
                 CandidateId::new(9),
@@ -97,7 +97,7 @@ mod tests {
     fn test_all_winners() {
         let scores = Score::new(
             vec![1, 1, 1, 1, 1],
-            &vec![
+            &[
                 CandidateId::new(42),
                 CandidateId::new(1),
                 CandidateId::new(2),

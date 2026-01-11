@@ -44,7 +44,7 @@ mod tests {
             unsafe {
                 CondorcetMatrix::new_unchecked(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]])
             },
-            &vec![
+            &[
                 CandidateId::new(42),
                 CandidateId::new(1),
                 CandidateId::new(87),
@@ -63,7 +63,7 @@ mod tests {
             unsafe {
                 CondorcetMatrix::new_unchecked(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]])
             },
-            &vec![
+            &[
                 CandidateId::new(4),
                 CandidateId::new(2),
                 CandidateId::new(67),
