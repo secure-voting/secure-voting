@@ -4,8 +4,12 @@ unstable_rust:
     - 'cargo-audit'
     - 'cargo-bloat'
     - 'cargo-deny'
+    - 'cargo-geiger'
+    - 'cargo-llvm-cov'
     - 'cargo-nextest'
-    - 'cargo-tarpaulin'
+    - 'cargo-outdated'
+    - 'cargo-public-api'
+    - 'cargo-udeps'
   components:
     - 'clippy'
     - 'rustfmt'
