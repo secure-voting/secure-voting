@@ -21,20 +21,20 @@ tasks:
       - '@globs(sources)'
   test:
     description: 'Run the test suite for all crates'
-    command: 'cargo nextest run --workspace'
+    command: 'cargo nextest run --workspace --all-features'
     toolchain: 'rust'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   lint:
     description: 'Check clippy suggestions in formatting'
-    command: "cargo clippy --workspace"
+    command: "cargo clippy --workspace --all-targets --all-features"
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   check:
     description: 'Check for compilation errors'
-    command: 'cargo check --workspace'
+    command: 'cargo check --workspace --all-targets --all-features'
     inputs:
       - '@globs(sources)'
   format:
@@ -45,7 +45,7 @@ tasks:
       - '@globs(tests)'
   coverage:
     description: 'Produce a coverage report'
-    command: 'cargo llvm-cov --workspace --all-features --lcov --output-path target/coverage.lcov'
+    command: 'cargo llvm-cov --workspace --all-features --lcov --output-path target/coverage.lcov --no-report'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
@@ -57,7 +57,7 @@ tasks:
       - '@globs(tests)'
   audit:
     description: 'Check dependency crates for known vulnerabilities'
-    command: 'cargo audit'
+    command: 'cargo audit --deny warnings'
     inputs:
       - '@globs(sources)'
   deny-check:
@@ -83,3 +83,13 @@ tasks:
     command: 'cargo geiger --manifest-path $MOON_WORKSPACE_ROOT/apps/compute/voting-core/Cargo.toml --all-features'
     inputs:
       - '@globs(sources)'
+  machete:
+    description: 'Find unused dependencies'
+    command: 'cargo machete'
+    inputs:
+      - '@globs(sources)'
+  # public-api:
+  #   command: 'cargo public-api diff'
+  outdated:
+    command: 'cargo outdated --workspace'
+   
