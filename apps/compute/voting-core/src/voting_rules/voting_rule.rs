@@ -16,7 +16,7 @@ use crate::{
     voting_rules::VotingRuleExec,
 };
 
-/// VotingRule error type.
+/// `VotingRule` error type.
 ///
 /// A voting rule can fail in each of its 3 steps, hence
 /// this error type has 3 variants, one for each step.
@@ -46,7 +46,7 @@ where
 ///
 /// 1. Scorer - transforms the raw vote data into score data for further analysis
 /// 2. Decider - chooses a set of winners depending on the score information
-/// 3. TieBreaker - chooses an absolute winner from the selected set
+/// 3. `TieBreaker` - chooses an absolute winner from the selected set
 #[derive(Debug, Clone, Copy)]
 pub struct VotingRule<S, D, T> {
     /// A scorer instance.
@@ -71,7 +71,7 @@ where
     D: Decider,
     T: TieBreaker,
 {
-    /// Construct a new VotingRule from its 3 components.
+    /// Construct a new `VotingRule` from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
         Self {
             scorer,

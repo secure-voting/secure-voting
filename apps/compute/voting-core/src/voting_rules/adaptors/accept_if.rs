@@ -1,4 +1,4 @@
-//! AcceptIf adaptor module.
+//! `AcceptIf` adaptor module.
 
 use tracing::instrument;
 
@@ -6,7 +6,7 @@ use crate::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
 use crate::voting_rules::VotingRuleExec;
 
-/// AcceptIf adaptor.
+/// `AcceptIf` adaptor.
 ///
 /// Accepts the candidate set if it meets a predicate.
 pub struct AcceptIf<V> {
@@ -17,7 +17,7 @@ pub struct AcceptIf<V> {
 }
 
 impl<V> AcceptIf<V> {
-    /// Construct a new AcceptIf instance.
+    /// Construct a new `AcceptIf` instance.
     pub fn new(voting_rule: V, predicate: impl Fn(&RuleOutcome) -> bool + 'static) -> Self {
         Self {
             voting_rule,

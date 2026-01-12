@@ -17,7 +17,7 @@ pub struct RequireUnique<R> {
 }
 
 impl<R> RequireUnique<R> {
-    /// Construct a RequireUnique adaptor from given rule.
+    /// Construct a `RequireUnique` adaptor from given rule.
     pub fn new(rule: R) -> Self {
         Self { rule }
     }
@@ -25,7 +25,7 @@ impl<R> RequireUnique<R> {
 
 /// Require unique error type.
 ///
-/// There are 2 ways the RequireUnique's [`super::super::VotingRuleExec::execute`] can fail:
+/// There are 2 ways the `RequireUnique`'s [`super::super::VotingRuleExec::execute`] can fail:
 ///
 /// 1. There is no unique winner
 /// 2. An error occured when choosing a set of winners

@@ -19,6 +19,7 @@ pub enum RuleOutcome {
 
 impl RuleOutcome {
     /// Return the candidates of this outcome.
+    #[must_use] 
     pub fn candidates(&self) -> Vec<CandidateId> {
         match self {
             RuleOutcome::UniqueWinner(candidate_id) => vec![*candidate_id],
@@ -27,6 +28,7 @@ impl RuleOutcome {
     }
 
     /// Check whether the winner is unique.
+    #[must_use] 
     pub fn is_unique(&self) -> bool {
         match self {
             RuleOutcome::UniqueWinner(_) => true,
@@ -50,6 +52,6 @@ pub trait TieBreaker {
         profile: &Profile,
     ) -> Result<RuleOutcome, Self::Error>;
 
-    /// Construct a new TieBreaker instance.
+    /// Construct a new `TieBreaker` instance.
     fn new() -> Self;
 }
