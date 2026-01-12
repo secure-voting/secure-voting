@@ -84,11 +84,12 @@ mod tests {
     }
 
     fn fake_profile() -> Profile {
-        Profile::try_from(vec![vec![0, 2, 1]]).unwrap()
+        Profile::try_from(vec![vec![0, 2, 1]])
+            .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     #[test]
-    fn test_unique_winner_propagation() {
+    fn unique_winner_propagation() {
         let mut mock = MockVotingRule::new();
 
         mock.expect_execute()
@@ -97,12 +98,14 @@ mod tests {
 
         assert_eq!(
             RuleOutcome::UniqueWinner(CandidateId::new(1)),
-            RequireUnique::new(mock).execute(&fake_profile()).unwrap()
+            RequireUnique::new(mock)
+                .execute(&fake_profile())
+                .expect("Shouldn't fail on a profile with a clear winner")
         );
     }
 
     #[test]
-    fn test_error_propagation_from_rule() {
+    fn error_propagation_from_rule() {
         let mut mock = MockVotingRule::new();
 
         mock.expect_execute().times(1).return_const(Err(()));
@@ -114,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn test_error_non_unique() {
+    fn error_non_unique() {
         let mut mock = MockVotingRule::new();
 
         mock.expect_execute()
