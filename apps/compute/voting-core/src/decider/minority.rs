@@ -10,7 +10,7 @@ use crate::{decider::Decider, profile::CandidateId, scorer::Score};
 /// This type is a zero-sized marker implementing [`Decider`].
 #[derive(Default, Debug, Clone, Copy)]
 pub struct MinScoreDecider<T> {
-    /// PhantomData type marker to allow generics inside this struct.
+    /// `PhantomData` type marker to allow generics inside this struct.
     _marker: PhantomData<T>,
 }
 
@@ -54,11 +54,11 @@ mod tests {
     use super::*;
 
     fn ids(v: Vec<CandidateId>) -> Vec<usize> {
-        v.into_iter().map(|x| x.into_inner()).collect()
+        v.into_iter().map(CandidateId::into_inner).collect()
     }
 
     #[test]
-    fn test_one_winner() {
+    fn one_winner() {
         let scores = Score::new(
             vec![2, 1, 2, 0],
             &[
@@ -76,7 +76,7 @@ mod tests {
     }
 
     #[test]
-    fn test_several_winners() {
+    fn several_winners() {
         let scores = Score::new(
             vec![3, 2, 3, 2],
             &[
@@ -94,7 +94,7 @@ mod tests {
     }
 
     #[test]
-    fn test_all_winners() {
+    fn all_winners() {
         let scores = Score::new(
             vec![1, 1, 1, 1, 1],
             &[

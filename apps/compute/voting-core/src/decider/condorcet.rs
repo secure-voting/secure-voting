@@ -18,7 +18,7 @@ impl Decider for CondorcetDecider {
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
         for (row, &cand_id) in scores.iter() {
-            if row.iter().map(|&elem| elem as usize).sum::<usize>() + 1 == row.len() {
+            if row.iter().map(|&elem| usize::from(elem)).sum::<usize>() + 1 == row.len() {
                 return Ok(vec![cand_id]);
             }
         }
@@ -39,7 +39,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_condorcet_winner() {
+    fn condorcet_winner() {
         let scores = Score::new(
             unsafe {
                 CondorcetMatrix::new_unchecked(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]])
@@ -58,7 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn test_condorcet_cycle() {
+    fn condorcet_cycle() {
         let scores = Score::new(
             unsafe {
                 CondorcetMatrix::new_unchecked(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]])

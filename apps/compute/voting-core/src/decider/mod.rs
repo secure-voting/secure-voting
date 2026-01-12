@@ -21,6 +21,12 @@ pub trait Decider {
     type Error: Debug;
 
     /// Decides the winner or a set of winners from the scores provided.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error of the implementation of a decider cannot compute
+    /// the decision step infallibly, usually caused by an invariant
+    /// inherent to the decision rule not expressed in the type system.
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error>;
 
     /// Construct a new Decider instance.
