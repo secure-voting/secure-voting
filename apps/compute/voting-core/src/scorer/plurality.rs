@@ -65,7 +65,7 @@ mod tests {
                 .compute_score(
                     &votes
                         .try_into()
-                        .expect("Profile constructed incorrectly, revise test example.")
+                        .expect("Profile is constructed incorrectly, revise test example.")
                 )
                 .unwrap()
                 .score()

@@ -288,8 +288,9 @@ mod tests {
     #[test]
     fn remove_single_candidate_middle() {
         let votes = vec![vec![0, 1, 2, 3], vec![3, 2, 1, 0]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
-
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
         let result = profile
             .remove_candidates(vec![CandidateId::new(1)])
             .expect("Chosen candidate couldn't be removed from the given profile");
@@ -321,7 +322,9 @@ mod tests {
     #[test]
     fn remove_multiple_candidates() {
         let votes = vec![vec![0, 1, 2, 3]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let result = profile
             .remove_candidates(vec![CandidateId::new(1), CandidateId::new(3)])
@@ -339,7 +342,9 @@ mod tests {
     #[test]
     fn remove_first_and_last_candidate() {
         let votes = vec![vec![0, 1, 2, 3]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let result = profile
             .remove_candidates(vec![CandidateId::new(0), CandidateId::new(3)])
@@ -357,7 +362,9 @@ mod tests {
     #[test]
     fn remove_all_candidates() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let result = profile
             .remove_candidates(vec![
@@ -374,7 +381,10 @@ mod tests {
     #[test]
     fn remove_no_candidates_returns_same_profile() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile = votes.clone().try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .clone()
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let result = profile
             .remove_candidates(vec![])
@@ -394,7 +404,9 @@ mod tests {
     #[test]
     fn remove_candidate_invalid_id_returns_error() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let err = profile
             .remove_candidates(vec![CandidateId::new(3)])
@@ -406,7 +418,9 @@ mod tests {
     #[test]
     fn remove_candidates_preserves_order_multiple_removals() {
         let votes = vec![vec![0, 2, 1, 3], vec![3, 1, 2, 0]];
-        let profile: Profile = votes.try_into().expect("Profile is incorrect");
+        let profile: Profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let profile = profile
             .remove_candidates(vec![CandidateId::new(2)])
