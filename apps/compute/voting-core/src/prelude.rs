@@ -2,7 +2,7 @@
 //!
 //! 1. Pre-packaged common voting rules.
 //! 2. Voting traits and adaptors.
-//! 3. Matrix types, RuleOutcome, CandidateID and the Profile type.
+//! 3. Matrix types, `RuleOutcome`, `CandidateID` and the Profile type.
 
 // Voting rules:
 // 1. Plurality
