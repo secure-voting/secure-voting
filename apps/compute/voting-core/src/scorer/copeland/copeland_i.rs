@@ -49,7 +49,9 @@ mod tests {
     #[test]
     fn copeland_single_vote_linear_order() {
         let votes = vec![vec![0, 1, 2, 3]];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
@@ -59,7 +61,9 @@ mod tests {
     #[test]
     fn copeland_condorcet_winner() {
         let votes = vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
@@ -69,7 +73,9 @@ mod tests {
     #[test]
     fn copeland_cycle() {
         let votes = vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
@@ -79,7 +85,9 @@ mod tests {
     #[test]
     fn copeland_two_candidates() {
         let votes = vec![vec![0, 1], vec![0, 1], vec![1, 0]];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
@@ -96,7 +104,9 @@ mod tests {
             vec![1, 0, 2],
             vec![2, 1, 0],
         ];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
