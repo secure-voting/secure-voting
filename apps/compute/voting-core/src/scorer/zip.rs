@@ -19,7 +19,7 @@ pub struct ZipScorer<S1, S2> {
 }
 
 impl<S1, S2> ZipScorer<S1, S2> {
-    /// Construct a ZipScorer from 2 scorers.
+    /// Construct a `ZipScorer` from 2 scorers.
     pub fn new(scorer1: S1, scorer2: S2) -> Self {
         Self { scorer1, scorer2 }
     }
