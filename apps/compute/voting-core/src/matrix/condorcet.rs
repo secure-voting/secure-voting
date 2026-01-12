@@ -15,6 +15,7 @@ use std::fmt::Debug;
 /// 5. All non-diagonal elements are 0/1.
 /// 6. For all i != j: matrix\[i\]\[j\] + matrix\[j\]\[i\] = 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::unsafe_derive_deserialize)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CondorcetMatrix {
     /// Inner condorcet matrix to be validated.
@@ -41,6 +42,14 @@ impl CondorcetMatrix {
     /// Return an iterator over the matrix rows (voters).
     pub fn iter(&self) -> core::slice::Iter<'_, Vec<bool>> {
         self.matrix.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a CondorcetMatrix {
+    type Item = &'a std::vec::Vec<bool>;
+    type IntoIter = std::slice::Iter<'a, std::vec::Vec<bool>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 

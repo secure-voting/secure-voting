@@ -124,15 +124,33 @@ impl PairwiseMatrix {
         self.matrix[i][j] > self.matrix[j][i]
     }
 
+    /// Subtract 2 usizes into an isize without possible overflows.
+    #[inline]
+    fn safe_sub_usize_to_isize(a: usize, b: usize) -> isize {
+        if a >= b {
+            (a - b).cast_signed()
+        } else {
+            -(b - a).cast_signed()
+        }
+    }
+
     /// Return the margin of win/loss between candidates i and j.
     #[must_use]
     pub fn margin(&self, i: usize, j: usize) -> isize {
-        self.matrix[i][j] as isize - self.matrix[j][i] as isize
+        Self::safe_sub_usize_to_isize(self.matrix[i][j], self.matrix[j][i])
     }
 
     /// Return an iterator over the rows of the matrix.
     pub fn iter(&self) -> core::slice::Iter<'_, Vec<usize>> {
         self.matrix.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a PairwiseMatrix {
+    type Item = &'a std::vec::Vec<usize>;
+    type IntoIter = std::slice::Iter<'a, std::vec::Vec<usize>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
