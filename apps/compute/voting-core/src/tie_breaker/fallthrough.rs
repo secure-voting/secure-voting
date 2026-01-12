@@ -40,8 +40,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unique_winner_fallthrough() {
-        let fake_profile = (vec![vec![0]]).try_into().unwrap();
+    fn unique_winner_fallthrough() {
+        let fake_profile = (vec![vec![0]])
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
         let candidates = vec![CandidateId::new(0)];
 
         assert_eq!(
@@ -53,8 +55,10 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_winner_fallthrough() {
-        let fake_profile = (vec![vec![0]]).try_into().unwrap();
+    fn multiple_winner_fallthrough() {
+        let fake_profile = (vec![vec![0]])
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
         let candidates = vec![CandidateId::new(0), CandidateId::new(42)];
 
         assert_eq!(
