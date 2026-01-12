@@ -6,7 +6,13 @@ members = ["compute-service","voting-core"]
 license = "MIT or Apache-2.0"
 
 [workspace.lints.clippy]
+cargo = { level = "deny", priority = -1 }
+complexity = { level = "deny", priority = -1 }
+correctness = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+perf = { level = "deny", priority = -1 }
+restriction = { level = "warn", priority = -1 }
+style = { level = "deny", priority = -1 }
 
 [workspace.lints.rust]
 unsafe_code = "warn"
