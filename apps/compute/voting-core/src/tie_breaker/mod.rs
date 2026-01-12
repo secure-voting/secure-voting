@@ -19,7 +19,7 @@ pub enum RuleOutcome {
 
 impl RuleOutcome {
     /// Return the candidates of this outcome.
-    #[must_use] 
+    #[must_use]
     pub fn candidates(&self) -> Vec<CandidateId> {
         match self {
             RuleOutcome::UniqueWinner(candidate_id) => vec![*candidate_id],
@@ -28,7 +28,7 @@ impl RuleOutcome {
     }
 
     /// Check whether the winner is unique.
-    #[must_use] 
+    #[must_use]
     pub fn is_unique(&self) -> bool {
         match self {
             RuleOutcome::UniqueWinner(_) => true,
@@ -46,6 +46,10 @@ pub trait TieBreaker {
 
     /// Resolves a tie among the given candidates using the provided voting profile.
     /// Returns the chosen winner or an error if tie-breaking cannot be performed.
+    ///
+    /// # Errors
+    ///
+    /// An error can be returned if the tie-breaker can fail.
     fn tie_break(
         &self,
         candidates: &[CandidateId],
