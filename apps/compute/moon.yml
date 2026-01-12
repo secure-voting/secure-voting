@@ -46,8 +46,8 @@ tasks:
       - '@globs(sources)'
       - '@globs(tests)'
   coverage:
-    description: 'Produce a coverage report'
-    command: 'cargo llvm-cov --workspace --all-features --lcov --output-path target/coverage.lcov --no-report'
+    description: 'Calculate line coverage as a percentage'
+    command: 'cargo llvm-cov --workspace --all-features --json | jq ".data[].totals.lines.percent"'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
