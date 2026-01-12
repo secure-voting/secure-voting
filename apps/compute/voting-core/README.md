@@ -19,7 +19,34 @@ in social choice theory.
 
 ## Example code snippets
 
-TODO
+### Borda rule with dummy profile
+
+```rust
+use voting_core::prelude::*;
+
+let profile = vec![vec![0, 2, 1], vec![0, 1, 2], vec![1, 0, 2]].try_into().unwrap();
+let rule = BordaRule::default();
+
+let winners = rule.execute(&profile).expect("Borda rule shouldn't fail, submit a PR").candidates();
+
+assert_eq!(winners, vec![CandidateId::new(0)]);
+```
+
+### Custom rule with dummy profile
+
+```rust
+use voting_core::prelude::*;
+use voting_core::scorer::plurality::PluralityScorer;
+use voting_core::decider::maxscore::MaxScoreDecider;
+use voting_core::tie_breaker::fallthrough::FallthroughTieBreaker;
+
+let profile = ...;
+let custom_rule = VotingRule::<PluralityScorer, MaxScoreDecider<usize>, FallthroughTieBreaker>::default();
+
+let winners = custom_rule.execute(&profile).expect("Custom rule failed").candidates();
+
+...
+```
 
 ---
 
