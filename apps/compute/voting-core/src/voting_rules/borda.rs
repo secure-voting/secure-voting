@@ -1,7 +1,7 @@
 //! Borda voting rule implementation.
 
 use crate::{
-    decider::majority::MaxScoreDecider, scorer::borda::BordaScorer,
+    decider::maxscore::MaxScoreDecider, scorer::borda::BordaScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 

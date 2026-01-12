@@ -1,7 +1,7 @@
 //! Hare's voting rule type.
 
 use crate::{
-    decider::majority::MaxScoreDecider,
+    decider::maxscore::MaxScoreDecider,
     scorer::plurality::PluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::elimination::{

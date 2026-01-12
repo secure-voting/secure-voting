@@ -1,7 +1,7 @@
 //! Inverse borda voting rule module.
 
 use crate::{
-    decider::majority::MaxScoreDecider,
+    decider::maxscore::MaxScoreDecider,
     prelude::Elimination,
     scorer::borda::BordaScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,

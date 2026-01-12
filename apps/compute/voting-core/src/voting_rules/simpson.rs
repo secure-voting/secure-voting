@@ -1,7 +1,7 @@
 //! Simpson's voting rule type.
 
 use crate::{
-    decider::majority::MaxScoreDecider, scorer::simpson::SimpsonScorer,
+    decider::maxscore::MaxScoreDecider, scorer::simpson::SimpsonScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 

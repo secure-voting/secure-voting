@@ -1,7 +1,7 @@
 //! Copeland's family of voting rules' implementation.
 
 use crate::{
-    decider::majority::MaxScoreDecider,
+    decider::maxscore::MaxScoreDecider,
     scorer::copeland::{
         copeland_i::CopelandIScorer, copeland_ii::CopelandIIScorer, copeland_iii::CopelandIIIScorer,
     },

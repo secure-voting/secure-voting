@@ -1,7 +1,7 @@
 //! Coombs' voting rule type.
 
 use crate::{
-    decider::majority::MaxScoreDecider,
+    decider::maxscore::MaxScoreDecider,
     prelude::zip_selector::ZipSelector,
     scorer::{anti_plurality::AntiPluralityScorer, plurality::PluralityScorer, zip::ZipScorer},
     tie_breaker::fallthrough::FallthroughTieBreaker,

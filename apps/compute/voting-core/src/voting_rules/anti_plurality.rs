@@ -1,7 +1,7 @@
 //! Anti-plurality voting rule implementation.
 
 use crate::{
-    decider::minority::MinScoreDecider, scorer::anti_plurality::AntiPluralityScorer,
+    decider::minscore::MinScoreDecider, scorer::anti_plurality::AntiPluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 

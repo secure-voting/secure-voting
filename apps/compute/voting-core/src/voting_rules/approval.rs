@@ -1,7 +1,7 @@
 //! Approval voting rule implementation.
 
 use crate::{
-    decider::majority::MaxScoreDecider, scorer::approval::ApprovalScorer,
+    decider::maxscore::MaxScoreDecider, scorer::approval::ApprovalScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
