@@ -59,12 +59,16 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3], vec![1, 2, 3, 0]], vec![6, 7, 4, 1]; "simple example")]
-    fn test_correct_borda_ranking(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3], vec![1, 2, 3, 0]], &[6, 7, 4, 1]; "simple example")]
+    fn test_correct_borda_ranking(votes: Vec<Vec<usize>>, answer: &[usize]) {
         assert_eq!(
             answer,
             BordaScorer
-                .compute_score(&votes.try_into().unwrap())
+                .compute_score(
+                    &votes
+                        .try_into()
+                        .expect("Profile is constructed incorrectly, revise test examples.")
+                )
                 .unwrap()
                 .score()
                 .clone()

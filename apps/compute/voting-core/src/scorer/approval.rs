@@ -67,16 +67,20 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], vec![3, 3]; "count all")]
-    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]], vec![3, 1, 2]; "count top 2")]
-    fn test_correct_approval_scoring(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], &[3, 3]; "count all")]
+    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]], &[3, 1, 2]; "count top 2")]
+    fn test_correct_approval_scoring(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = ApprovalScorer::<2>;
 
         assert_eq!(
             answer,
             scorer
-                .compute_score(&votes.try_into().unwrap())
-                .unwrap()
+                .compute_score(
+                    &votes
+                        .try_into()
+                        .expect("Profile is constructed incorrectly, revise test examples.")
+                )
+                .expect("Scorer should not fail if Q is bigger than candidate count")
                 .score()
                 .clone()
         );
@@ -87,7 +91,11 @@ mod tests {
         let scorer = ApprovalScorer::<3>;
 
         assert!(matches!(
-            scorer.compute_score(&votes.try_into().unwrap()),
+            scorer.compute_score(
+                &votes
+                    .try_into()
+                    .expect("Profile is consctruced incorrectly, revise test examples.")
+            ),
             Err(ApprovalScorerError)
         ));
     }
