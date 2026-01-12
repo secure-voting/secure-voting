@@ -94,7 +94,7 @@ mod tests {
             scorer.compute_score(
                 &votes
                     .try_into()
-                    .expect("Profile is consctruced incorrectly, revise test examples.")
+                    .expect("Profile is constructed incorrectly, revise test examples.")
             ),
             Err(ApprovalScorerError)
         ));
