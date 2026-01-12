@@ -22,7 +22,7 @@ pub struct CondorcetMatrix {
 }
 
 impl CondorcetMatrix {
-    /// Construct a CondorcetMatrix without validating its invariants.
+    /// Construct a `CondorcetMatrix` without validating its invariants.
     /// Not exposed past this crate.
     ///
     /// SAFETY:
