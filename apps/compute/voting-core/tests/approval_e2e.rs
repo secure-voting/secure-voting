@@ -7,29 +7,33 @@ use crate::common::{CHATTANOOGA, MEMPHIS, NASHVILLE, construct_tennessee_wiki_ex
 mod common;
 
 #[test]
-fn test_wiki_example_q_1() {
+fn wiki_example_q_1() {
     let profile = construct_tennessee_wiki_example();
     let scorer = ApprovalRule::<1>::default();
 
     assert_eq!(
         RuleOutcome::UniqueWinner(CandidateId::new(MEMPHIS)),
-        scorer.execute(&profile).unwrap()
+        scorer
+            .execute(&profile)
+            .expect("Scorer failed, but shouldn't have.")
     );
 }
 
 #[test]
-fn test_wiki_example_q_2() {
+fn wiki_example_q_2() {
     let profile = construct_tennessee_wiki_example();
     let scorer = ApprovalRule::<2>::default();
 
     assert_eq!(
         RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
-        scorer.execute(&profile).unwrap()
+        scorer
+            .execute(&profile)
+            .expect("Scorer failed, but shouldn't have.")
     );
 }
 
 #[test]
-fn test_wiki_example_q_3() {
+fn wiki_example_q_3() {
     let profile = construct_tennessee_wiki_example();
     let scorer = ApprovalRule::<3>::default();
 
@@ -38,12 +42,14 @@ fn test_wiki_example_q_3() {
             CandidateId::new(NASHVILLE),
             CandidateId::new(CHATTANOOGA)
         ]),
-        scorer.execute(&profile).unwrap()
+        scorer
+            .execute(&profile)
+            .expect("Scorer failed, but shouldn't have.")
     );
 }
 
 #[test]
-fn test_error_q_too_big() {
+fn error_q_too_big() {
     let profile = construct_tennessee_wiki_example();
     let scorer = ApprovalRule::<6>::default();
 
