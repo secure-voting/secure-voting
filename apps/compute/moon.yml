@@ -80,9 +80,9 @@ tasks:
     command: 'cargo bloat --release --crates'
     inputs:
       - '@globs(sources)'
-  geiger-core:
-    description: 'Check the library codebase for unsafe usage'
-    command: 'cargo geiger --manifest-path $MOON_WORKSPACE_ROOT/apps/compute/voting-core/Cargo.toml --all-features'
+  vet:
+    description: 'Verify dependency audits and safety policies'
+    command: 'cargo vet'
     inputs:
       - '@globs(sources)'
   machete:
