@@ -14,6 +14,7 @@
 
 #![warn(missing_docs)]
 #![warn(clippy::missing_docs_in_private_items)]
+#![forbid(unsafe_code)]
 
 pub mod decider;
 pub mod matrix;

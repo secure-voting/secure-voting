@@ -31,19 +31,18 @@ impl Decider for CondorcetDecider {
     }
 }
 
-// Unsafe code because CondorcetMatrix is constructed from a Vec<Vec<usize>>
-// in an "unsafe" matter (invariants are not upheld).
-#[allow(unsafe_code)]
 #[cfg(test)]
 mod tests {
+    use crate::matrix::PairwiseMatrix;
+
     use super::*;
 
     #[test]
     fn condorcet_winner() {
         let scores = Score::new(
-            unsafe {
-                CondorcetMatrix::new_unchecked(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]])
-            },
+            PairwiseMatrix::try_new(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]], 1)
+                .expect("Pairwise matrix is incorrectly constructed, revise text example")
+                .into(),
             &[
                 CandidateId::new(42),
                 CandidateId::new(1),
@@ -60,9 +59,9 @@ mod tests {
     #[test]
     fn condorcet_cycle() {
         let scores = Score::new(
-            unsafe {
-                CondorcetMatrix::new_unchecked(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]])
-            },
+            PairwiseMatrix::try_new(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]], 1)
+                .expect("Pairwise matrix is incorrectly constructed, revise text example")
+                .into(),
             &[
                 CandidateId::new(4),
                 CandidateId::new(2),

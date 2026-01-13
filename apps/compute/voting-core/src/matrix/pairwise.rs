@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
+use crate::profile::Profile;
 
 /// Pairwise voting result matrix.
 ///
@@ -156,12 +156,10 @@ impl<'a> IntoIterator for &'a PairwiseMatrix {
 
 /// Helper function to sum 2 matrices of the same size.
 ///
-/// SAFETY:
+/// # Panics
 ///
 /// Matrices should be non-empty and same sized.
-/// Otherwise an Out-of-bounds panic can occur.
-#[allow(unsafe_code)]
-unsafe fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: &[Vec<usize>]) -> Vec<Vec<usize>> {
+fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: &[Vec<usize>]) -> Vec<Vec<usize>> {
     assert_eq!(matrix_a.len(), matrix_b.len());
     assert_eq!(matrix_a[0].len(), matrix_b[0].len());
 
@@ -195,36 +193,12 @@ impl From<&Profile> for PairwiseMatrix {
             })
             .reduce(
                 || vec![vec![0; n_candidates]; n_candidates],
-                #[allow(unsafe_code)]
-                |a, b| unsafe { sum_matrix(a, &b) },
+                |a, b| sum_matrix(a, &b),
             );
 
         PairwiseMatrix {
             matrix: vote_counts,
             n_voters: profile.n_voters(),
-        }
-    }
-}
-
-impl From<PairwiseMatrix> for CondorcetMatrix {
-    #[allow(clippy::needless_range_loop)]
-    fn from(matrix: PairwiseMatrix) -> Self {
-        let mut result = vec![vec![0; matrix.n()]; matrix.n()];
-
-        for i in 0..result.len() {
-            for j in i + 1..result.len() {
-                if matrix.beats(i, j) {
-                    result[i][j] = 1;
-                } else if matrix.beats(j, i) {
-                    result[j][i] = 1;
-                }
-            }
-        }
-
-        // Unsafe code here is justified, because all the invariants are held by the library.
-        #[allow(unsafe_code)]
-        unsafe {
-            CondorcetMatrix::new_unchecked(result)
         }
     }
 }
