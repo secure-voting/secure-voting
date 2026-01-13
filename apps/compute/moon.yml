@@ -77,7 +77,7 @@ tasks:
       CARGO_PROFILE_RELEASE_DEBUG: 'true'
   bloat:
     description: 'Check what dependency is taking the most space in the executable'
-    command: 'cargo bloat --release --crates'
+    command: 'cargo bloat --release --bin compute-service'
     inputs:
       - '@globs(sources)'
   vet:
