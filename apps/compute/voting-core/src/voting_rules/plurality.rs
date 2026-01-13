@@ -1,7 +1,7 @@
 //! Plurality voting rule implementation.
 
 use crate::{
-    decider::majority::MajorityDecider, scorer::plurality::PluralityScorer,
+    decider::maxscore::MaxScoreDecider, scorer::plurality::PluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -13,4 +13,4 @@ use crate::{
 pub type PluralityRule = PluralityRuleWith<FallthroughTieBreaker>;
 
 /// Plurality Voting rule type with a custom tie-breaker.
-pub type PluralityRuleWith<TB> = VotingRule<PluralityScorer, MajorityDecider<usize>, TB>;
+pub type PluralityRuleWith<TB> = VotingRule<PluralityScorer, MaxScoreDecider<usize>, TB>;

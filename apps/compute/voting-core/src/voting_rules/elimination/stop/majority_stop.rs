@@ -37,12 +37,11 @@ mod tests {
         assert_eq!(
             result,
             MajorityStop.should_stop(
-                &Score::new(
-                    scores,
-                    &(0..3).map(|x| CandidateId::new(x)).collect::<Vec<_>>()
-                ),
+                &Score::new(scores, &(0..3).map(CandidateId::new).collect::<Vec<_>>()),
                 &RuleOutcome::MultipleWinners(vec![]),
-                &votes.try_into().unwrap()
+                &votes
+                    .try_into()
+                    .expect("Profile is constructed incorrectly, revise test example")
             )
         );
     }

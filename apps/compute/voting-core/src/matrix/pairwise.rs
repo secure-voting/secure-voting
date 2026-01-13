@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
+use crate::profile::Profile;
 
 /// Pairwise voting result matrix.
 ///
@@ -17,6 +17,7 @@ use crate::{matrix::condorcet::CondorcetMatrix, profile::Profile};
 /// 4. The diagonal is zero-ed out
 /// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n, if i != j and n is the number of voters.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PairwiseMatrix {
     /// Underlying voting result matrix type
     matrix: Vec<Vec<usize>>,
@@ -50,6 +51,16 @@ impl PairwiseMatrix {
     /// Create a validatied pairwise matrix.
     ///
     /// Ensures the invariants of the type are upheld. Otherwise [`PairwiseMatrixError`] is returned.
+    ///
+    /// # Errors
+    ///
+    /// A `PairwiseMatrixError` is returned if one of the type's invariants is not upheld:
+    ///
+    /// 1. Passed matrix is not a matrix at all.
+    /// 2. Matrix is empty.
+    /// 3. Matrix is not square.
+    /// 4. The diagonal has non-zero elements.
+    /// 5. matrix\[i\][\j\] + matrix\[j\]\[i\] != n for some i != j and n = ``n_voters``
     pub fn try_new(matrix: Vec<Vec<usize>>, n_voters: usize) -> Result<Self, PairwiseMatrixError> {
         if matrix.is_empty() {
             return Err(PairwiseMatrixError::EmptyMatrix);
@@ -60,7 +71,7 @@ impl PairwiseMatrix {
         if matrix
             .iter()
             .skip(1)
-            .map(|row| row.len())
+            .map(std::vec::Vec::len)
             .any(|row_len| row_len != row_0_len)
         {
             return Err(PairwiseMatrixError::NonMatrix);
@@ -95,24 +106,38 @@ impl PairwiseMatrix {
     }
 
     /// Return the square matrix's row/col count.
+    #[must_use]
     pub fn n(&self) -> usize {
         self.matrix.len()
     }
 
     /// Return the voter count.
+    #[must_use]
     pub fn n_voters(&self) -> usize {
         self.n_voters
     }
 
     /// Check whether the i-th candidate strongly beats the j-th candidate
     /// in a head-to-head vote-off.
+    #[must_use]
     pub fn beats(&self, i: usize, j: usize) -> bool {
         self.matrix[i][j] > self.matrix[j][i]
     }
 
+    /// Subtract 2 usizes into an isize without possible overflows.
+    #[inline]
+    fn safe_sub_usize_to_isize(a: usize, b: usize) -> isize {
+        if a >= b {
+            (a - b).cast_signed()
+        } else {
+            -(b - a).cast_signed()
+        }
+    }
+
     /// Return the margin of win/loss between candidates i and j.
+    #[must_use]
     pub fn margin(&self, i: usize, j: usize) -> isize {
-        self.matrix[i][j] as isize - self.matrix[j][i] as isize
+        Self::safe_sub_usize_to_isize(self.matrix[i][j], self.matrix[j][i])
     }
 
     /// Return an iterator over the rows of the matrix.
@@ -121,14 +146,20 @@ impl PairwiseMatrix {
     }
 }
 
+impl<'a> IntoIterator for &'a PairwiseMatrix {
+    type Item = &'a std::vec::Vec<usize>;
+    type IntoIter = std::slice::Iter<'a, std::vec::Vec<usize>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 /// Helper function to sum 2 matrices of the same size.
 ///
-/// SAFETY:
+/// # Panics
 ///
 /// Matrices should be non-empty and same sized.
-/// Otherwise an Out-of-bounds panic can occur.
-#[allow(unsafe_code)]
-unsafe fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
+fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: &[Vec<usize>]) -> Vec<Vec<usize>> {
     assert_eq!(matrix_a.len(), matrix_b.len());
     assert_eq!(matrix_a[0].len(), matrix_b[0].len());
 
@@ -162,36 +193,12 @@ impl From<&Profile> for PairwiseMatrix {
             })
             .reduce(
                 || vec![vec![0; n_candidates]; n_candidates],
-                #[allow(unsafe_code)]
-                |a, b| unsafe { sum_matrix(a, b) },
+                |a, b| sum_matrix(a, &b),
             );
 
         PairwiseMatrix {
             matrix: vote_counts,
             n_voters: profile.n_voters(),
-        }
-    }
-}
-
-impl From<PairwiseMatrix> for CondorcetMatrix {
-    #[allow(clippy::needless_range_loop)]
-    fn from(matrix: PairwiseMatrix) -> Self {
-        let mut result = vec![vec![0; matrix.n()]; matrix.n()];
-
-        for i in 0..result.len() {
-            for j in i + 1..result.len() {
-                if matrix.beats(i, j) {
-                    result[i][j] = 1;
-                } else if matrix.beats(j, i) {
-                    result[j][i] = 1;
-                }
-            }
-        }
-
-        // Unsafe code here is justified, because all the invariants are held by the library.
-        #[allow(unsafe_code)]
-        unsafe {
-            CondorcetMatrix::new_unchecked(result)
         }
     }
 }
@@ -216,16 +223,19 @@ mod tests {
 
     use PairwiseMatrixError::*;
 
-    #[test_case(vec![], 0, EmptyMatrix; "empty matrix")]
-    #[test_case(vec![vec![0, 1], vec![0]], 0, NonMatrix; "non matrix")]
-    #[test_case(vec![vec![0, 1, 0], vec![1, 0, 0]], 0, NonSquareMatrix; "non sqaure matrix")]
-    #[test_case(vec![vec![0, 1], vec![1, 1]], 0, NonZeroDiagonal; "non zero diagonal")]
-    #[test_case(vec![vec![0, 1], vec![1, 0]], 1, NonAntiSymmetric; "non-antisymmetric pair")]
+    #[test_case(vec![], 0, &EmptyMatrix; "empty matrix")]
+    #[test_case(vec![vec![0, 1], vec![0]], 0, &NonMatrix; "non matrix")]
+    #[test_case(vec![vec![0, 1, 0], vec![1, 0, 0]], 0, &NonSquareMatrix; "non sqaure matrix")]
+    #[test_case(vec![vec![0, 1], vec![1, 1]], 0, &NonZeroDiagonal; "non zero diagonal")]
+    #[test_case(vec![vec![0, 1], vec![1, 0]], 1, &NonAntiSymmetric; "non-antisymmetric pair")]
     fn test_incorrect_invariant_violated(
         input: Vec<Vec<usize>>,
         n_voters: usize,
-        error: PairwiseMatrixError,
+        error: &PairwiseMatrixError,
     ) {
-        assert_eq!(PairwiseMatrix::try_new(input, n_voters).unwrap_err(), error);
+        assert_eq!(
+            PairwiseMatrix::try_new(input, n_voters).expect_err("Test should have failed."),
+            *error
+        );
     }
 }

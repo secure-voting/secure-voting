@@ -16,3 +16,7 @@ db-data/
 cache/
 mongo-data/
 iggy/
+
+# Profiling artifacts
+flamegraph.svg
+perf.data*

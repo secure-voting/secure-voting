@@ -86,7 +86,7 @@ This significantly reduces validation logic in downstream algorithms.
 - non-empty square shape
 - zero diagonal
 - symmetry:  
-  `matrix[i][j] + matrix[j][i] = n` for `i ≠ j`
+  `matrix[i][j] + matrix[j][i] = n` for `i !=  j`
 
 `CondorcetMatrix` is derived from `PairwiseMatrix` and encodes pairwise
 victories using boolean values.
@@ -113,6 +113,24 @@ src/
 
 Module internals are intentionally kept private where possible to avoid
 leaking implementation details into the public API.
+
+---
+
+## Advanced features
+
+Advanced in a sense that they are not useful to 95% of users.
+
+### ZipScorer
+
+If your voting rule needs to use the results of multiple scorers (for example, Coombs' rule uses both Plurality and AntiPlurality),
+then ZipScorer is a choice. It combines outputs of 2 scorers into a tuple.
+
+### ZipSelector
+
+A utility type to use the output of the ZipScorer type and avoid rewriting further steps to use a tuple.
+Accepts a generic constant (0/1) to determine which element of the tuple to get output from and forward to the action.
+
+Actions could be `Decider`, `EliminationCriterion` or `EliminationStopCondition`.
 
 ---
 

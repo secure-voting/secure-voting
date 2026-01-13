@@ -1,7 +1,7 @@
 //! Simpson's voting rule type.
 
 use crate::{
-    decider::majority::MajorityDecider, scorer::simpson::SimpsonScorer,
+    decider::maxscore::MaxScoreDecider, scorer::simpson::SimpsonScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -12,4 +12,4 @@ use crate::{
 pub type SimpsonRule = SimpsonRuleWith<FallthroughTieBreaker>;
 
 /// The Simpson's voting rule with a custom tie-breaker.
-pub type SimpsonRuleWith<TB> = VotingRule<SimpsonScorer, MajorityDecider<isize>, TB>;
+pub type SimpsonRuleWith<TB> = VotingRule<SimpsonScorer, MaxScoreDecider<isize>, TB>;

@@ -2,22 +2,23 @@
 resolver = "3"
 members = ["compute-service","voting-core"]
 
+[workspace.package]
+license = "MIT or Apache-2.0"
+
 [workspace.lints.clippy]
-single_match = "warn"
-single_match_else = "warn"
-needless_match = "warn"
-needless_late_init = "warn"
-redundant_pattern_matching = "warn"
-redundant_pattern = "warn"
-redundant_guards = "warn"
-collapsible_match = "warn"
-match_single_binding = "warn"
-match_same_arms = "warn"
-match_ref_pats = "warn"
-match_bool = "warn"
-needless_bool = "deny"
-unwrap_used = "warn"
-expect_used = "warn"
+cargo                 = { level = "warn", priority = -1 }
+complexity            = { level = "warn", priority = -1 }
+correctness           = { level = "deny", priority = -1 }
+pedantic              = { level = "warn", priority = -1 }
+perf                  = { level = "deny", priority = -1 }
+restriction           = { level = "allow", priority = -1 }
+style                 = { level = "warn", priority = -1 }
+dbg_macro             = "deny"
+expect_used           = "deny"
+panic                 = "deny"
+redundant_test_prefix = "warn"
+todo                  = "deny"
+unwrap_used           = "deny"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

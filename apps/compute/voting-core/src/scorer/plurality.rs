@@ -55,14 +55,18 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], vec![1, 2]; "simple plurality")]
-    fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], &[1, 2]; "simple plurality")]
+    fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = PluralityScorer;
 
         assert_eq!(
             answer,
             scorer
-                .compute_score(&votes.try_into().unwrap())
+                .compute_score(
+                    &votes
+                        .try_into()
+                        .expect("Profile is constructed incorrectly, revise test example.")
+                )
                 .unwrap()
                 .score()
                 .clone()

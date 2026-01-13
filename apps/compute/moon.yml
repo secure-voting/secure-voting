@@ -9,37 +9,89 @@ fileGroups:
     - '*/src/**/*'
     - '*/Cargo.toml'
     - 'Cargo.toml'
+    - 'clippy.toml'
+    - 'deny.toml'
   tests:
     - '*/benches/**/*'
     - '*/tests/**/*'
 
 tasks:
   build:
+    description: 'Build the project in release mode'
     command: 'cargo build --release'
     inputs:
       - '@globs(sources)'
   test:
-    command: 'nextest run --workspace'
+    description: 'Run the test suite for all crates'
+    command: 'cargo nextest run --workspace --all-features'
     toolchain: 'rust'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   lint:
-    command: "cargo clippy --workspace"
+    description: 'Check clippy suggestions in formatting'
+    command: "cargo clippy --workspace --all-targets --all-features"
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   check:
-    command: 'cargo check --workspace'
+    description: 'Check for compilation errors'
+    command: 'cargo check --workspace --all-targets --all-features'
     inputs:
       - '@globs(sources)'
   format:
+    description: 'Check formatting'
     command: 'cargo fmt --all --check'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
   coverage:
-    command: 'cargo tarpaulin'
+    description: 'Calculate line coverage as a percentage'
+    command: 'cargo llvm-cov --workspace --all-features --json | jq ".data[].totals.lines.percent"'
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
+  coverage-html:
+    description: 'Produce a coverage report and open in browser'
+    command: 'cargo llvm-cov --workspace --all-features --open'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+  audit:
+    description: 'Check dependency crates for known vulnerabilities'
+    command: 'cargo audit --deny warnings'
+    inputs:
+      - '@globs(sources)'
+  deny-check:
+    description: 'Check dependency crates for licensing issues or unknown sources'
+    command: 'cargo deny check'
+    inputs:
+      - '@globs(sources)'
+  profile:
+    description: 'Run the main binary and profile it, outputting a flamegraph'
+    command: 'cargo flamegraph'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: 'true'
+  bloat:
+    description: 'Check what dependency is taking the most space in the executable'
+    command: 'cargo bloat --release --bin compute-service'
+    inputs:
+      - '@globs(sources)'
+  vet:
+    description: 'Verify dependency audits and safety policies'
+    command: 'cargo vet'
+    inputs:
+      - '@globs(sources)'
+  machete:
+    description: 'Find unused dependencies'
+    command: 'cargo machete'
+    inputs:
+      - '@globs(sources)'
+  # public-api:
+  #   command: 'cargo public-api diff'
+  outdated:
+    description: 'Find outdated dependencies in the workspace'
+    command: 'cargo outdated --workspace'

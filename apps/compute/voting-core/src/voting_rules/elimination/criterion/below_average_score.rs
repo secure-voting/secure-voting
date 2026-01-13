@@ -1,4 +1,4 @@
-//! BelowAverageElimination module.
+//! `BelowAverageElimination` module.
 
 use crate::{
     prelude::CandidateId, scorer::Score, voting_rules::elimination::criterion::EliminationCriterion,
@@ -32,17 +32,17 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    fn ids(value: Vec<CandidateId>) -> Vec<usize> {
+    fn ids(value: &[CandidateId]) -> Vec<usize> {
         value.iter().map(|x| x.into_inner()).collect()
     }
 
-    #[test_case(vec![0, 4, 1], vec![0, 2]; "clear winner gap")]
-    #[test_case(vec![0, 2, 1], vec![0]; "no clear winner")]
-    #[test_case(vec![1, 1, 1], vec![]; "even distribution")]
-    fn test(scores: Vec<usize>, answer: Vec<usize>) {
+    #[test_case(vec![0, 4, 1], &[0, 2]; "clear winner gap")]
+    #[test_case(vec![0, 2, 1], &[0]; "no clear winner")]
+    #[test_case(vec![1, 1, 1], &[]; "even distribution")]
+    fn test(scores: Vec<usize>, answer: &[usize]) {
         assert_eq!(
             answer,
-            ids(BelowAverageElimination.eliminate(&Score::new(
+            ids(&BelowAverageElimination.eliminate(&Score::new(
                 scores,
                 &[
                     CandidateId::new(0),

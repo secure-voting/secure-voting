@@ -1,7 +1,7 @@
 //! Approval voting rule implementation.
 
 use crate::{
-    decider::majority::MajorityDecider, scorer::approval::ApprovalScorer,
+    decider::maxscore::MaxScoreDecider, scorer::approval::ApprovalScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -12,6 +12,6 @@ use crate::{
 /// If multiple winners remain, the result is left undecided.
 pub type ApprovalRule<const Q: usize> = ApprovalRuleWith<Q, FallthroughTieBreaker>;
 
-/// Q-Approval Voting rule type with a custom TieBreaker.
+/// Q-Approval Voting rule type with a custom `TieBreaker`.
 pub type ApprovalRuleWith<const Q: usize, TB> =
-    VotingRule<ApprovalScorer<Q>, MajorityDecider<usize>, TB>;
+    VotingRule<ApprovalScorer<Q>, MaxScoreDecider<usize>, TB>;

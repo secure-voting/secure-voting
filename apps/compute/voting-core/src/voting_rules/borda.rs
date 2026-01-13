@@ -1,7 +1,7 @@
 //! Borda voting rule implementation.
 
 use crate::{
-    decider::majority::MajorityDecider, scorer::borda::BordaScorer,
+    decider::maxscore::MaxScoreDecider, scorer::borda::BordaScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -14,4 +14,4 @@ use crate::{
 pub type BordaRule = BordaRuleWith<FallthroughTieBreaker>;
 
 /// Borda Voting rule type with a custom tie-breaker.
-pub type BordaRuleWith<TB> = VotingRule<BordaScorer, MajorityDecider<usize>, TB>;
+pub type BordaRuleWith<TB> = VotingRule<BordaScorer, MaxScoreDecider<usize>, TB>;

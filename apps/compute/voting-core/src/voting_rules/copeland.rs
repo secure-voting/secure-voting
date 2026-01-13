@@ -1,7 +1,7 @@
 //! Copeland's family of voting rules' implementation.
 
 use crate::{
-    decider::majority::MajorityDecider,
+    decider::maxscore::MaxScoreDecider,
     scorer::copeland::{
         copeland_i::CopelandIScorer, copeland_ii::CopelandIIScorer, copeland_iii::CopelandIIIScorer,
     },
@@ -16,7 +16,7 @@ use crate::{
 pub type CopelandIRule = CopelandIRuleWith<FallthroughTieBreaker>;
 
 /// Copeland I Voting rule type with a custom tie-breaker.
-pub type CopelandIRuleWith<TB> = VotingRule<CopelandIScorer, MajorityDecider<usize>, TB>;
+pub type CopelandIRuleWith<TB> = VotingRule<CopelandIScorer, MaxScoreDecider<usize>, TB>;
 
 /// Copeland II Voting rule type.
 ///
@@ -25,7 +25,7 @@ pub type CopelandIRuleWith<TB> = VotingRule<CopelandIScorer, MajorityDecider<usi
 pub type CopelandIIRule = CopelandIIRuleWith<FallthroughTieBreaker>;
 
 /// Copeland I Voting rule type with a custom tie-breaker.
-pub type CopelandIIRuleWith<TB> = VotingRule<CopelandIIScorer, MajorityDecider<isize>, TB>;
+pub type CopelandIIRuleWith<TB> = VotingRule<CopelandIIScorer, MaxScoreDecider<isize>, TB>;
 
 /// Copeland III Voting rule type.
 ///
@@ -33,4 +33,4 @@ pub type CopelandIIRuleWith<TB> = VotingRule<CopelandIIScorer, MajorityDecider<i
 pub type CopelandIIIRule = CopelandIIIRuleWith<FallthroughTieBreaker>;
 
 /// Copeland I Voting rule type with a custom tie-breaker.
-pub type CopelandIIIRuleWith<TB> = VotingRule<CopelandIIIScorer, MajorityDecider<isize>, TB>;
+pub type CopelandIIIRuleWith<TB> = VotingRule<CopelandIIIScorer, MaxScoreDecider<isize>, TB>;

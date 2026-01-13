@@ -36,7 +36,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_single_lowest_score() {
+    fn single_lowest_score() {
         let scores = Score::new(
             vec![0, 1, 2, 1],
             &[
@@ -54,7 +54,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_lowest_scores() {
+    fn multiple_lowest_scores() {
         let scores = Score::new(
             vec![3, 1, 2, 1],
             &[
@@ -72,7 +72,7 @@ mod tests {
     }
 
     #[test]
-    fn test_all_lowest_scores() {
+    fn all_lowest_scores() {
         let scores = Score::new(
             vec![1, 1, 1, 1, 1],
             &[

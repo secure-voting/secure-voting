@@ -1,4 +1,4 @@
-//! ZipSelector module.
+//! `ZipSelector` module.
 
 use std::marker::PhantomData;
 
@@ -14,7 +14,7 @@ pub struct ZipSelector<const I: usize, A, T1, T2> {
     /// Action to perform on a tuple's element.
     action: A,
 
-    /// PhantomData type marker for the 2 input types of a tuple.
+    /// `PhantomData` type marker for the 2 input types of a tuple.
     _marker: PhantomData<(T1, T2)>,
 }
 

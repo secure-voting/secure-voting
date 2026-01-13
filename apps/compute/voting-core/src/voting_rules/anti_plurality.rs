@@ -1,7 +1,7 @@
 //! Anti-plurality voting rule implementation.
 
 use crate::{
-    decider::minority::MinorityDecider, scorer::anti_plurality::AntiPluralityScorer,
+    decider::minscore::MinScoreDecider, scorer::anti_plurality::AntiPluralityScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
 };
 
@@ -13,4 +13,4 @@ use crate::{
 pub type AntiPluralityRule = AntiPluralityRuleWith<FallthroughTieBreaker>;
 
 /// Anti-plurality Voting rule type with a custom tie-breaker.
-pub type AntiPluralityRuleWith<TB> = VotingRule<AntiPluralityScorer, MinorityDecider<usize>, TB>;
+pub type AntiPluralityRuleWith<TB> = VotingRule<AntiPluralityScorer, MinScoreDecider<usize>, TB>;

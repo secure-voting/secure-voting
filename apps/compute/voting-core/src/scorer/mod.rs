@@ -77,6 +77,12 @@ pub trait Scorer {
     type Error: Debug;
 
     /// Scores the voting profile.
+    ///
+    /// # Errors
+    ///
+    /// An error is returned if the scoring step can fail.
+    /// Usually happens due to invariants of the scoring step
+    /// not being upheld or supported by the type system.
     fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error>;
 
     /// Construct a new scorer.

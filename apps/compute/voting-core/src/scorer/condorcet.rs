@@ -45,7 +45,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_correct_condorcet_matrix_single_vote() {
+    fn correct_condorcet_matrix_single_vote() {
         let votes = vec![vec![1, 2, 0, 3]];
         let answer = vec![
             vec![false, false, false, true],
@@ -53,7 +53,9 @@ mod tests {
             vec![true, false, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         assert_eq!(
             answer,
@@ -68,7 +70,7 @@ mod tests {
     }
 
     #[test]
-    fn test_correct_condorcet_matrix_multiple_votes() {
+    fn correct_condorcet_matrix_multiple_votes() {
         let votes = vec![vec![1, 2, 0, 3], vec![3, 0, 2, 1], vec![0, 2, 1, 3]];
         let answer = vec![
             vec![false, true, true, true],
@@ -76,7 +78,9 @@ mod tests {
             vec![false, true, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes.try_into().unwrap();
+        let profile = votes
+            .try_into()
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         assert_eq!(
             answer,

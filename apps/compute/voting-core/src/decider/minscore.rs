@@ -9,12 +9,12 @@ use crate::{decider::Decider, profile::CandidateId, scorer::Score};
 /// Selects all candidates whose score is equal to the minimum score.
 /// This type is a zero-sized marker implementing [`Decider`].
 #[derive(Default, Debug, Clone, Copy)]
-pub struct MinorityDecider<T> {
-    /// PhantomData type marker to allow generics inside this struct.
+pub struct MinScoreDecider<T> {
+    /// `PhantomData` type marker to allow generics inside this struct.
     _marker: PhantomData<T>,
 }
 
-impl<T> Decider for MinorityDecider<T>
+impl<T> Decider for MinScoreDecider<T>
 where
     T: PartialOrd + Default + Copy,
 {
@@ -54,14 +54,14 @@ mod tests {
     use super::*;
 
     fn ids(v: Vec<CandidateId>) -> Vec<usize> {
-        v.into_iter().map(|x| x.into_inner()).collect()
+        v.into_iter().map(CandidateId::into_inner).collect()
     }
 
     #[test]
-    fn test_one_winner() {
+    fn one_winner() {
         let scores = Score::new(
             vec![2, 1, 2, 0],
-            &vec![
+            &[
                 CandidateId::new(1),
                 CandidateId::new(2),
                 CandidateId::new(9),
@@ -71,15 +71,15 @@ mod tests {
 
         assert_eq!(
             vec![0],
-            ids(MinorityDecider::new().decide(&scores).unwrap())
+            ids(MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
     #[test]
-    fn test_several_winners() {
+    fn several_winners() {
         let scores = Score::new(
             vec![3, 2, 3, 2],
-            &vec![
+            &[
                 CandidateId::new(1),
                 CandidateId::new(2),
                 CandidateId::new(9),
@@ -89,15 +89,15 @@ mod tests {
 
         assert_eq!(
             vec![2, 0],
-            ids(MinorityDecider::new().decide(&scores).unwrap())
+            ids(MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
     #[test]
-    fn test_all_winners() {
+    fn all_winners() {
         let scores = Score::new(
             vec![1, 1, 1, 1, 1],
-            &vec![
+            &[
                 CandidateId::new(10),
                 CandidateId::new(1),
                 CandidateId::new(2),
@@ -108,7 +108,7 @@ mod tests {
 
         assert_eq!(
             vec![10, 1, 2, 9, 0],
-            ids(MinorityDecider::new().decide(&scores).unwrap())
+            ids(MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 }

@@ -1,4 +1,4 @@
-//! AcceptIf adaptor module.
+//! `AcceptIf` adaptor module.
 
 use tracing::instrument;
 
@@ -6,7 +6,7 @@ use crate::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
 use crate::voting_rules::VotingRuleExec;
 
-/// AcceptIf adaptor.
+/// `AcceptIf` adaptor.
 ///
 /// Accepts the candidate set if it meets a predicate.
 pub struct AcceptIf<V> {
@@ -17,7 +17,7 @@ pub struct AcceptIf<V> {
 }
 
 impl<V> AcceptIf<V> {
-    /// Construct a new AcceptIf instance.
+    /// Construct a new `AcceptIf` instance.
     pub fn new(voting_rule: V, predicate: impl Fn(&RuleOutcome) -> bool + 'static) -> Self {
         Self {
             voting_rule,
@@ -79,11 +79,12 @@ mod tests {
     }
 
     fn fake_profile() -> Profile {
-        Profile::try_from(vec![vec![0, 2, 1]]).unwrap()
+        Profile::try_from(vec![vec![0, 2, 1]])
+            .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     #[test]
-    fn test_does_match_outcome() {
+    fn does_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
         mock.expect_execute()
@@ -97,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn test_doesnt_match_outcome() {
+    fn doesnt_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
         mock.expect_execute()
@@ -117,7 +118,7 @@ mod tests {
     }
 
     #[test]
-    fn test_voting_rule_error_is_propagated() {
+    fn voting_rule_error_is_propagated() {
         let mut mock = MockSuccessfulVotingRule::new();
 
         mock.expect_execute().return_const(Err(()));

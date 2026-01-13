@@ -1,4 +1,4 @@
-//! Different adaptors that modify or compose voting strategies.
+//! Different adaptors that modify or compose voting strategies or its parts.
 
 pub mod accept_if;
 pub mod fallback;

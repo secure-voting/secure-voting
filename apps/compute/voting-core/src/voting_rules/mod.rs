@@ -17,6 +17,7 @@ pub mod borda;
 pub mod coombs;
 pub mod copeland;
 pub mod hare;
+pub mod inverse_borda;
 pub mod minmax;
 pub mod nanson;
 pub mod plurality;
@@ -29,5 +30,10 @@ pub trait VotingRuleExec: Default {
     type Error: Debug;
 
     /// Run the constructed pipeline.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any of voting steps failed.
+    /// Usually a sum type of the steps' error types.
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error>;
 }

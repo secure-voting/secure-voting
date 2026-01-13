@@ -1,10 +1,8 @@
-//! Prelude.
+//! Prelude with re-exports of all the necessary public API.
 //!
-//! Re-exports all the necessary public API:
-//!
-//! 1. 17 pre-packaged voting rules.
+//! 1. Pre-packaged common voting rules.
 //! 2. Voting traits and adaptors.
-//! 3. Matrix types, RuleOutcome, CandidateID and the Profile type.
+//! 3. Matrix types, `RuleOutcome`, `CandidateID` and the Profile type.
 
 // Voting rules:
 // 1. Plurality
@@ -15,15 +13,17 @@
 // 6. Copeland I, II, III
 // 7. Simpson (Maxmin)
 // 8. Minmax
-// 9. Strong q-Paretian simple majority
-// 10. Strong q-Paretian plurality
-// 11. Strongest q-Paretian simple majority
-// 12. Condorcet practical
-// 13. Threshold
-// 14. Hare
-// 15. Inverse Borda
-// 16. Nanson
-// 17. Coombs
+// 9. Condorcet practical
+// 10. Hare
+// 11. Nanson
+// 12. Coombs
+// 13. Inverse Borda
+//
+// TBD:
+//
+// 1. Strong q-Paretian simple majority
+// 2. Strong q-Paretian plurality
+// 3. Strongest q-Paretian simple majority
 pub use crate::voting_rules::{
     anti_plurality::AntiPluralityRule,
     approval::ApprovalRule,
@@ -32,6 +32,7 @@ pub use crate::voting_rules::{
     coombs::CoombsRule,
     copeland::{CopelandIIIRule, CopelandIIRule, CopelandIRule},
     hare::HareRule,
+    inverse_borda::InverseBordaRule,
     minmax::MinmaxRule,
     nanson::NansonRule,
     plurality::PluralityRule,

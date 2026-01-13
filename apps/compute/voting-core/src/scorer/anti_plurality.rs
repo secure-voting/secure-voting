@@ -56,15 +56,19 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![1, 2, 0]], vec![1, 1, 1]; "case_1")]
-    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 3, 2], vec![2, 3, 1, 0]], vec![1, 0, 1, 1]; "case_2")]
-    fn test_correct_anti_plurality(votes: Vec<Vec<usize>>, answer: Vec<usize>) {
+    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![1, 2, 0]], &[1, 1, 1]; "case_1")]
+    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 3, 2], vec![2, 3, 1, 0]], &[1, 0, 1, 1]; "case_2")]
+    fn test_correct_anti_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = AntiPluralityScorer;
 
         assert_eq!(
             answer,
             scorer
-                .compute_score(&votes.try_into().unwrap())
+                .compute_score(
+                    &votes
+                        .try_into()
+                        .expect("Profile is constructed incorrectly, revise test examples.")
+                )
                 .unwrap()
                 .score()
                 .clone()

@@ -1,7 +1,7 @@
 //! Coombs' voting rule type.
 
 use crate::{
-    decider::majority::MajorityDecider,
+    decider::maxscore::MaxScoreDecider,
     prelude::zip_selector::ZipSelector,
     scorer::{anti_plurality::AntiPluralityScorer, plurality::PluralityScorer, zip::ZipScorer},
     tie_breaker::fallthrough::FallthroughTieBreaker,
@@ -22,7 +22,7 @@ pub type CoombsRule = CoombsRuleWith<FallthroughTieBreaker>;
 pub type CoombsRuleWith<TB> = Elimination<
     ZipScorer<PluralityScorer, AntiPluralityScorer>,
     ZipSelector<1, MaxScoreElimination, Vec<usize>, Vec<usize>>,
-    ZipSelector<0, MajorityDecider<usize>, Vec<usize>, Vec<usize>>,
+    ZipSelector<0, MaxScoreDecider<usize>, Vec<usize>, Vec<usize>>,
     TB,
     ZipSelector<0, MajorityStop, Vec<usize>, Vec<usize>>,
 >;

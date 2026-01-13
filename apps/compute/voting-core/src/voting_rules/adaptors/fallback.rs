@@ -100,7 +100,8 @@ mod tests {
     }
 
     fn fake_profile() -> Profile {
-        Profile::try_from(vec![vec![0, 1]]).unwrap()
+        Profile::try_from(vec![vec![0, 1]])
+            .expect("Profile is constructed incorrectly, revise test example")
     }
 
     #[test]
@@ -120,7 +121,7 @@ mod tests {
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.unwrap(),
+            result.expect("The rule shouldn't fail"),
             RuleOutcome::UniqueWinner(CandidateId::new(0))
         );
     }
@@ -148,7 +149,7 @@ mod tests {
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.unwrap(),
+            result.expect("The rule shouldn't fail"),
             RuleOutcome::UniqueWinner(CandidateId::new(1))
         );
     }

@@ -53,7 +53,8 @@ mod tests {
 
     #[test]
     fn simpson_single_vote_linear_order() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2, 3]]).unwrap();
+        let profile = Profile::try_from(vec![vec![0, 1, 2, 3]])
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
@@ -62,7 +63,8 @@ mod tests {
 
     #[test]
     fn simpson_condorcet_winner() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]]).unwrap();
+        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]])
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
@@ -71,7 +73,8 @@ mod tests {
 
     #[test]
     fn simpson_condorcet_cycle() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]]).unwrap();
+        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]])
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
@@ -80,7 +83,8 @@ mod tests {
 
     #[test]
     fn simpson_two_candidates() {
-        let profile = Profile::try_from(vec![vec![0, 1], vec![0, 1], vec![1, 0]]).unwrap();
+        let profile = Profile::try_from(vec![vec![0, 1], vec![0, 1], vec![1, 0]])
+            .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
@@ -97,7 +101,7 @@ mod tests {
             vec![2, 0, 1],
             vec![2, 1, 0],
         ])
-        .unwrap();
+        .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
@@ -114,7 +118,7 @@ mod tests {
             vec![2, 0, 1],
             vec![2, 0, 1],
         ])
-        .unwrap();
+        .expect("Profile is constructed incorrectly, revise test example.");
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
