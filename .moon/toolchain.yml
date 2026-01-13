@@ -9,6 +9,7 @@ unstable_rust:
     - 'cargo-machete'
     - 'cargo-nextest'
     - 'cargo-outdated'
+    - 'cargo-pgo'
     - 'cargo-public-api'
   components:
     - 'clippy'
