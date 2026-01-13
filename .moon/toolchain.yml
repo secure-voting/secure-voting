@@ -11,6 +11,7 @@ unstable_rust:
     - 'cargo-outdated'
     - 'cargo-pgo'
     - 'cargo-public-api'
+    - 'cargo-vet'
   components:
     - 'clippy'
     - 'rustfmt'
