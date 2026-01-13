@@ -93,5 +93,5 @@ tasks:
   # public-api:
   #   command: 'cargo public-api diff'
   outdated:
+    description: 'Find outdated dependencies in the workspace'
     command: 'cargo outdated --workspace'
-   
