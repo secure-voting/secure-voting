@@ -2,7 +2,6 @@ unstable_rust:
   version: '1.92.0'
   bins:
     - 'cargo-audit'
-    - 'cargo-bloat'
     - 'cargo-deny'
     - 'cargo-geiger'
     - 'cargo-llvm-cov'
