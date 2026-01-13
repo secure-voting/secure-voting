@@ -1,8 +1,21 @@
 [package]
-name = "compute-service"
-version = "0.1.0"
+categories = [
+  "asynchronous",
+  "network-programming",
+  "web-programming::http"
+]
+description = "An RPC-service capable of electing a winner in a ranked-ballot voting configuration"
 edition = "2024"
+keywords = [
+  "election",
+  "rpc",
+  "service",
+  "voting"
+]
 license.workspace=true
+name = "compute-service"
+repository = "https://github.com/schukark/secure-voting/apps/compute/compute-service"
+version = "0.1.0"
 
 [dependencies]
 

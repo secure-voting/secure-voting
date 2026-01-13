@@ -1,8 +1,21 @@
 [package]
-name = "voting-core"
-version = "0.1.0"
+categories = [
+  "algorithms",
+  "mathematics",
+  "science"
+]
+description = "Composable Rust framework for defining and running voting rules"
 edition = "2024"
+keywords = [
+  "voting",
+  "election",
+  "framework",
+  "social-choice"
+]
 license.workspace = true
+name = "voting-core"
+repository = "https://github.com/schukark/secure-voting/apps/compute/voting-core"
+version = "0.1.0"
 
 [dependencies]
 nutype = "0.6.2"
