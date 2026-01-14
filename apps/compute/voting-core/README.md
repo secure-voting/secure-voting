@@ -1,3 +1,9 @@
+[![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
+[![MSRV](https://img.shields.io/badge/MSRV-1.92.0-blue)](https://github.com/schukark/secure-voting)
+![CI](https://github.com/schukark/secure-voting/actions/workflows/ci.yml/badge.svg)
+![cargo-audit](https://img.shields.io/badge/dependencies-audited-success)
+![licenses](https://img.shields.io/badge/licenses-MIT%2FApache--2.0-blue)
+
 # voting-core
 
 `voting-core` is a **composable Rust framework for implementing voting rules**.
