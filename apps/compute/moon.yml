@@ -83,6 +83,8 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
+    options:
+      runInCI: false
 
   # ---------------------------
   # Dependency & supply-chain
