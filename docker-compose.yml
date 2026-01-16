@@ -92,17 +92,17 @@ services:
     container_name: redis-cache
     networks:
       - app_network
-      - redis_network      
-    command: redis-server --save 20 1 --loglevel warning --requirepass ${REDIS_PASSWORD}
-    restart: unless-stopped
+      - redis_network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c 'redis-server --save 20 1 --loglevel warning --requirepass "$$REDIS_PASSWORD"'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
-      retries: 5    
-    profiles:
-      - db
-      - prod
+      retries: 5
+
 
   # Redis WebUI
   redis-webui:
