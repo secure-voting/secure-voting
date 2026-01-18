@@ -1,3 +1,3 @@
-module secure-voting/backend
+module secure-voting/apps/backend
 
 go 1.22
