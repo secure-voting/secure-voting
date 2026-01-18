@@ -15,7 +15,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-    read_only: true
+    read_only: false
     profiles:
       - frontend
       - prod
@@ -28,13 +28,16 @@ services:
       - app_network
       - rpc_network
       - db_network
+      - kafka_network
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       cache:
         condition: service_healthy
-      iggy:
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
@@ -43,7 +46,7 @@ services:
       retries: 3
     profiles:
       - backend
-      - prod    
+      - prod
 
   # SQL Postgres db
   db:
@@ -56,8 +59,8 @@ services:
     networks:
       - db_network
     volumes:
-      - db-data:/var/lib/postgresql/data
-      - scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - db-data:/var/lib/postgresql
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
@@ -103,7 +106,6 @@ services:
       timeout: 5s
       retries: 5
 
-
   # Redis WebUI
   redis-webui:
     image: redisinsight:2.70
@@ -119,7 +121,7 @@ services:
     profiles:
       - db
       - debug
-      
+
   # NoSQL MongoDB
   mongo:
     image: mongo:8.0
@@ -139,15 +141,17 @@ services:
       retries: 5
     profiles:
       - db
-      - prod  
+      - prod
 
   mongodb-webui:
     image: mongo-express:1.0.2-20-alpine3.19
     container_name: mongodb-webui
     environment:
       - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
     ports:
-      - "127.0.0.1:8082:8082"
+      - "127.0.0.1:8082:8081"
     networks:
       - db_network
     restart: unless-stopped
@@ -170,58 +174,44 @@ services:
       - compute
       - prod
 
-  # Apache Iggy message broker
-  iggy:
-    image: apache/iggy:1.0.2-20-alpine3.19
-    container_name: iggy-mq
-    cap_add:
-      - SYS_NICE
-    security_opt:
-      - seccomp:unconfined
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    environment:
-      - IGGY_ROOT_USERNAME=iggy
-      - IGGY_ROOT_PASSWORD=${IGGY_ROOT_PASSWORD}
-      - IGGY_HTTP_ENABLED=true
-      - IGGY_HTTP_ADDRESS=0.0.0.0:80
-      - IGGY_TCP_ENABLED=true
-      - IGGY_TCP_ADDRESS=0.0.0.0:3000
-      - IGGY_QUIC_ENABLED=false
-      - IGGY_WEBSOCKET_ENABLED=false
-      - IGGY_HEARTBEAT_ENABLED=true
-      - IGGY_HEARTBEAT_INTERVAL=5s
+
+  # Kafka (KRaft, local-dev friendly)
+  kafka:
+    image: confluentinc/confluent-local:7.6.9-1-ubi8
+    container_name: kafka
     networks:
-      - iggy_network
-    volumes:
-      - iggy:/iggy/local_data
+      - kafka_network
+    ports:
+      - "9092:9092"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 10
     profiles:
-      - iggy
+      - kafka
       - prod
 
-  # Apache Iggy WebUI
-  iggy-webui:
-    image: apache/iggy-web-ui:1.0.2-20-alpine3.19
-    container_name: iggy-webui
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
     environment:
-      - PUBLIC_IGGY_API_URL=http://iggy:80
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
     ports:
-      - "127.0.0.1:3050:3050"
+      - "127.0.0.1:8089:8080"
     networks:
-      - iggy_network
-    read_only: true
+      - kafka_network
+    restart: unless-stopped
     profiles:
-      - iggy
       - debug
-  
+
+
 networks:
   app_network:
     driver: bridge
@@ -231,10 +221,12 @@ networks:
   rpc_network:
     driver: bridge
     internal: true
-  iggy_network:
-    driver: bridge
   redis_network:
     driver: bridge
+  kafka_network:
+    driver: bridge
+    internal: true
+
 
 volumes:
   db-data:
@@ -243,5 +235,7 @@ volumes:
     driver: local
   mongo-data:
     driver: local
-  iggy:
+  kafka-data:
+    driver: local
+  pgadmin-data:
     driver: local
