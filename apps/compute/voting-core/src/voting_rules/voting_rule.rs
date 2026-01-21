@@ -110,6 +110,13 @@ impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec
     fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
         self.run(profile)
     }
+
+    fn create_default() -> Self
+    where
+        Self: Sized,
+    {
+        Self::default()
+    }
 }
 
 impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> Default for VotingRule<S, D, T> {

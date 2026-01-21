@@ -65,6 +65,13 @@ where
             Err(e) => Err(FallbackError::PrimaryError(e)),
         }
     }
+
+    fn create_default() -> Self
+    where
+        Self: Sized,
+    {
+        Fallback::default()
+    }
 }
 
 impl<R1, R2> Default for Fallback<R1, R2>
@@ -74,8 +81,8 @@ where
 {
     fn default() -> Self {
         Self {
-            primary: Default::default(),
-            fallback: Default::default(),
+            primary: R1::create_default(),
+            fallback: R2::create_default(),
         }
     }
 }
@@ -96,6 +103,7 @@ mod tests {
             type Error = &'static str;
 
             fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+            fn create_default() -> Self where Self: Sized;
         }
     }
 
@@ -106,8 +114,8 @@ mod tests {
 
     #[test]
     fn primary_unique_winner_short_circuits() {
-        let mut primary = MockVotingRule::new();
-        let mut fallback = MockVotingRule::new();
+        let mut primary = MockVotingRule::create_default();
+        let mut fallback = MockVotingRule::create_default();
 
         primary
             .expect_execute()
@@ -128,8 +136,8 @@ mod tests {
 
     #[test]
     fn primary_multiple_winners_triggers_fallback() {
-        let mut primary = MockVotingRule::new();
-        let mut fallback = MockVotingRule::new();
+        let mut primary = MockVotingRule::create_default();
+        let mut fallback = MockVotingRule::create_default();
 
         primary
             .expect_execute()
@@ -156,8 +164,8 @@ mod tests {
 
     #[test]
     fn primary_error_is_propagated_and_fallback_not_called() {
-        let mut primary = MockVotingRule::new();
-        let mut fallback = MockVotingRule::new();
+        let mut primary = MockVotingRule::create_default();
+        let mut fallback = MockVotingRule::create_default();
 
         primary
             .expect_execute()
@@ -178,8 +186,8 @@ mod tests {
 
     #[test]
     fn fallback_error_is_wrapped_correctly() {
-        let mut primary = MockVotingRule::new();
-        let mut fallback = MockVotingRule::new();
+        let mut primary = MockVotingRule::create_default();
+        let mut fallback = MockVotingRule::create_default();
 
         primary
             .expect_execute()

@@ -45,6 +45,13 @@ where
             Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
         }
     }
+
+    fn create_default() -> Self
+    where
+        Self: Sized,
+    {
+        AcceptIf::default()
+    }
 }
 
 impl<V> Default for AcceptIf<V>
@@ -53,7 +60,7 @@ where
 {
     fn default() -> Self {
         Self {
-            voting_rule: Default::default(),
+            voting_rule: V::create_default(),
             predicate: Box::new(|_| true),
         }
     }
@@ -75,6 +82,7 @@ mod tests {
             type Error = ();
 
             fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+            fn create_default() -> Self where Self: Sized;
         }
     }
 
