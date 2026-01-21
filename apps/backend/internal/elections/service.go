@@ -627,3 +627,107 @@ func insertAudit(ctx context.Context, tx pgx.Tx, actorUserID *string, eventType 
 	)
 	return err
 }
+
+
+type ElectionDetail struct {
+	ID          string  `json:"id"`
+	Title       string  `json:"title"`
+	Description *string `json:"description,omitempty"`
+
+	StartAt string `json:"start_at"`
+	EndAt   string `json:"end_at"`
+
+	TallyRule    string `json:"tally_rule"`
+	BallotFormat string `json:"ballot_format"`
+
+	CommitteeSize *int    `json:"committee_size,omitempty"`
+	QuotaType     *string `json:"quota_type,omitempty"`
+
+	Status      string `json:"status"`
+	AccessMode  string `json:"access_mode"`
+	PublishAt   *string `json:"publish_at,omitempty"`
+	PublishedAt *string `json:"published_at,omitempty"`
+	ShowAggregates bool `json:"show_aggregates"`
+
+	ApprovalMaxChoices *int `json:"approval_max_choices,omitempty"`
+	RankingTopK        *int `json:"ranking_top_k,omitempty"`
+	ScoreMin           *int `json:"score_min,omitempty"`
+	ScoreMax           *int `json:"score_max,omitempty"`
+	ScoreStep          *int `json:"score_step,omitempty"`
+	ScoreAllowSkip     bool `json:"score_allow_skip"`
+
+	Candidates []Candidate `json:"candidates"`
+}
+
+func (s *Service) Get(ctx context.Context, electionID, userID, email, role string) (ElectionDetail, string, error) {
+	allowed, err := s.isAccessible(ctx, electionID, userID, email, role)
+	if err != nil {
+		return ElectionDetail{}, "", err
+	}
+	if !allowed {
+		return ElectionDetail{}, "not_found", nil
+	}
+
+	var d ElectionDetail
+	d.ID = electionID
+
+	var startAt, endAt time.Time
+	var publishAt, publishedAt *time.Time
+
+	err = s.db.QueryRow(ctx, `
+		SELECT title, description, start_at, end_at,
+		       tally_rule, ballot_format,
+		       committee_size, quota_type,
+		       status, access_mode,
+		       publish_at, published_at, show_aggregates,
+		       approval_max_choices, ranking_top_k,
+		       score_min, score_max, score_step, score_allow_skip
+		FROM elections
+		WHERE id=$1::uuid
+	`, electionID).Scan(
+		&d.Title, &d.Description, &startAt, &endAt,
+		&d.TallyRule, &d.BallotFormat,
+		&d.CommitteeSize, &d.QuotaType,
+		&d.Status, &d.AccessMode,
+		&publishAt, &publishedAt, &d.ShowAggregates,
+		&d.ApprovalMaxChoices, &d.RankingTopK,
+		&d.ScoreMin, &d.ScoreMax, &d.ScoreStep, &d.ScoreAllowSkip,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ElectionDetail{}, "not_found", nil
+		}
+		return ElectionDetail{}, "", err
+	}
+
+	d.StartAt = startAt.UTC().Format(time.RFC3339)
+	d.EndAt = endAt.UTC().Format(time.RFC3339)
+	if publishAt != nil {
+		s := publishAt.UTC().Format(time.RFC3339)
+		d.PublishAt = &s
+	}
+	if publishedAt != nil {
+		s := publishedAt.UTC().Format(time.RFC3339)
+		d.PublishedAt = &s
+	}
+
+	rows, err := s.db.Query(ctx, `SELECT id::text, name, meta FROM candidates WHERE election_id=$1::uuid ORDER BY name`, electionID)
+	if err != nil {
+		return ElectionDetail{}, "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var c Candidate
+		var metaJSON []byte
+		if err := rows.Scan(&c.ID, &c.Name, &metaJSON); err != nil {
+			return ElectionDetail{}, "", err
+		}
+		if len(metaJSON) > 0 && string(metaJSON) != "null" {
+			_ = json.Unmarshal(metaJSON, &c.Meta)
+		}
+		d.Candidates = append(d.Candidates, c)
+	}
+
+	return d, "", nil
+}

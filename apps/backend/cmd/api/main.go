@@ -6,17 +6,40 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	//"time"
+	"time"
 
 	"secure-voting/apps/backend/internal/config"
+	"secure-voting/apps/backend/internal/db"
 	"secure-voting/apps/backend/internal/httpserver"
 )
 
-// main starts the HTTP server and shuts it down gracefully.
 func main() {
 	cfg := config.FromEnv()
 
-	handler := httpserver.Routes()
+	bootCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pg, err := db.NewPostgresPool(bootCtx, cfg.PostgresDSN)
+	if err != nil {
+		log.Fatalf("failed to init postgres: %v", err)
+	}
+	defer pg.Close()
+
+	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword)
+	if err != nil {
+		log.Fatalf("failed to init redis: %v", err)
+	}
+	defer func() { _ = rdb.Close() }()
+
+	mc, err := db.NewMongoClient(bootCtx, cfg.MongoURI)
+	if err != nil {
+		log.Fatalf("failed to init mongo: %v", err)
+	}
+	defer func() { _ = mc.Disconnect(context.Background()) }()
+
+	mdb := mc.Database(cfg.MongoDBName)
+
+	handler := httpserver.Routes(cfg, pg, rdb, mdb)
 	srv := httpserver.New(cfg.HTTPAddr, handler)
 
 	errCh := make(chan error, 1)
@@ -37,8 +60,8 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
+	ctx, cancel2 := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer cancel2()
 
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Printf("shutdown error: %v", err)
