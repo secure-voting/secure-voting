@@ -1,22 +1,23 @@
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 use anyhow::anyhow;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct Args {
     /// Input file path
     #[arg(short, long)]
-    file: String,
+    pub file: PathBuf,
     /// Input file format
-    #[arg(short = 't', long = "type")]
-    format: String,
+    #[arg(short = 't', long = "type", value_enum)]
+    pub format: InputFormat,
     /// Voting rule name
     #[arg(short, long)]
-    rule: RuleName,
+    pub rule: RuleName,
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum RuleName {
     /// Plurality rule.
@@ -63,4 +64,10 @@ impl FromStr for RuleName {
             name => Err(anyhow!("Unknown rule name: {}", name)),
         }
     }
+}
+
+#[non_exhaustive]
+#[derive(ValueEnum, Copy, Clone, Debug)]
+pub enum InputFormat {
+    CVR,
 }
