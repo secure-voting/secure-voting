@@ -14,12 +14,12 @@ mod models;
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let file_contents = std::fs::read_to_string(args.file)?;
-    let (profile, mapping) = get_profile_and_mappings(&args.format, file_contents.as_bytes())?;
+    let (profile, mapping) = get_profile_and_mappings(args.format, file_contents.as_bytes())?;
     let result = compute_result(&args.rule, &profile)?;
 
     match result {
         RuleOutcome::UniqueWinner(candidate_id) => {
-            println!("A unique winner is determined: {}", mapping[&candidate_id])
+            println!("A unique winner is determined: {}", mapping[&candidate_id]);
         }
         RuleOutcome::MultipleWinners(candidate_ids) => println!(
             "A unique winner couldn't be found, but here are candidates tied for a win: {:?}",
@@ -35,11 +35,11 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn get_profile_and_mappings<R: io::Read>(
-    format: &InputFormat,
+    format: InputFormat,
     reader: R,
 ) -> anyhow::Result<(Profile, HashMap<CandidateId, String>)> {
     match format {
-        InputFormat::CVR => Ok(CVRParser.parse(reader)?),
+        InputFormat::Cvr => Ok(CVRParser.parse(reader)?),
         _ => Err(anyhow!("Unsupported input format")),
     }
 }

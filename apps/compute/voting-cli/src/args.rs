@@ -46,13 +46,9 @@ impl FromStr for RuleName {
         let binding = s.to_lowercase();
         let s = binding.as_str();
 
-        if s.starts_with("approval") {
-            let postfix = s.strip_prefix("approval").unwrap();
+        if let Some(postfix) = s.strip_prefix("approval") {
             let x = postfix.parse().map_err(|_| {
-                anyhow!(
-                    "Can't parse Q for approval, expected number, got: {}",
-                    postfix
-                )
+                anyhow!("Can't parse Q for approval, expected number, got: {postfix}")
             })?;
             return Ok(Self::Approval(x));
         }
@@ -61,7 +57,7 @@ impl FromStr for RuleName {
             "plurality" => Ok(Self::Plurality),
             "inverseplurality" => Ok(Self::InversePlurality),
             "borda" => Ok(Self::Borda),
-            name => Err(anyhow!("Unknown rule name: {}", name)),
+            name => Err(anyhow!("Unknown rule name: {name}")),
         }
     }
 }
@@ -69,5 +65,5 @@ impl FromStr for RuleName {
 #[non_exhaustive]
 #[derive(ValueEnum, Copy, Clone, Debug)]
 pub enum InputFormat {
-    CVR,
+    Cvr,
 }

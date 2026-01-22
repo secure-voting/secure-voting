@@ -44,9 +44,8 @@ impl ProfileParser for CVRParser {
         let mut header_mapping = vec![None; REQUIRED_HEADERS.len()];
 
         for (id, header) in headers.iter().enumerate() {
-            if REQUIRED_HEADERS.contains(&header) {
-                header_mapping[REQUIRED_HEADERS.iter().position(|x| x == &header).unwrap()] =
-                    Some(id);
+            if let Some(idx) = REQUIRED_HEADERS.iter().position(|x| x == &header) {
+                header_mapping[idx] = Some(id);
             }
         }
 
@@ -95,7 +94,7 @@ impl ProfileParser for CVRParser {
                         vec.push(0);
                     }
 
-                    vec[rank] = *candidate_mapping.get(&choice).unwrap();
+                    vec[rank] = candidate_mapping[&choice];
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -124,6 +123,6 @@ mod tests {
     fn crv_example_data_fixed_to_support() {
         let data = "ballot_id,rank,choice\nAB001,1,Alice\nAB001,2,Bob\nAB001,3,Edna\nAB002,1,Alice\nAB002,2,Edna\nAB002,3,Bob";
 
-        assert!(matches!(CVRParser.parse(data.as_bytes()), Ok(_)));
+        assert!(CVRParser.parse(data.as_bytes()).is_ok());
     }
 }
