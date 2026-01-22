@@ -114,8 +114,8 @@ mod tests {
 
     #[test]
     fn primary_unique_winner_short_circuits() {
-        let mut primary = MockVotingRule::create_default();
-        let mut fallback = MockVotingRule::create_default();
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
 
         primary
             .expect_execute()
@@ -136,8 +136,8 @@ mod tests {
 
     #[test]
     fn primary_multiple_winners_triggers_fallback() {
-        let mut primary = MockVotingRule::create_default();
-        let mut fallback = MockVotingRule::create_default();
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
 
         primary
             .expect_execute()
@@ -164,8 +164,8 @@ mod tests {
 
     #[test]
     fn primary_error_is_propagated_and_fallback_not_called() {
-        let mut primary = MockVotingRule::create_default();
-        let mut fallback = MockVotingRule::create_default();
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
 
         primary
             .expect_execute()
@@ -186,8 +186,8 @@ mod tests {
 
     #[test]
     fn fallback_error_is_wrapped_correctly() {
-        let mut primary = MockVotingRule::create_default();
-        let mut fallback = MockVotingRule::create_default();
+        let mut primary = MockVotingRule::new();
+        let mut fallback = MockVotingRule::new();
 
         primary
             .expect_execute()
