@@ -17,7 +17,6 @@ pub struct Args {
     pub rule: RuleName,
 }
 
-#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub enum RuleName {
     /// Plurality rule.
@@ -62,7 +61,6 @@ impl FromStr for RuleName {
     }
 }
 
-#[non_exhaustive]
 #[derive(ValueEnum, Copy, Clone, Debug)]
 pub enum InputFormat {
     Cvr,

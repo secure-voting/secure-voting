@@ -40,7 +40,6 @@ fn get_profile_and_mappings<R: io::Read>(
 ) -> anyhow::Result<(Profile, HashMap<CandidateId, String>)> {
     match format {
         InputFormat::Cvr => Ok(CVRParser.parse(reader)?),
-        _ => Err(anyhow!("Unsupported input format")),
     }
 }
 
@@ -56,6 +55,5 @@ fn compute_result(rule_enum: &RuleName, input_data: &Profile) -> anyhow::Result<
         },
         RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
         RuleName::Borda => Ok(BordaRule::default().execute(input_data)?),
-        _ => Err(anyhow!("Unsupported rule")),
     }
 }
