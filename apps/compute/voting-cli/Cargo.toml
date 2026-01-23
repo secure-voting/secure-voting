@@ -9,8 +9,8 @@ keywords = [
   "cli",
   "election",
   "social-choice",
-  "terminal"
-  "voting",
+  "terminal",
+  "voting"
 ]
 license.workspace = true
 name = "voting-cli"
