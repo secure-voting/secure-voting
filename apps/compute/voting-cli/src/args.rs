@@ -55,6 +55,32 @@ pub enum RuleName {
     ///
     /// Candidates are chosen by the margin of winning in each head-to-head.
     CopelandIII,
+    /// Simpson's rule.
+    ///
+    /// Candidates are scored based on their worst defeat in head-to-head. Best winning margin is chosen.
+    Simpson,
+    /// Minmax rule.
+    /// Each candidate's score is the maximum margin of them against opponents.
+    /// The candidate(-s) with the minimum score are winners.
+    Minmax,
+    /// Hare's rule.
+    ///
+    /// Choose a candidate with a majority of votes if they exist.
+    /// Otherwise eliminate the candidate with the least amount of votes and continue.
+    Hare,
+    /// Nanson's rule.
+    ///
+    /// If there is a Borda winner, choose them. Otherwise eliminate candidates with below average Borda score.
+    Nanson,
+    /// Coombs' rule.
+    ///
+    /// If there is a candidate with a strict majority, choose them.
+    /// Otherwise eliminate the candidate with the biggest number of last-place votes.
+    Coombs,
+    /// Inverse Borda rule.
+    ///
+    /// Each round eliminate the candidate with the lowest Borda score and repeat until one candidate is left.
+    InverseBorda,
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug)]

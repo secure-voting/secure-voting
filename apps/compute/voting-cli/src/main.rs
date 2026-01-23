@@ -53,5 +53,11 @@ fn compute_result(rule_enum: RuleName, input_data: &Profile) -> anyhow::Result<R
         RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
         RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
         RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
+        RuleName::Simpson => Ok(SimpsonRule::default().execute(input_data)?),
+        RuleName::Minmax => Ok(MinmaxRule::default().execute(input_data)?),
+        RuleName::Hare => Ok(HareRule::default().execute(input_data)?),
+        RuleName::Nanson => Ok(NansonRule::default().execute(input_data)?),
+        RuleName::Coombs => Ok(CoombsRule::default().execute(input_data)?),
+        RuleName::InverseBorda => Ok(InverseBordaRule::default().execute(input_data)?),
     }
 }
