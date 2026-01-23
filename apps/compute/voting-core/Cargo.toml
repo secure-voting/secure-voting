@@ -14,7 +14,7 @@ keywords = [
 ]
 license.workspace = true
 name = "voting-core"
-repository = "https://github.com/schukark/secure-voting/apps/compute/voting-core"
+repository = "https://github.com/schukark/secure-voting.git"
 version = "0.1.0"
 
 [dependencies]

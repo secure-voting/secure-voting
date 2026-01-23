@@ -1,8 +1,21 @@
 [package]
-name = "voting-cli"
-version = "0.1.0"
-edition.workspace = true
+categories = [
+  "command-line-utilities",
+  "science"
+]
+description = "CLI voting tool"
+edition = "2024"
+keywords = [
+  "cli",
+  "election",
+  "social-choice",
+  "terminal"
+  "voting",
+]
 license.workspace = true
+name = "voting-cli"
+repository = "https://github.com/schukark/secure-voting.git"
+version = "0.1.0"
 
 [lints]
 workspace = true
