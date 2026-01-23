@@ -14,7 +14,7 @@ use crate::{
 ///
 /// The score of each candidate is equal to the
 /// difference in strict wins and strict losses
-/// in eacah head-to-head.
+/// in each head-to-head.
 ///
 /// Ties contribute 0.
 #[derive(Debug, Clone, Copy)]
