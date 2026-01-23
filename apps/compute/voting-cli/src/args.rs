@@ -1,6 +1,5 @@
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use anyhow::anyhow;
 use clap::{Parser, ValueEnum};
 
 #[derive(Parser, Debug)]
@@ -13,20 +12,24 @@ pub struct Args {
     #[arg(short = 't', long = "type", value_enum)]
     pub format: InputFormat,
     /// Voting rule name
-    #[arg(short, long)]
+    #[arg(short, long, value_enum)]
     pub rule: RuleName,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum RuleName {
     /// Plurality rule.
     ///
     /// Candidates are chosen by the total number of first-place votes for them.
     Plurality,
-    /// Approval rule.
+    /// Approval rule with q=2.
     ///
     /// Candidates are chosen by the total number of votes in the first q places for each ballot.
-    Approval(usize),
+    Approval2,
+    /// Approval rule with q=3.
+    ///
+    /// Candidates are chosen by the total number of votes in the first q places for each ballot.
+    Approval3,
     /// Inverse plurality rule.
     ///
     /// Candidates are chosen by the least number of last-place votes for them.
@@ -52,33 +55,6 @@ pub enum RuleName {
     ///
     /// Candidates are chosen by the margin of winning in each head-to-head.
     CopelandIII,
-}
-
-impl FromStr for RuleName {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let binding = s.to_lowercase();
-        let s = binding.as_str();
-
-        if let Some(postfix) = s.strip_prefix("approval") {
-            let x = postfix.parse().map_err(|_| {
-                anyhow!("Can't parse Q for approval, expected number, got: {postfix}")
-            })?;
-            return Ok(Self::Approval(x));
-        }
-
-        match s {
-            "plurality" => Ok(Self::Plurality),
-            "inverseplurality" => Ok(Self::InversePlurality),
-            "borda" => Ok(Self::Borda),
-            "black" => Ok(Self::Black),
-            "copelandi" => Ok(Self::CopelandI),
-            "copelandii" => Ok(Self::CopelandII),
-            "copelandiii" => Ok(Self::CopelandIII),
-            name => Err(anyhow!("Unknown rule name: {name}")),
-        }
-    }
 }
 
 #[derive(ValueEnum, Copy, Clone, Debug)]

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::io;
 
-use anyhow::anyhow;
 use clap::Parser;
 use voting_core::prelude::*;
 
@@ -44,20 +43,16 @@ fn get_profile_and_mappings<R: io::Read>(
 }
 
 fn compute_result(rule_enum: &RuleName, input_data: &Profile) -> anyhow::Result<RuleOutcome> {
+    use RuleName::*;
     match rule_enum {
-        RuleName::Plurality => Ok(PluralityRule::default().execute(input_data)?),
-        RuleName::Approval(q) => match q {
-            2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),
-            3 => Ok(ApprovalRule::<3>::default().execute(input_data)?),
-            _ => Err(anyhow!(
-                "Approval rule doesn't support q different from 2 or 3."
-            )),
-        },
-        RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
-        RuleName::Borda => Ok(BordaRule::default().execute(input_data)?),
-        RuleName::Black => Ok(BlackRule::default().execute(input_data)?),
-        RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
-        RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
-        RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
+        Plurality => Ok(PluralityRule::default().execute(input_data)?),
+        Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),
+        Approval3 => Ok(ApprovalRule::<3>::default().execute(input_data)?),
+        InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
+        Borda => Ok(BordaRule::default().execute(input_data)?),
+        Black => Ok(BlackRule::default().execute(input_data)?),
+        CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
+        CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
+        CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
     }
 }
