@@ -31,11 +31,27 @@ pub enum RuleName {
     ///
     /// Candidates are chosen by the least number of last-place votes for them.
     InversePlurality,
-    /// Borda rule.
+    /// Borda's rule.
     ///
     /// Candidates are scored per ballot, getting n points per first place and 0 for last.
     /// Winners are chosen by most total score.
     Borda,
+    /// Black's rule.
+    ///
+    /// If there is a Condorcet winner, choose them, otherwise the Borda's rule is used.
+    Black,
+    /// Copeland I rule.
+    ///
+    /// Candidates are scored by the number of strict head-to-head wins.
+    CopelandI,
+    /// Copeland II rule.
+    ///
+    /// Candidates are scored by the difference between the number of strict wins and strict losses.
+    CopelandII,
+    /// Copeland III rule.
+    ///
+    /// Candidates are chosen by the margin of winning in each head-to-head.
+    CopelandIII,
 }
 
 impl FromStr for RuleName {
@@ -56,6 +72,10 @@ impl FromStr for RuleName {
             "plurality" => Ok(Self::Plurality),
             "inverseplurality" => Ok(Self::InversePlurality),
             "borda" => Ok(Self::Borda),
+            "black" => Ok(Self::Black),
+            "copelandi" => Ok(Self::CopelandI),
+            "copelandii" => Ok(Self::CopelandII),
+            "copelandiii" => Ok(Self::CopelandIII),
             name => Err(anyhow!("Unknown rule name: {name}")),
         }
     }

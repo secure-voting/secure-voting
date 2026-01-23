@@ -55,5 +55,9 @@ fn compute_result(rule_enum: &RuleName, input_data: &Profile) -> anyhow::Result<
         },
         RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
         RuleName::Borda => Ok(BordaRule::default().execute(input_data)?),
+        RuleName::Black => Ok(BlackRule::default().execute(input_data)?),
+        RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
+        RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
+        RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
     }
 }
