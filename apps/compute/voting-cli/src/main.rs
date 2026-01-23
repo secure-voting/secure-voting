@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let file_contents = std::fs::read_to_string(args.file)?;
     let (profile, mapping) = get_profile_and_mappings(args.format, file_contents.as_bytes())?;
-    let result = compute_result(&args.rule, &profile)?;
+    let result = compute_result(args.rule, &profile)?;
 
     match result {
         RuleOutcome::UniqueWinner(candidate_id) => {
@@ -42,17 +42,16 @@ fn get_profile_and_mappings<R: io::Read>(
     }
 }
 
-fn compute_result(rule_enum: &RuleName, input_data: &Profile) -> anyhow::Result<RuleOutcome> {
-    use RuleName::*;
+fn compute_result(rule_enum: RuleName, input_data: &Profile) -> anyhow::Result<RuleOutcome> {
     match rule_enum {
-        Plurality => Ok(PluralityRule::default().execute(input_data)?),
-        Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),
-        Approval3 => Ok(ApprovalRule::<3>::default().execute(input_data)?),
-        InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
-        Borda => Ok(BordaRule::default().execute(input_data)?),
-        Black => Ok(BlackRule::default().execute(input_data)?),
-        CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
-        CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
-        CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
+        RuleName::Plurality => Ok(PluralityRule::default().execute(input_data)?),
+        RuleName::Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),
+        RuleName::Approval3 => Ok(ApprovalRule::<3>::default().execute(input_data)?),
+        RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
+        RuleName::Borda => Ok(BordaRule::default().execute(input_data)?),
+        RuleName::Black => Ok(BlackRule::default().execute(input_data)?),
+        RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
+        RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
+        RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
     }
 }
