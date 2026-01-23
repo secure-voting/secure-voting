@@ -98,7 +98,7 @@ tasks:
 
   deny-check:
     description: 'Check licenses and crate sources'
-    command: 'cargo deny check'
+    command: 'cargo deny --workspace --all-features check'
     inputs:
       - '@globs(policy)'
 
