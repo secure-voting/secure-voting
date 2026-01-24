@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-type AnyObj = Record<string, any>;
+type AnyObj = Record<string, unknown>;
 
 type Me = {
   id?: string;
@@ -74,10 +74,10 @@ type ResultResp = {
   election_id: string;
   version: number;
   method: string;
-  params?: any;
-  winners: any;
-  metrics?: any;
-  protocol?: any;
+  params?: unknown;
+  winners: unknown;
+  metrics?: unknown;
+  protocol?: unknown;
   published_at?: string | null;
 };
 
@@ -98,30 +98,48 @@ type InviteCreated = {
   created_at: string;
 };
 
+const STORAGE_TOKEN_KEY = "sv_token";
+const DEFAULT_TIMEOUT_MS = 15000;
+const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
+
 function nowRfc3339Plus(minutes: number) {
   const d = new Date(Date.now() + minutes * 60_000);
   return d.toISOString();
 }
 
-function safeJsonParse(text: string): any | null {
+function readStoredToken(): string | null {
+  const t = localStorage.getItem(STORAGE_TOKEN_KEY);
+  return t && t.trim() ? t.trim() : null;
+}
+
+function writeStoredToken(token: string) {
+  localStorage.setItem(STORAGE_TOKEN_KEY, token);
+}
+
+function clearStoredToken() {
+  localStorage.removeItem(STORAGE_TOKEN_KEY);
+}
+
+function safeJsonParse(text: string): unknown | null {
   const t = text.trim();
   if (!t) return null;
   try {
-    return JSON.parse(t);
+    return JSON.parse(t) as unknown;
   } catch {
     return null;
   }
 }
 
-function pickToken(obj: any): string | null {
-  if (!obj || typeof obj !== "object") return null;
+function extractToken(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const p = payload as any;
   const candidates = [
-    obj.access_token,
-    obj.token,
-    obj.accessToken,
-    obj.jwt,
-    obj.data?.access_token,
-    obj.data?.token,
+    p.access_token,
+    p.token,
+    p.accessToken,
+    p.jwt,
+    p.data?.access_token,
+    p.data?.token,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.trim()) return c.trim();
@@ -129,68 +147,90 @@ function pickToken(obj: any): string | null {
   return null;
 }
 
-function newIdemKey(): string {
-  const g = (globalThis as any);
+function formatApiError(payload: unknown, fallback: string): string {
+  if (!payload) return fallback;
+  if (typeof payload === "string" && payload.trim()) return payload.trim();
+
+  if (typeof payload === "object") {
+    const p = payload as any;
+    const direct =
+      p.message ||
+      p.error ||
+      p.code ||
+      p.detail ||
+      p.reason ||
+      p?.error?.message ||
+      p?.error?.code ||
+      p?.error?.error ||
+      p?.error?.detail;
+
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+    try {
+      return JSON.stringify(payload);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return fallback;
+}
+
+function newIdempotencyKey(): string {
+  const g = globalThis as any;
   const uuid =
     typeof g?.crypto?.randomUUID === "function"
       ? g.crypto.randomUUID()
       : `r${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-  // допустимые символы по validateIdempotencyKey: буквы/цифры/-_:.@
   return `idem-${uuid}`;
-}
-
-function parseApiError(data: any, fallback: string): string {
-  if (!data) return fallback;
-  if (typeof data === "string") return data;
-
-  const direct =
-    data.message ||
-    data.error ||
-    data.code ||
-    data.detail ||
-    data.reason ||
-    data?.error?.message ||
-    data?.error?.code ||
-    data?.error?.error ||
-    data?.error?.detail;
-
-  if (typeof direct === "string" && direct.trim()) return direct.trim();
-
-  try {
-    return JSON.stringify(data);
-  } catch {
-    return fallback;
-  }
 }
 
 async function apiRequest<T>(
   path: string,
-  opts: RequestInit,
+  init: RequestInit & { timeoutMs?: number },
   token: string | null
 ): Promise<T> {
-  const headers = new Headers(opts.headers || {});
+  const headers = new Headers(init.headers || {});
   headers.set("Accept", "application/json");
-  if (opts.body && !headers.has("Content-Type")) {
+
+  const hasBody = init.body !== undefined && init.body !== null;
+  if (hasBody && !headers.has("Content-Type") && typeof init.body === "string") {
     headers.set("Content-Type", "application/json");
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(path, { ...opts, headers });
-  const text = await res.text();
-  const data = safeJsonParse(text);
+  const controller = new AbortController();
+  const timeoutMs = typeof init.timeoutMs === "number" ? init.timeoutMs : DEFAULT_TIMEOUT_MS;
+  const timer = window.setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
 
-  if (!res.ok) {
-    const msg = parseApiError(
-      data,
-      `HTTP ${res.status} ${res.statusText || "error"}`
-    );
-    throw new Error(msg);
+  if (init.signal) {
+    if (init.signal.aborted) controller.abort();
+    else init.signal.addEventListener("abort", () => controller.abort(), { once: true });
   }
 
-  return (data ?? ({} as any)) as T;
+  try {
+    const res = await fetch(path, { ...init, headers, signal: controller.signal });
+
+    if (res.status === 204) return {} as T;
+
+    const text = await res.text();
+    const data = safeJsonParse(text);
+
+    if (!res.ok) {
+      const msg = formatApiError(data, `HTTP ${res.status} ${res.statusText || "error"}`);
+      const err = new Error(msg) as Error & { status?: number; payload?: unknown };
+      err.status = res.status;
+      err.payload = data;
+      throw err;
+    }
+
+    return (data ?? ({} as any)) as T;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
-function useHashRoute() {
+function useHashRouter() {
   const [hash, setHash] = useState(() => window.location.hash || "#/");
 
   useEffect(() => {
@@ -206,28 +246,19 @@ function useHashRoute() {
     if (parts.length === 0) return { name: "home" as const };
 
     if (parts[0] === "login") return { name: "login" as const };
-    if (parts[0] === "elections" && parts.length === 1)
-      return { name: "elections" as const };
-    if (parts[0] === "elections" && parts.length === 2)
-      return { name: "election" as const, id: parts[1] };
-    if (parts[0] === "elections" && parts.length === 3 && parts[2] === "vote")
-      return { name: "vote" as const, id: parts[1] };
-    if (
-      parts[0] === "elections" &&
-      parts.length === 3 &&
-      parts[2] === "results"
-    )
-      return { name: "results" as const, id: parts[1] };
-    if (parts[0] === "admin" && parts[1] === "create")
-      return { name: "admin_create" as const };
+    if (parts[0] === "elections" && parts.length === 1) return { name: "elections" as const };
+    if (parts[0] === "elections" && parts.length === 2) return { name: "election" as const, id: parts[1] };
+    if (parts[0] === "elections" && parts.length === 3 && parts[2] === "vote") return { name: "vote" as const, id: parts[1] };
+    if (parts[0] === "elections" && parts.length === 3 && parts[2] === "results") return { name: "results" as const, id: parts[1] };
+    if (parts[0] === "admin" && parts[1] === "create") return { name: "admin_create" as const };
 
     return { name: "not_found" as const, raw };
   }, [hash]);
 
-  const go = (to: string) => {
+  const go = useCallback((to: string) => {
     if (!to.startsWith("#")) window.location.hash = `#${to}`;
     else window.location.hash = to;
-  };
+  }, []);
 
   return { route, go };
 }
@@ -248,6 +279,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #e5e7eb",
     borderRadius: 12,
     marginBottom: 16,
+    background: "white",
   },
   title: { margin: 0, fontSize: 20 },
   btn: {
@@ -279,6 +311,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid #d1d5db",
     width: "100%",
     boxSizing: "border-box",
+    background: "white",
   },
   card: {
     border: "1px solid #e5e7eb",
@@ -338,36 +371,49 @@ function ErrorBanner({ error }: { error: string | null }) {
   );
 }
 
-function JsonBlock({ value }: { value: any }) {
+function JsonBlock({ value }: { value: unknown }) {
   return <pre style={styles.pre}>{JSON.stringify(value, null, 2)}</pre>;
 }
 
 export default function App() {
-  const { route, go } = useHashRoute();
+  const { route, go } = useHashRouter();
 
-  const [token, setToken] = useState<string | null>(() => {
-    const t = localStorage.getItem("sv_token");
-    return t && t.trim() ? t.trim() : null;
-  });
-
+  const [token, setToken] = useState<string | null>(() => readStoredToken());
   const [me, setMe] = useState<Me | null>(null);
-  const [bootError, setBootError] = useState<string | null>(null);
+
   const [bootLoading, setBootLoading] = useState(false);
+  const [bootError, setBootError] = useState<string | null>(null);
+
+  const authed = Boolean(token && me?.email);
+
+  const clearAuth = useCallback(() => {
+    clearStoredToken();
+    setToken(null);
+    setMe(null);
+  }, []);
+
+  const bootAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    bootAbortRef.current?.abort();
+    bootAbortRef.current = null;
 
-    async function boot() {
-      if (!token) {
-        setMe(null);
-        return;
-      }
+    if (!token) {
+      setMe(null);
+      setBootError(null);
+      setBootLoading(false);
+      return;
+    }
+
+    const ac = new AbortController();
+    bootAbortRef.current = ac;
+
+    const run = async () => {
       setBootLoading(true);
       setBootError(null);
-      try {
-        const resp = await apiRequest<any>("/api/v1/auth/me", { method: "GET" }, token);
-        if (cancelled) return;
 
+      try {
+        const resp = await apiRequest<any>("/api/v1/auth/me", { method: "GET", signal: ac.signal }, token);
         const obj = resp?.user ?? resp?.data?.user ?? resp?.data ?? resp ?? {};
         const nextMe: Me = {
           id: obj.id ?? obj.user_id ?? obj.uuid,
@@ -376,53 +422,50 @@ export default function App() {
         };
         setMe(nextMe);
       } catch (e: any) {
-        if (cancelled) return;
-        setBootError(e?.message || "auth/me failed");
-        setMe(null);
-        localStorage.removeItem("sv_token");
-        setToken(null);
+        if (e?.name === "AbortError") return;
+        setBootError(e?.message || "Не удалось проверить сессию");
+        clearAuth();
       } finally {
-        if (!cancelled) setBootLoading(false);
+        setBootLoading(false);
       }
-    }
-
-    boot();
-    return () => {
-      cancelled = true;
     };
-  }, [token]);
+
+    run();
+
+    return () => {
+      ac.abort();
+      bootAbortRef.current = null;
+    };
+  }, [token, clearAuth]);
 
   useEffect(() => {
-    if (!window.location.hash || window.location.hash === "#/") {
-      if (token) go("#/elections");
-      else go("#/login");
+    const h = window.location.hash || "#/";
+    if (h === "#/" || h === "#") {
+      go(token ? "#/elections" : "#/login");
     }
   }, [token, go]);
 
-  const authed = !!token && !!me?.email;
-
-  const onLogout = async () => {
+  const onLogout = useCallback(async () => {
     try {
       if (token) {
         await apiRequest("/api/v1/auth/logout", { method: "POST", body: "{}" }, token);
       }
     } catch {
+    } finally {
+      clearAuth();
+      go("#/login");
     }
-    localStorage.removeItem("sv_token");
-    setToken(null);
-    setMe(null);
-    go("#/login");
-  };
+  }, [token, clearAuth, go]);
 
   const Topbar = (
     <div style={styles.topbar}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <h1 style={styles.title}>secure voting</h1>
-        <span style={styles.muted}>demo UI</span>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {bootLoading ? <span style={styles.muted}>checking session…</span> : null}
+        {bootLoading ? <span style={styles.muted}>Проверка сессии</span> : null}
+
         {authed ? (
           <>
             <span style={styles.muted}>
@@ -453,11 +496,12 @@ export default function App() {
     <div style={styles.page}>
       {Topbar}
       <ErrorBanner error={bootError} />
+
       {!authed && route.name !== "login" ? (
         <div style={styles.card}>
-          <p style={{ margin: 0 }}>
-            Ты не авторизован. Перейди в <a href="#/login">#/login</a>.
-          </p>
+          <div style={{ margin: 0 }}>
+            Требуется авторизация. Перейдите на <a href="#/login">#/login</a>.
+          </div>
         </div>
       ) : null}
 
@@ -465,32 +509,18 @@ export default function App() {
         <LoginScreen
           token={token}
           onToken={(t) => {
-            localStorage.setItem("sv_token", t);
+            writeStoredToken(t);
             setToken(t);
             go("#/elections");
           }}
         />
       ) : null}
 
-      {authed && route.name === "elections" ? (
-        <ElectionsList token={token} me={me} go={go} />
-      ) : null}
-
-      {authed && route.name === "election" ? (
-        <ElectionView token={token} me={me} id={route.id} go={go} />
-      ) : null}
-
-      {authed && route.name === "vote" ? (
-        <VoteView token={token} me={me} id={route.id} go={go} />
-      ) : null}
-
-      {authed && route.name === "results" ? (
-        <ResultsView token={token} me={me} id={route.id} go={go} />
-      ) : null}
-
-      {authed && route.name === "admin_create" ? (
-        <AdminCreateElection token={token} me={me} go={go} />
-      ) : null}
+      {authed && route.name === "elections" ? <ElectionsList token={token} me={me} go={go} onUnauthorized={clearAuth} /> : null}
+      {authed && route.name === "election" ? <ElectionView token={token} me={me} id={route.id} go={go} onUnauthorized={clearAuth} /> : null}
+      {authed && route.name === "vote" ? <VoteView token={token} me={me} id={route.id} go={go} onUnauthorized={clearAuth} /> : null}
+      {authed && route.name === "results" ? <ResultsView token={token} id={route.id} go={go} onUnauthorized={clearAuth} /> : null}
+      {authed && route.name === "admin_create" ? <AdminCreateElection token={token} me={me} go={go} onUnauthorized={clearAuth} /> : null}
 
       {route.name === "not_found" ? (
         <div style={styles.card}>
@@ -507,13 +537,7 @@ export default function App() {
   );
 }
 
-function LoginScreen({
-  token,
-  onToken,
-}: {
-  token: string | null;
-  onToken: (t: string) => void;
-}) {
+function LoginScreen({ token, onToken }: { token: string | null; onToken: (t: string) => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -522,7 +546,7 @@ function LoginScreen({
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [rawResp, setRawResp] = useState<any>(null);
+  const [rawResp, setRawResp] = useState<unknown>(null);
 
   useEffect(() => {
     setErr(null);
@@ -533,43 +557,36 @@ function LoginScreen({
     setLoading(true);
     setErr(null);
     setRawResp(null);
+
     try {
-      if (!email.trim() || !password) throw new Error("email/password required");
+      const e = email.trim();
+      if (!e || !password) throw new Error("Введите email и пароль");
 
       if (mode === "register") {
         const resp = await apiRequest<any>(
           "/api/v1/auth/register",
-          {
-            method: "POST",
-            body: JSON.stringify({ email: email.trim(), password, role }),
-          },
+          { method: "POST", body: JSON.stringify({ email: e, password, role }) },
           null
         );
-        setRawResp(resp);
+        if (IS_DEV) setRawResp(resp);
 
-        const t = pickToken(resp);
-        if (t) onToken(t);
+        const t = extractToken(resp);
+        if (!t) throw new Error("Регистрация выполнена, но токен не найден в ответе");
+        onToken(t);
       } else {
         const resp = await apiRequest<any>(
           "/api/v1/auth/login",
-          {
-            method: "POST",
-            body: JSON.stringify({ email: email.trim(), password }),
-          },
+          { method: "POST", body: JSON.stringify({ email: e, password }) },
           null
         );
-        setRawResp(resp);
+        if (IS_DEV) setRawResp(resp);
 
-        const t = pickToken(resp);
-        if (!t) {
-          throw new Error(
-            "login ok, но не нашёл токен в ответе (ожидал access_token/token/accessToken). Проверь формат ответа backend."
-          );
-        }
+        const t = extractToken(resp);
+        if (!t) throw new Error("Вход выполнен, но токен не найден в ответе");
         onToken(t);
       }
     } catch (e: any) {
-      setErr(e?.message || "auth failed");
+      setErr(e?.message || "Ошибка авторизации");
     } finally {
       setLoading(false);
     }
@@ -581,16 +598,10 @@ function LoginScreen({
         <h2 style={{ marginTop: 0 }}>{mode === "login" ? "Login" : "Register"}</h2>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button
-            style={mode === "login" ? styles.btnPrimary : styles.btn}
-            onClick={() => setMode("login")}
-          >
+          <button style={mode === "login" ? styles.btnPrimary : styles.btn} onClick={() => setMode("login")}>
             Login
           </button>
-          <button
-            style={mode === "register" ? styles.btnPrimary : styles.btn}
-            onClick={() => setMode("register")}
-          >
+          <button style={mode === "register" ? styles.btnPrimary : styles.btn} onClick={() => setMode("register")}>
             Register
           </button>
         </div>
@@ -598,12 +609,7 @@ function LoginScreen({
         <ErrorBanner error={err} />
 
         <label style={{ display: "block", marginBottom: 6 }}>Email</label>
-        <input
-          style={styles.input}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="user@example.com"
-        />
+        <input style={styles.input} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
 
         <div style={{ height: 10 }} />
 
@@ -613,80 +619,95 @@ function LoginScreen({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           type="password"
-          placeholder="password"
+          autoComplete={mode === "login" ? "current-password" : "new-password"}
         />
 
         {mode === "register" ? (
           <>
             <div style={{ height: 10 }} />
             <label style={{ display: "block", marginBottom: 6 }}>Role</label>
-            <select
-              style={styles.input}
-              value={role}
-              onChange={(e) => setRole(e.target.value as any)}
-            >
+            <select style={styles.input} value={role} onChange={(e) => setRole(e.target.value as any)}>
               <option value="voter">voter</option>
               <option value="researcher">researcher</option>
               <option value="admin">admin</option>
             </select>
-            <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
-              Для демо удобно создать отдельного admin.
-            </div>
           </>
         ) : null}
 
         <div style={{ height: 14 }} />
 
         <button style={styles.btnPrimary} onClick={submit} disabled={loading}>
-          {loading ? "…" : mode === "login" ? "Login" : "Register"}
+          {loading ? "Loading" : mode === "login" ? "Login" : "Register"}
         </button>
 
         {token ? (
-          <>
-            <div style={{ height: 12 }} />
-            <div style={styles.muted}>
-              Сейчас есть токен в localStorage. Если что-то сломалось — сделайте Logout.
-            </div>
-          </>
+          <div style={{ marginTop: 12, ...styles.muted }}>
+            В хранилище уже есть токен. Если вход не проходит, выполните Logout.
+          </div>
         ) : null}
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Debug: raw auth response</h3>
-        {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>—</div>}
-        <div style={{ marginTop: 10, ...styles.muted, fontSize: 12 }}>
-          Если login/register не отдаёт токен, покажите сюда реальный JSON, и я подстрою парсер.
+      {IS_DEV ? (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Auth response</h3>
+          {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>Empty</div>}
         </div>
-      </div>
+      ) : (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Info</h3>
+          <div style={styles.muted}>После авторизации можно перейти к списку выборов.</div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ElectionsList({ token, me, go }: { token: string | null; me: Me | null; go: (to: string) => void }) {
+function ElectionsList({
+  token,
+  me,
+  go,
+  onUnauthorized,
+}: {
+  token: string | null;
+  me: Me | null;
+  go: (to: string) => void;
+  onUnauthorized: () => void;
+}) {
   const [items, setItems] = useState<ElectionSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const reload = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     setLoading(true);
     setErr(null);
+
     try {
       const resp = await apiRequest<{ items: ElectionSummary[] }>(
         "/api/v1/elections",
-        { method: "GET" },
+        { method: "GET", signal: ac.signal },
         token
       );
-      setItems(resp.items || []);
+      setItems(Array.isArray(resp.items) ? resp.items : []);
     } catch (e: any) {
-      setErr(e?.message || "list elections failed");
+      if (e?.name === "AbortError") return;
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось загрузить список выборов");
+      setItems([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, onUnauthorized]);
 
   useEffect(() => {
     reload();
-  }, []);
+    return () => abortRef.current?.abort();
+  }, [reload]);
 
   return (
     <div style={styles.card}>
@@ -706,7 +727,7 @@ function ElectionsList({ token, me, go }: { token: string | null; me: Me | null;
 
       <ErrorBanner error={err} />
 
-      {loading ? <div style={{ marginTop: 10, ...styles.muted }}>Loading…</div> : null}
+      {loading ? <div style={{ marginTop: 10, ...styles.muted }}>Loading</div> : null}
       {!loading && items.length === 0 ? <div style={{ marginTop: 10, ...styles.muted }}>No elections</div> : null}
 
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
@@ -747,7 +768,19 @@ function ElectionsList({ token, me, go }: { token: string | null; me: Me | null;
   );
 }
 
-function ElectionView({ token, me, id, go }: { token: string | null; me: Me | null; id: string; go: (to: string) => void }) {
+function ElectionView({
+  token,
+  me,
+  id,
+  go,
+  onUnauthorized,
+}: {
+  token: string | null;
+  me: Me | null;
+  id: string;
+  go: (to: string) => void;
+  onUnauthorized: () => void;
+}) {
   const [item, setItem] = useState<ElectionDetail | null>(null);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -757,23 +790,29 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
   const [err, setErr] = useState<string | null>(null);
 
   const isAdmin = me?.role === "admin";
+  const abortRef = useRef<AbortController | null>(null);
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     setLoading(true);
     setErr(null);
     setInviteCode(null);
+
     try {
-      const resp = await apiRequest<ElectionDetail>(`/api/v1/elections/${id}`, { method: "GET" }, token);
+      const resp = await apiRequest<ElectionDetail>(`/api/v1/elections/${id}`, { method: "GET", signal: ac.signal }, token);
       setItem(resp);
 
       if (isAdmin) {
         try {
           const inv = await apiRequest<{ items: Invite[] }>(
             `/api/v1/elections/${id}/invites`,
-            { method: "GET" },
+            { method: "GET", signal: ac.signal },
             token
           );
-          setInvites(inv.items || []);
+          setInvites(Array.isArray(inv.items) ? inv.items : []);
         } catch {
           setInvites([]);
         }
@@ -781,46 +820,59 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
         setInvites([]);
       }
     } catch (e: any) {
-      setErr(e?.message || "get election failed");
+      if (e?.name === "AbortError") return;
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось загрузить выборы");
       setItem(null);
       setInvites([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, isAdmin, token, onUnauthorized]);
 
   useEffect(() => {
     reload();
-  }, [id]);
+    return () => abortRef.current?.abort();
+  }, [reload]);
 
   const doAction = async (action: string) => {
     setLoading(true);
     setErr(null);
+
     try {
       await apiRequest(`/api/v1/elections/${id}/actions/${action}`, { method: "POST", body: "{}" }, token);
       await reload();
     } catch (e: any) {
-      setErr(e?.message || "action failed");
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Операция не выполнена");
     } finally {
       setLoading(false);
     }
   };
 
   const createInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) {
+      setErr("Введите email");
+      return;
+    }
+
     setLoading(true);
     setErr(null);
     setInviteCode(null);
+
     try {
       const resp = await apiRequest<InviteCreated>(
         `/api/v1/elections/${id}/invites`,
-        { method: "POST", body: JSON.stringify({ email: inviteEmail.trim() }) },
+        { method: "POST", body: JSON.stringify({ email }) },
         token
       );
       setInviteCode(resp.invite_code || null);
       setInviteEmail("");
       await reload();
     } catch (e: any) {
-      setErr(e?.message || "create invite failed");
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось создать приглашение");
     } finally {
       setLoading(false);
     }
@@ -848,7 +900,7 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
         </div>
 
         <ErrorBanner error={err} />
-        {loading ? <div style={styles.muted}>Loading…</div> : null}
+        {loading ? <div style={styles.muted}>Loading</div> : null}
 
         {item ? (
           <>
@@ -906,7 +958,7 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
                     resume
                   </button>
                   <button style={styles.btnDanger} onClick={() => doAction("close")} disabled={loading}>
-                    close (triggers tally)
+                    close
                   </button>
                   <button style={styles.btnPrimary} onClick={() => doAction("publish")} disabled={loading}>
                     publish
@@ -923,7 +975,7 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
                         style={styles.input}
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="email to invite"
+                        placeholder="email"
                       />
                       <button style={styles.btnPrimary} onClick={createInvite} disabled={loading}>
                         Create invite
@@ -932,10 +984,8 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
 
                     {inviteCode ? (
                       <div style={{ marginTop: 10, ...styles.card, borderColor: "#bbf7d0", background: "#f0fdf4" }}>
-                        <div style={{ fontWeight: 700 }}>Invite code (один раз показываем):</div>
-                        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-                          {inviteCode}
-                        </div>
+                        <div style={{ fontWeight: 700 }}>Invite code</div>
+                        <div style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{inviteCode}</div>
                       </div>
                     ) : null}
 
@@ -950,7 +1000,7 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
                             <Badge text={it.status} />
                           </div>
                           <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
-                            created_at: {it.created_at}
+                            <div>created_at: {it.created_at}</div>
                             {it.sent_at ? <div>sent_at: {it.sent_at}</div> : null}
                             {it.accepted_at ? <div>accepted_at: {it.accepted_at}</div> : null}
                           </div>
@@ -966,15 +1016,28 @@ function ElectionView({ token, me, id, go }: { token: string | null; me: Me | nu
         ) : null}
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Raw election JSON</h3>
-        {item ? <JsonBlock value={item} /> : <div style={styles.muted}>—</div>}
-      </div>
+      {IS_DEV ? (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Election JSON</h3>
+          {item ? <JsonBlock value={item} /> : <div style={styles.muted}>Empty</div>}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; id: string; go: (to: string) => void }) {
+function VoteView({
+  token,
+  id,
+  go,
+  onUnauthorized,
+}: {
+  token: string | null;
+  me: Me | null;
+  id: string;
+  go: (to: string) => void;
+  onUnauthorized: () => void;
+}) {
   const [meta, setMeta] = useState<BallotMeta | null>(null);
   const [my, setMy] = useState<MyBallotResp | null>(null);
 
@@ -982,50 +1045,62 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
   const [ranking, setRanking] = useState<string[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
 
-  const [idemKey, setIdemKey] = useState<string>(() => newIdemKey());
+  const [idemKey, setIdemKey] = useState<string>(() => newIdempotencyKey());
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [submitResp, setSubmitResp] = useState<any>(null);
+  const [submitResp, setSubmitResp] = useState<unknown>(null);
 
-  const reload = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     setLoading(true);
     setErr(null);
     setSubmitResp(null);
+
     try {
-      const m = await apiRequest<BallotMeta>(`/api/v1/elections/${id}/ballot`, { method: "GET" }, token);
+      const m = await apiRequest<BallotMeta>(`/api/v1/elections/${id}/ballot`, { method: "GET", signal: ac.signal }, token);
       setMeta(m);
 
-      const mb = await apiRequest<MyBallotResp>(
-        `/api/v1/elections/${id}/ballots/me`,
-        { method: "GET" },
-        token
-      );
+      const mb = await apiRequest<MyBallotResp>(`/api/v1/elections/${id}/ballots/me`, { method: "GET", signal: ac.signal }, token);
       setMy(mb);
-
-      if (m.ballot_format === "score" && m.score_min != null) {
-        const next: Record<string, number> = {};
-        for (const c of m.candidates) {
-          next[c.id] = m.score_min;
-        }
-        setScores(next);
-      }
     } catch (e: any) {
-      setErr(e?.message || "load ballot meta failed");
+      if (e?.name === "AbortError") return;
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось загрузить бюллетень");
       setMeta(null);
       setMy(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, token, onUnauthorized]);
 
   useEffect(() => {
     reload();
-  }, [id]);
+    return () => abortRef.current?.abort();
+  }, [reload]);
+
+  useEffect(() => {
+    if (!meta) return;
+    if (meta.ballot_format !== "score") return;
+    if (meta.score_min == null) return;
+
+    setScores((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const next: Record<string, number> = {};
+      for (const c of meta.candidates) next[c.id] = meta.score_min as number;
+      return next;
+    });
+  }, [meta]);
 
   const toggleApproval = (cid: string) => {
     if (!meta) return;
     const max = meta.approval_max_choices ?? null;
+
     setApprovalSet((prev) => {
       const has = prev.includes(cid);
       if (has) return prev.filter((x) => x !== cid);
@@ -1037,6 +1112,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
   const toggleRank = (cid: string) => {
     if (!meta) return;
     const topK = meta.ranking_top_k ?? null;
+
     setRanking((prev) => {
       const has = prev.includes(cid);
       if (has) return prev.filter((x) => x !== cid);
@@ -1049,33 +1125,87 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
     setScores((prev) => ({ ...prev, [cid]: v }));
   };
 
+  const validateBeforeSubmit = (): string | null => {
+    if (!meta) return "Нет метаданных бюллетеня";
+
+    if (meta.ballot_format === "approval") {
+      if (approvalSet.length === 0) return "Выберите хотя бы одного кандидата";
+      const max = meta.approval_max_choices ?? null;
+      if (max != null && max > 0 && approvalSet.length > max) return "Превышен лимит выбора";
+      return null;
+    }
+
+    if (meta.ballot_format === "ranking") {
+      if (ranking.length === 0) return "Сформируйте ранжирование";
+      const topK = meta.ranking_top_k ?? null;
+      if (topK != null && topK > 0 && ranking.length > topK) return "Превышен topK";
+      const uniq = new Set(ranking);
+      if (uniq.size !== ranking.length) return "В ранжировании есть повторы";
+      return null;
+    }
+
+    if (meta.ballot_format === "score") {
+      const min = meta.score_min;
+      const max = meta.score_max;
+      const step = meta.score_step;
+
+      if (min == null || max == null || step == null || step <= 0) return "Некорректные параметры оценки";
+      for (const c of meta.candidates) {
+        const v = scores[c.id];
+        if (v === undefined || v === null) {
+          if (meta.score_allow_skip) continue;
+          return "Заполните все оценки";
+        }
+        if (!Number.isFinite(v)) return "Некорректное значение оценки";
+        if (v < min || v > max) return "Оценка вне диапазона";
+        if (((v - min) % step) !== 0) return "Оценка не соответствует шагу";
+      }
+      return null;
+    }
+
+    return "Неизвестный формат бюллетеня";
+  };
+
   const submit = async () => {
+    const v = validateBeforeSubmit();
+    if (v) {
+      setErr(v);
+      return;
+    }
     if (!meta) return;
+
     setLoading(true);
     setErr(null);
     setSubmitResp(null);
 
     try {
       const body: AnyObj = {};
+
       if (meta.ballot_format === "approval") body.approval_set = approvalSet;
       if (meta.ballot_format === "ranking") body.ranking = ranking;
-      if (meta.ballot_format === "score") body.scores = scores;
+      if (meta.ballot_format === "score") {
+        const out: Record<string, number> = {};
+        for (const c of meta.candidates) {
+          const val = scores[c.id];
+          if (val === undefined || val === null) continue;
+          out[c.id] = val;
+        }
+        body.scores = out;
+      }
 
       const resp = await apiRequest<any>(
         `/api/v1/elections/${id}/ballots/submit`,
-        {
-          method: "POST",
-          headers: { "Idempotency-Key": idemKey },
-          body: JSON.stringify(body),
-        },
+        { method: "POST", headers: { "Idempotency-Key": idemKey }, body: JSON.stringify(body) },
         token
       );
 
-      setSubmitResp(resp);
-      setIdemKey(newIdemKey());
+      if (IS_DEV) setSubmitResp(resp);
+
+      setIdemKey(newIdempotencyKey());
       await reload();
     } catch (e: any) {
-      setErr(e?.message || "submit failed");
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось отправить бюллетень");
     } finally {
       setLoading(false);
     }
@@ -1100,8 +1230,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
         </div>
 
         <ErrorBanner error={err} />
-
-        {loading ? <div style={styles.muted}>Loading…</div> : null}
+        {loading ? <div style={styles.muted}>Loading</div> : null}
 
         {my ? (
           <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -1116,18 +1245,10 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Badge text={`format: ${meta.ballot_format}`} />
               <Badge text={`rule: ${meta.tally_rule}`} />
-              {meta.ballot_format === "approval" && meta.approval_max_choices != null ? (
-                <Badge text={`max choices: ${meta.approval_max_choices}`} />
-              ) : null}
-              {meta.ballot_format === "ranking" && meta.ranking_top_k != null ? (
-                <Badge text={`topK: ${meta.ranking_top_k}`} />
-              ) : null}
+              {meta.ballot_format === "approval" && meta.approval_max_choices != null ? <Badge text={`max: ${meta.approval_max_choices}`} /> : null}
+              {meta.ballot_format === "ranking" && meta.ranking_top_k != null ? <Badge text={`topK: ${meta.ranking_top_k}`} /> : null}
               {meta.ballot_format === "score" ? (
-                <Badge
-                  text={`score: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"} step ${
-                    meta.score_step ?? "?"
-                  } allow_skip=${String(meta.score_allow_skip)}`}
-                />
+                <Badge text={`score: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"} step ${meta.score_step ?? "?"} skip ${String(meta.score_allow_skip)}`} />
               ) : null}
             </div>
 
@@ -1136,9 +1257,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
             {meta.ballot_format === "approval" ? (
               <>
                 <h3 style={{ marginTop: 0 }}>Approval</h3>
-                <div style={styles.muted}>
-                  Выбери кандидатов. Лимит: {meta.approval_max_choices ?? "?"}
-                </div>
+                <div style={styles.muted}>Выберите кандидатов</div>
                 <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
                   {meta.candidates.map((c) => {
                     const checked = approvalSet.includes(c.id);
@@ -1156,11 +1275,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
                           userSelect: "none",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleApproval(c.id)}
-                        />
+                        <input type="checkbox" checked={checked} onChange={() => toggleApproval(c.id)} />
                         <div style={{ flex: 1 }}>
                           <b>{c.name}</b>
                           <div style={styles.muted}>{c.id}</div>
@@ -1175,23 +1290,19 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
             {meta.ballot_format === "ranking" ? (
               <>
                 <h3 style={{ marginTop: 0 }}>Ranking</h3>
-                <div style={styles.muted}>
-                  Кликаешь кандидата — добавляется в конец ранжирования. Повторный клик — удаляет.
-                  TopK: {meta.ranking_top_k ?? "?"}
-                </div>
+                <div style={styles.muted}>Нажмите кандидата, чтобы добавить или удалить</div>
 
                 <div style={{ marginTop: 10, ...styles.card, background: "#f9fafb" }}>
-                  <div style={{ fontWeight: 700 }}>Текущее ранжирование:</div>
+                  <div style={{ fontWeight: 700 }}>Текущее ранжирование</div>
                   {ranking.length === 0 ? (
-                    <div style={styles.muted}>—</div>
+                    <div style={styles.muted}>Empty</div>
                   ) : (
                     <ol style={{ margin: "6px 0 0 18px" }}>
                       {ranking.map((cid) => {
                         const c = meta.candidates.find((x) => x.id === cid);
                         return (
                           <li key={cid}>
-                            {c ? `${c.name}` : cid}{" "}
-                            <span style={{ ...styles.muted, fontSize: 12 }}>({cid})</span>
+                            {c ? c.name : cid} <span style={{ ...styles.muted, fontSize: 12 }}>{cid}</span>
                           </li>
                         );
                       })}
@@ -1231,9 +1342,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
             {meta.ballot_format === "score" ? (
               <>
                 <h3 style={{ marginTop: 0 }}>Score</h3>
-                <div style={styles.muted}>
-                  Выставь оценки. Allow-skip: {String(meta.score_allow_skip)}.
-                </div>
+                <div style={styles.muted}>Заполните оценки</div>
 
                 <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                   {meta.candidates.map((c) => {
@@ -1242,15 +1351,15 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
                     const max = meta.score_max ?? 10;
                     const step = meta.score_step ?? 1;
 
-                    const isMissing = !meta.score_allow_skip && (v === undefined || v === null);
+                    const missing = !meta.score_allow_skip && (v === undefined || v === null);
                     return (
                       <div
                         key={c.id}
                         style={{
                           ...styles.card,
                           padding: 12,
-                          borderColor: isMissing ? "#fecaca" : "#e5e7eb",
-                          background: isMissing ? "#fff1f2" : "white",
+                          borderColor: missing ? "#fecaca" : "#e5e7eb",
+                          background: missing ? "#fff1f2" : "white",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
@@ -1258,6 +1367,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
                             <b>{c.name}</b>
                             <div style={styles.muted}>{c.id}</div>
                           </div>
+
                           <div style={{ width: 220 }}>
                             <input
                               style={styles.input}
@@ -1281,7 +1391,6 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
                                 const num = Number(raw);
                                 if (Number.isFinite(num)) setScore(c.id, num);
                               }}
-                              placeholder={meta.score_allow_skip ? "skip allowed" : "required"}
                             />
                           </div>
                         </div>
@@ -1296,19 +1405,19 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
 
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <b>Idempotency-Key:</b>
+                <b>Idempotency-Key</b>
                 <span style={{ fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{idemKey}</span>
-                <button style={styles.btn} onClick={() => setIdemKey(newIdemKey())} disabled={loading}>
-                  regen
+                <button style={styles.btn} onClick={() => setIdemKey(newIdempotencyKey())} disabled={loading}>
+                  Regen
                 </button>
               </div>
 
               <button style={styles.btnPrimary} onClick={submit} disabled={loading}>
-                {loading ? "Submitting…" : "Submit ballot"}
+                {loading ? "Submitting" : "Submit ballot"}
               </button>
             </div>
 
-            {submitResp ? (
+            {IS_DEV && submitResp ? (
               <>
                 <hr style={styles.hr} />
                 <h3 style={{ marginTop: 0 }}>Submit response</h3>
@@ -1319,45 +1428,67 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
         ) : null}
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Debug meta/my</h3>
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <div style={styles.muted}>Ballot meta</div>
-            {meta ? <JsonBlock value={meta} /> : <div style={styles.muted}>—</div>}
-          </div>
-          <div>
-            <div style={styles.muted}>My ballot</div>
-            {my ? <JsonBlock value={my} /> : <div style={styles.muted}>—</div>}
+      {IS_DEV ? (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Debug</h3>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div>
+              <div style={styles.muted}>Ballot meta</div>
+              {meta ? <JsonBlock value={meta} /> : <div style={styles.muted}>Empty</div>}
+            </div>
+            <div>
+              <div style={styles.muted}>My ballot</div>
+              {my ? <JsonBlock value={my} /> : <div style={styles.muted}>Empty</div>}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
 
-function ResultsView({ token, id, go }: { token: string | null; me: Me | null; id: string; go: (to: string) => void }) {
+function ResultsView({
+  token,
+  id,
+  go,
+  onUnauthorized,
+}: {
+  token: string | null;
+  id: string;
+  go: (to: string) => void;
+  onUnauthorized: () => void;
+}) {
   const [res, setRes] = useState<ResultResp | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const reload = async () => {
+  const abortRef = useRef<AbortController | null>(null);
+
+  const reload = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     setLoading(true);
     setErr(null);
+
     try {
-      const r = await apiRequest<ResultResp>(`/api/v1/elections/${id}/results`, { method: "GET" }, token);
+      const r = await apiRequest<ResultResp>(`/api/v1/elections/${id}/results`, { method: "GET", signal: ac.signal }, token);
       setRes(r);
     } catch (e: any) {
-      setErr(e?.message || "get results failed");
+      if (e?.name === "AbortError") return;
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось загрузить результаты");
       setRes(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, token, onUnauthorized]);
 
   useEffect(() => {
     reload();
-  }, [id]);
+    return () => abortRef.current?.abort();
+  }, [reload]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -1378,14 +1509,14 @@ function ResultsView({ token, id, go }: { token: string | null; me: Me | null; i
         </div>
 
         <ErrorBanner error={err} />
-        {loading ? <div style={styles.muted}>Loading…</div> : null}
+        {loading ? <div style={styles.muted}>Loading</div> : null}
 
         {res ? (
           <>
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Badge text={`method: ${res.method}`} />
               <Badge text={`version: ${String(res.version)}`} />
-              {res.published_at ? <Badge text={`published_at: ${res.published_at}`} /> : <Badge text="published_at: null" />}
+              <Badge text={`published_at: ${res.published_at ?? "null"}`} />
             </div>
 
             <hr style={styles.hr} />
@@ -1417,17 +1548,29 @@ function ResultsView({ token, id, go }: { token: string | null; me: Me | null; i
         ) : null}
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Raw results JSON</h3>
-        {res ? <JsonBlock value={res} /> : <div style={styles.muted}>—</div>}
-      </div>
+      {IS_DEV ? (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Results JSON</h3>
+          {res ? <JsonBlock value={res} /> : <div style={styles.muted}>Empty</div>}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function AdminCreateElection({ token, me, go }: { token: string | null; me: Me | null; go: (to: string) => void }) {
-  const [title, setTitle] = useState("Demo election");
-  const [description, setDescription] = useState("Created from demo UI");
+function AdminCreateElection({
+  token,
+  me,
+  go,
+  onUnauthorized,
+}: {
+  token: string | null;
+  me: Me | null;
+  go: (to: string) => void;
+  onUnauthorized: () => void;
+}) {
+  const [title, setTitle] = useState("Election");
+  const [description, setDescription] = useState("");
 
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
   const [tallyRule, setTallyRule] = useState("plurality");
@@ -1454,23 +1597,21 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [createdID, setCreatedID] = useState<string | null>(null);
-  const [rawResp, setRawResp] = useState<any>(null);
+  const [rawResp, setRawResp] = useState<unknown>(null);
 
   useEffect(() => {
     if (ballotFormat === "approval") {
-      setTallyRule("approval");
+      if (tallyRule !== "approval") setTallyRule("approval");
     } else if (ballotFormat === "ranking") {
       if (tallyRule === "approval") setTallyRule("plurality");
     } else if (ballotFormat === "score") {
-      if (tallyRule !== "plurality" && tallyRule !== "borda" && tallyRule !== "approval") {
-        setTallyRule("plurality");
-      }
+      if (tallyRule !== "plurality" && tallyRule !== "borda") setTallyRule("plurality");
     }
   }, [ballotFormat]);
 
   const submit = async () => {
     if (me?.role !== "admin") {
-      setErr("only admin can create elections");
+      setErr("Только admin может создавать выборы");
       return;
     }
 
@@ -1485,25 +1626,31 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const candidates = names.map((name) => ({ name }));
+      const uniq: string[] = [];
+      const seen = new Set<string>();
+      for (const n of names) {
+        const key = n.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniq.push(n);
+      }
+
+      if (uniq.length < 2) throw new Error("Добавьте минимум двух кандидатов");
+
+      const candidates = uniq.map((name) => ({ name }));
 
       const body: AnyObj = {
         title: title.trim(),
         description: description.trim() ? description.trim() : null,
-
         start_at: startAt.trim(),
         end_at: endAt.trim(),
-
         tally_rule: tallyRule.trim(),
         ballot_format: ballotFormat,
-
         committee_size: committeeSize,
         quota_type: committeeSize > 1 ? quotaType : null,
-
         access_mode: accessMode,
         publish_at: null,
         show_aggregates: showAggregates,
-
         candidates,
       };
 
@@ -1518,21 +1665,15 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
         body.score_allow_skip = scoreAllowSkip;
       }
 
-      const resp = await apiRequest<any>(
-        "/api/v1/elections",
-        { method: "POST", body: JSON.stringify(body) },
-        token
-      );
-      setRawResp(resp);
+      const resp = await apiRequest<any>("/api/v1/elections", { method: "POST", body: JSON.stringify(body) }, token);
+      if (IS_DEV) setRawResp(resp);
 
       const eid = resp?.id;
-      if (typeof eid === "string" && eid.trim()) {
-        setCreatedID(eid.trim());
-      } else {
-        throw new Error("create ok, но не нашёл id в ответе");
-      }
+      if (typeof eid === "string" && eid.trim()) setCreatedID(eid.trim());
+      else throw new Error("Выборы созданы, но id не найден в ответе");
     } catch (e: any) {
-      setErr(e?.message || "create election failed");
+      if (e?.status === 401) onUnauthorized();
+      setErr(e?.message || "Не удалось создать выборы");
     } finally {
       setLoading(false);
     }
@@ -1542,7 +1683,7 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-          <h2 style={{ margin: 0 }}>Create election (admin)</h2>
+          <h2 style={{ margin: 0 }}>Create election</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button style={styles.btn} onClick={() => go("#/elections")}>
               Back
@@ -1587,23 +1728,14 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
               <option value="borda">borda</option>
               <option value="approval">approval</option>
             </select>
-            <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
-              Для MVP tally на бэке: ranking plurality/borda, approval -> approval.
-            </div>
           </div>
 
           <div>
             <label>Committee size</label>
-            <input
-              style={styles.input}
-              type="number"
-              min={1}
-              value={committeeSize}
-              onChange={(e) => setCommitteeSize(Number(e.target.value))}
-            />
+            <input style={styles.input} type="number" min={1} value={committeeSize} onChange={(e) => setCommitteeSize(Number(e.target.value))} />
           </div>
           <div>
-            <label>Quota type (если committee_size &gt; 1)</label>
+            <label>Quota type</label>
             <select style={styles.input} value={quotaType} onChange={(e) => setQuotaType(e.target.value as any)}>
               <option value="hare">hare</option>
               <option value="droop">droop</option>
@@ -1620,11 +1752,7 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
 
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input
-                type="checkbox"
-                checked={showAggregates}
-                onChange={(e) => setShowAggregates(e.target.checked)}
-              />
+              <input type="checkbox" checked={showAggregates} onChange={(e) => setShowAggregates(e.target.checked)} />
               show_aggregates
             </label>
           </div>
@@ -1636,13 +1764,7 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
           <div style={styles.grid2}>
             <div>
               <label>approval_max_choices</label>
-              <input
-                style={styles.input}
-                type="number"
-                min={1}
-                value={approvalMax}
-                onChange={(e) => setApprovalMax(Number(e.target.value))}
-              />
+              <input style={styles.input} type="number" min={1} value={approvalMax} onChange={(e) => setApprovalMax(Number(e.target.value))} />
             </div>
             <div />
           </div>
@@ -1652,13 +1774,7 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
           <div style={styles.grid2}>
             <div>
               <label>ranking_top_k</label>
-              <input
-                style={styles.input}
-                type="number"
-                min={1}
-                value={rankingTopK}
-                onChange={(e) => setRankingTopK(Number(e.target.value))}
-              />
+              <input style={styles.input} type="number" min={1} value={rankingTopK} onChange={(e) => setRankingTopK(Number(e.target.value))} />
             </div>
             <div />
           </div>
@@ -1668,39 +1784,19 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
           <div style={styles.grid2}>
             <div>
               <label>score_min</label>
-              <input
-                style={styles.input}
-                type="number"
-                value={scoreMin}
-                onChange={(e) => setScoreMin(Number(e.target.value))}
-              />
+              <input style={styles.input} type="number" value={scoreMin} onChange={(e) => setScoreMin(Number(e.target.value))} />
             </div>
             <div>
               <label>score_max</label>
-              <input
-                style={styles.input}
-                type="number"
-                value={scoreMax}
-                onChange={(e) => setScoreMax(Number(e.target.value))}
-              />
+              <input style={styles.input} type="number" value={scoreMax} onChange={(e) => setScoreMax(Number(e.target.value))} />
             </div>
             <div>
               <label>score_step</label>
-              <input
-                style={styles.input}
-                type="number"
-                min={1}
-                value={scoreStep}
-                onChange={(e) => setScoreStep(Number(e.target.value))}
-              />
+              <input style={styles.input} type="number" min={1} value={scoreStep} onChange={(e) => setScoreStep(Number(e.target.value))} />
             </div>
             <div style={{ display: "flex", alignItems: "center" }}>
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={scoreAllowSkip}
-                  onChange={(e) => setScoreAllowSkip(e.target.checked)}
-                />
+                <input type="checkbox" checked={scoreAllowSkip} onChange={(e) => setScoreAllowSkip(e.target.checked)} />
                 score_allow_skip
               </label>
             </div>
@@ -1720,20 +1816,22 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
 
         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button style={styles.btnPrimary} onClick={submit} disabled={loading}>
-            {loading ? "Creating…" : "Create"}
+            {loading ? "Creating" : "Create"}
           </button>
           {createdID ? (
             <button style={styles.btn} onClick={() => go(`#/elections/${createdID}`)}>
-              Open created election
+              Open
             </button>
           ) : null}
         </div>
       </div>
 
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Raw create response</h3>
-        {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>—</div>}
-      </div>
+      {IS_DEV ? (
+        <div style={styles.card}>
+          <h3 style={{ marginTop: 0 }}>Create response</h3>
+          {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>Empty</div>}
+        </div>
+      ) : null}
     </div>
   );
 }
