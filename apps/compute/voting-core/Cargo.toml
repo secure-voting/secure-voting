@@ -18,6 +18,7 @@ repository = "https://github.com/schukark/secure-voting.git"
 version = "0.1.0"
 
 [dependencies]
+anyhow = "1.0.100"
 rayon = "1.11.0"
 serde = { version = "1.0.228", optional = true, features = ["serde_derive"] }
 thiserror = "2.0.17"
