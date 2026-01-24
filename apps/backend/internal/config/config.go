@@ -29,6 +29,13 @@ type Config struct {
 	KafkaResultsTopic   string
 	KafkaGroupID        string
 	WorkerPollInterval  time.Duration
+
+	// Compute gRPC
+	ComputeGRPCAddr      string
+	ComputeTLS           bool
+	ComputeTLSCA         string
+	ComputeTLSServerName string
+
 }
 
 func FromEnv() Config {
@@ -123,6 +130,29 @@ func FromEnv() Config {
 		}
 	}
 
+	computeAddr := os.Getenv("COMPUTE_GRPC_ADDR")
+	if computeAddr == "" {
+		computeAddr = "rust-compute:50051"
+	}
+
+	computeTLS := true
+	if s := strings.TrimSpace(os.Getenv("COMPUTE_TLS")); s != "" {
+		if s == "0" || strings.EqualFold(s, "false") {
+			computeTLS = false
+		}
+	}
+
+	computeCA := os.Getenv("COMPUTE_TLS_CA")
+	if computeCA == "" {
+		computeCA = "/certs/ca.pem"
+	}
+
+	computeSN := os.Getenv("COMPUTE_TLS_SERVER_NAME")
+	if computeSN == "" {
+		computeSN = "rust-compute"
+	}
+
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
@@ -144,6 +174,12 @@ func FromEnv() Config {
 		KafkaResultsTopic:  resultsTopic,
 		KafkaGroupID:       groupID,
 		WorkerPollInterval: poll,
+		
+		ComputeGRPCAddr:      computeAddr,
+		ComputeTLS:           computeTLS,
+		ComputeTLSCA:         computeCA,
+		ComputeTLSServerName: computeSN,
+
 	}
 }
 

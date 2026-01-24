@@ -653,21 +653,23 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 	}
 
 	_, err = s.db.Exec(ctx, `
-		UPDATE elections SET
-			tally_rule = $2,
-			ballot_format = $3,
-			committee_size = $4,
-			quota_type = $5,
-			access_mode = $6,
-			publish_at = $7,
-			show_aggregates = $8,
-			approval_max_choices = $9,
-			ranking_top_k = $10,
-			score_min = $11,
-			score_max = $12,
-			score_step = $13,
-			score_allow_skip = $14
-		WHERE id=$1::uuid AND created_by=$15::uuid
+	UPDATE elections SET
+	tally_rule = $2,
+	ballot_format = $3,
+	committee_size = $4,
+	quota_type = $5,
+	access_mode = $6,
+	publish_at = $7,
+	show_aggregates = $8,
+
+	approval_max_choices = CASE WHEN $3 = 'approval' THEN $9  ELSE NULL END,
+	ranking_top_k        = CASE WHEN $3 = 'ranking'  THEN $10 ELSE NULL END,
+
+	score_min        = CASE WHEN $3 = 'score' THEN $11 ELSE NULL END,
+	score_max        = CASE WHEN $3 = 'score' THEN $12 ELSE NULL END,
+	score_step       = CASE WHEN $3 = 'score' THEN $13 ELSE NULL END,
+	score_allow_skip = CASE WHEN $3 = 'score' THEN $14 ELSE false END
+	WHERE id=$1::uuid AND created_by=$15::uuid
 	`, electionID,
 		finalTally, finalFormat,
 		finalCommittee, finalQuota,
@@ -679,6 +681,7 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		finalScoreAllowSkip,
 		adminUserID,
 	)
+
 	if err != nil {
 		return "", err
 	}

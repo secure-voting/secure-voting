@@ -7,20 +7,21 @@ services:
       - "8080:80"
     networks:
       - app_network
-    volumes:
-      - cache:/data
     restart: unless-stopped
+    depends_on:
+      - backend
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      # nginx:alpine обычно без curl -> используем wget
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:80 >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
     read_only: false
     profiles:
       - frontend
       - prod
 
-  # Go backend
+  # Go backend (API)
   backend:
     build: apps/backend
     container_name: go-backend
@@ -29,19 +30,39 @@ services:
       - rpc_network
       - db_network
       - kafka_network
+      - redis_network
     environment:
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+      # server
+      - HTTP_ADDR=:3001
       - TOKEN_TTL=720h
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - MAX_UPLOAD_BYTES=10485760
+
+      # postgres
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+
+      # redis
       - REDIS_ADDR=cache:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - IDEMPOTENCY_TTL=24h
+
+      # mongo (ВАЖНО: иначе backend возьмет дефолт и не совпадет с твоим паролем)
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_DB=secure_voting
+
+      # kafka / worker settings (совпадает с internal/config/config.go)
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
+      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
+      - KAFKA_GROUP_ID=secure-voting-backend-worker
+      - WORKER_POLL_INTERVAL=1s
+
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       cache:
+        condition: service_healthy
+      mongo:
         condition: service_healthy
       kafka:
         condition: service_healthy
@@ -49,10 +70,44 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
+    # удобно для дебага локально (не обязательно)
+    ports:
+      - "127.0.0.1:3001:3001"
     profiles:
       - backend
       - prod
+
+  # Go worker (jobs -> Kafka -> Mongo/Postgres)
+  worker:
+    build: apps/backend
+    container_name: go-worker
+    networks:
+      - db_network
+      - rpc_network
+    environment:
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_DB=secure_voting
+      - COMPUTE_GRPC_ADDR=rust-compute:50051
+      - COMPUTE_TLS=true
+      - COMPUTE_TLS_CA=/certs/ca.pem
+      - COMPUTE_TLS_SERVER_NAME=rust-compute
+      - WORKER_POLL_INTERVAL=1s
+    volumes:
+      - ./scripts/certs/out:/certs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      compute:
+        condition: service_started
+    restart: unless-stopped
+    command: ["/app/worker"]
+    profiles:
+      - prod
+
 
   # SQL Postgres db
   db:
@@ -65,14 +120,15 @@ services:
     networks:
       - db_network
     volumes:
-      - db-data:/var/lib/postgresql
-      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # ВАЖНО: правильный путь у postgres
+      - db-data:/var/lib/postgresql/data
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     profiles:
       - db
       - prod
@@ -106,11 +162,14 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: >
       sh -c 'redis-server --save 20 1 --loglevel warning --requirepass "$$REDIS_PASSWORD"'
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   # Redis WebUI
   redis-webui:
@@ -143,10 +202,10 @@ services:
       - mongo-data:/data/db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand(\"ping\")'"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep -q 1"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     profiles:
       - db
       - prod
@@ -176,12 +235,18 @@ services:
     container_name: rust-compute
     networks:
       - rpc_network
+      - kafka_network
+    environment:
+      - GRPC_ADDR=0.0.0.0:50051
+      - TLS_CERT=/certs/compute.pem
+      - TLS_KEY=/certs/compute.key
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     restart: unless-stopped
     read_only: true
     profiles:
       - compute
       - prod
-
 
   # Kafka (KRaft, local-dev friendly)
   kafka:
@@ -191,16 +256,17 @@ services:
       - kafka_network
     ports:
       - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 15
     profiles:
       - kafka
       - prod
-
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -235,11 +301,10 @@ networks:
     driver: bridge
     internal: true
 
-
 volumes:
   db-data:
     driver: local
-  cache:
+  redis-data:
     driver: local
   mongo-data:
     driver: local

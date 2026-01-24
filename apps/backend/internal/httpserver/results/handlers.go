@@ -1,7 +1,6 @@
 package results
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -11,20 +10,17 @@ import (
 	"secure-voting/apps/backend/internal/results"
 )
 
-type Service interface {
-	Get(ctx context.Context, electionID, role, userID, email string) (results.ResultResp, string, error)
-}
-
 type Handlers struct {
-	svc Service
+	svc *results.Service
 }
 
-func NewHandlers(svc Service) *Handlers {
+func NewHandlers(svc *results.Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
 func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 	eid := strings.TrimSpace(r.PathValue("id"))
+
 	role, _ := middleware.RoleFromContext(r.Context())
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	email, _ := middleware.EmailFromContext(r.Context())
@@ -37,6 +33,8 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	if code != "" {
 		switch code {
+		case "invalid_id":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid id")
 		case "not_found":
 			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
 		case "not_published":

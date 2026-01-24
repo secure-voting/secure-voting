@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package securevoting.compute.v1;
+
+option go_package = "secure-voting/apps/backend/internal/compute/pb;pb";
+
+import "google/protobuf/wrappers.proto";
+
+message Candidate {
+  string id = 1;
+  string name = 2;
+}
+
+message RunHeader {
+  string kind = 1;              // "tally" | "experiment_run"
+  string run_id = 2;            // uuid для experiment_run
+  string election_id = 3;       // uuid для tally
+  string experiment_id = 4;     // uuid для experiment_run
+  string dataset_id = 5;        // mongo hex
+
+  string tally_rule = 6;        // для tally; для experiment_run может быть пусто (берем из params_json)
+  string ballot_format = 7;     // "approval" | "ranking" | "score"
+
+  google.protobuf.Int32Value committee_size = 8;
+  google.protobuf.StringValue quota_type = 9;
+
+  google.protobuf.Int32Value approval_max_choices = 10;
+  google.protobuf.Int32Value ranking_top_k = 11;
+
+  google.protobuf.Int32Value score_min = 12;
+  google.protobuf.Int32Value score_max = 13;
+  google.protobuf.Int32Value score_step = 14;
+  google.protobuf.BoolValue score_allow_skip = 15;
+
+  bytes params_json = 16;       // experiments.params или произвольные параметры
+  repeated Candidate candidates = 17;
+}
+
+message ApprovalBallot {
+  repeated string approvals = 1; // candidate ids
+}
+
+message RankingBallot {
+  repeated string ranking = 1; // candidate ids in order
+}
+
+message ScoreEntry {
+  string candidate_id = 1;
+  int32 value = 2;
+}
+
+message ScoreBallot {
+  repeated ScoreEntry scores = 1;
+}
+
+message Ballot {
+  string voter_ref = 1; // voter_hash / voter_ref (необязательно)
+  oneof payload {
+    ApprovalBallot approval = 2;
+    RankingBallot ranking = 3;
+    ScoreBallot score = 4;
+  }
+}
+
+message BallotBatch {
+  repeated Ballot ballots = 1;
+}
+
+message RunChunk {
+  oneof part {
+    RunHeader header = 1;     // первым сообщением
+    BallotBatch batch = 2;    // дальше батчи
+  }
+}
+
+message RunResult {
+  string status = 1;          // "done" | "error"
+  string error_text = 2;
+
+  string method = 3;
+  bytes params_json = 4;
+
+  bytes winners_json = 5;
+  bytes metrics_json = 6;
+  bytes protocol_json = 7;
+}
+
+service Compute {
+  rpc Run (stream RunChunk) returns (RunResult);
+}
