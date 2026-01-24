@@ -1,0 +1,28 @@
+[package]
+categories = [
+  "command-line-utilities",
+  "science"
+]
+description = "CLI voting tool"
+edition = "2024"
+keywords = [
+  "cli",
+  "election",
+  "social-choice",
+  "terminal",
+  "voting"
+]
+license.workspace = true
+name = "voting-cli"
+repository = "https://github.com/schukark/secure-voting.git"
+version = "0.1.0"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.54", features = ["derive"] }
+csv = "1.4.0"
+thiserror = "2.0.18"
+voting-core = {path = "../voting-core", version = "0.1.0"}

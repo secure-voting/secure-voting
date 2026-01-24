@@ -1,9 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["compute-service","voting-core"]
+members = ["compute-service", "voting-cli","voting-core"]
 
 [workspace.package]
 license = "MIT or Apache-2.0"
+edition = "2024"
 
 [workspace.lints.clippy]
 cargo                 = { level = "warn", priority = -1 }

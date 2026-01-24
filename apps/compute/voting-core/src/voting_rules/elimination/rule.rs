@@ -133,6 +133,13 @@ where
             }
         }
     }
+
+    fn create_default() -> Self
+    where
+        Self: Sized,
+    {
+        Self::default()
+    }
 }
 
 impl<S, E, D, T, Stop> Default for Elimination<S, E, D, T, Stop>
