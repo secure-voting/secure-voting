@@ -56,8 +56,9 @@ pub use crate::{
 // Allow to combine the voting rules together or modify existing voting rules.
 pub use crate::voting_rules::adaptors::*;
 
-// Essential types.
+// Essential types and functions.
 pub use crate::{
+    election::run_election,
     matrix::{CondorcetMatrix, PairwiseMatrix},
     profile::{CandidateId, Profile},
     tie_breaker::RuleOutcome,
