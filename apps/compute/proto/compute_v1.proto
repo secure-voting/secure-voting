@@ -12,13 +12,13 @@ message Candidate {
 }
 
 message RunHeader {
-  string kind = 1;              // "tally" | "experiment_run"
-  string run_id = 2;            // uuid для experiment_run, или "" для tally
-  string election_id = 3;       // uuid для tally, или "" для experiment_run
-  string dataset_id = 4;        // mongo hex для experiment_run, или "" для tally
+  string kind = 1;
+  string run_id = 2;
+  string election_id = 3;
+  string dataset_id = 4;
 
-  string tally_rule = 5;        // "borda", "copeland_i", ...
-  string ballot_format = 6;     // "approval" | "ranking" | "score"
+  string tally_rule = 5;
+  string ballot_format = 6;
 
   google.protobuf.Int32Value committee_size = 7;
   google.protobuf.StringValue quota_type = 8;
@@ -33,16 +33,16 @@ message RunHeader {
   google.protobuf.Int32Value score_step = 14;
   google.protobuf.BoolValue score_allow_skip = 15;
 
-  bytes params_json = 16;       // experiments.params или election params (если надо)
+  bytes params_json = 16;
   repeated Candidate candidates = 17;
 }
 
 message ApprovalBallot {
-  repeated string approvals = 1; // candidate ids
+  repeated string approvals = 1;
 }
 
 message RankingBallot {
-  repeated string ranking = 1; // candidate ids in order
+  repeated string ranking = 1;
 }
 
 message ScoreEntry {
@@ -55,7 +55,7 @@ message ScoreBallot {
 }
 
 message Ballot {
-  string voter_ref = 1; // хэш/ид (не обязательно)
+  string voter_ref = 1;
   oneof payload {
     ApprovalBallot approval = 2;
     RankingBallot ranking = 3;
@@ -69,13 +69,13 @@ message BallotBatch {
 
 message RunChunk {
   oneof part {
-    RunHeader header = 1;     // первым сообщением
-    BallotBatch batch = 2;    // дальше батчи
+    RunHeader header = 1;
+    BallotBatch batch = 2;
   }
 }
 
 message RunResult {
-  string status = 1;          // "done" | "error"
+  string status = 1;
   string error_text = 2;
 
   bytes winners_json = 3;

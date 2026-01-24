@@ -90,7 +90,6 @@ func (s *Service) loadElectionVoteCfg(ctx context.Context, electionID, email str
 		return electionVoteCfg{}, "", err
 	}
 	if !cfg.Allowed {
-		// не раскрываем существование election, если нет доступа
 		return electionVoteCfg{}, "not_found", nil
 	}
 	return cfg, "", nil
@@ -140,7 +139,6 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		return SubmitResp{}, "invalid_idempotency_key", nil
 	}
 
-	// access + election cfg
 	cfg, code, err := s.loadElectionVoteCfg(ctx, electionID, email)
 	if err != nil {
 		return SubmitResp{}, "", err
@@ -155,12 +153,10 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 	voterHash := computeVoterHash(electionID, userID)
 	rkey := fmt.Sprintf("idem:submit:%s:%s:%s", electionID, voterHash, idemKey)
 
-	// 1) быстрый idempotency hit
 	if cached, ok := s.tryGetCached(ctx, rkey); ok {
 		return cached, "", nil
 	}
 
-	// 2) защита от гонок: lock в Redis, если он есть
 	var unlock func()
 	if s.rdb != nil {
 		lockKey := rkey + ":lock"
@@ -168,7 +164,6 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		if lockErr == nil && ok {
 			unlock = func() { _ = s.rdb.Del(ctx, lockKey).Err() }
 		} else {
-			// кто-то уже обрабатывает этот же idemKey -> чуть подождем готового ответа
 			deadline := time.Now().Add(2 * time.Second)
 			for time.Now().Before(deadline) {
 				if cached, ok := s.tryGetCached(ctx, rkey); ok {
@@ -187,7 +182,6 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		defer unlock()
 	}
 
-	// candidates set
 	cRows, err := s.db.Query(ctx, `SELECT id::text FROM candidates WHERE election_id=$1::uuid`, electionID)
 	if err != nil {
 		return SubmitResp{}, "", err
@@ -239,7 +233,6 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// insert or update only if draft
 	var ballotID string
 	err = tx.QueryRow(ctx, `
 		INSERT INTO ballots (
@@ -271,14 +264,11 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// conflict but not updated => already accepted/rejected
 			return SubmitResp{}, "already_submitted", nil
 		}
 		return SubmitResp{}, "", err
 	}
 
-	// audit (без раскрытия содержимого бюллетеня)
-	// actor_user_id фиксируем, details минимальные
 	_ = insertAuditTx(ctx, tx, userID, "ballot_submitted", map[string]any{
 		"target_type": "ballot",
 		"target_id":   ballotID,
@@ -301,7 +291,6 @@ func (s *Service) MyBallot(ctx context.Context, electionID, userID, email string
 		return MyBallotResp{}, "invalid_id", nil
 	}
 
-	// проверяем доступ к election (invite/open). если нет доступа -> not_found
 	_, code, err := s.loadElectionVoteCfg(ctx, electionID, email)
 	if err != nil {
 		return MyBallotResp{}, "", err

@@ -56,7 +56,6 @@ type GenerateReq struct {
 	Voters      int         `json:"voters"`
 	Seed        *int64      `json:"seed,omitempty"`
 
-	// для синтетики
 	ApprovalMaxChoices *int `json:"approval_max_choices,omitempty"`
 	RankingTopK        *int `json:"ranking_top_k,omitempty"`
 	ScoreMin           *int `json:"score_min,omitempty"`
@@ -181,7 +180,6 @@ func (s *Service) Download(ctx context.Context, id string) ([]byte, string, stri
 	}
 
 	if len(d.Raw.Data) == 0 {
-		// если raw не сохранен — вернем минимальный JSON метаданных
 		meta := map[string]any{
 			"id":          d.ID.Hex(),
 			"name":        d.Name,
@@ -211,7 +209,6 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 	name := strings.TrimSpace(meta.Name)
 	format := strings.TrimSpace(meta.Format)
 
-	// читаем файл в память (ограничение на уровне handler)
 	b, err := io.ReadAll(file)
 	if err != nil {
 		return "", "", err
@@ -222,11 +219,10 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 		mime = "application/octet-stream"
 	}
 
-	// попробуем распарсить JSON в формате export: {dataset:{...}, ballots:[...]}
 	var parsed importFile
 	if strings.Contains(strings.ToLower(mime), "json") {
 		if err := json.Unmarshal(b, &parsed); err == nil && strings.TrimSpace(parsed.Dataset.Format) != "" {
-			// meta имеет приоритет
+
 			if name == "" {
 				name = strings.TrimSpace(parsed.Dataset.Name)
 			}
@@ -243,9 +239,6 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 	switch format {
 	case "approval", "ranking", "score":
 	default:
-		// если формат не задан/невалиден — импорт всё равно сохраним как raw,
-		// но вернем код, чтобы клиент понимал что датасет не пригоден для экспериментов
-		// (можешь сделать строго invalid_format, если хочешь “жестко”)
 		return "", "invalid_format", nil
 	}
 
@@ -277,7 +270,6 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 	}
 	dsid := res.InsertedID.(primitive.ObjectID)
 
-	// если JSON распознан и есть ballots — запишем в dataset_ballots, чтобы датасет можно было гонять в экспериментах
 	if len(parsed.Ballots) > 0 && len(candidates) > 0 {
 		cset := map[string]struct{}{}
 		for _, c := range candidates {
@@ -386,7 +378,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	}
 			switch req.Format {
 		case "approval":
-			// q: максимум выбираемых, по умолчанию = все кандидаты
 			q := len(cids)
 			if req.ApprovalMaxChoices != nil && *req.ApprovalMaxChoices > 0 {
 				q = *req.ApprovalMaxChoices
@@ -398,7 +389,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 				q = 1
 			}
 
-			// k в [1..q]
 			k := 1 + int(rng.next()%uint64(q))
 			b.Approval = pickSubset(rng, cids, k)
 
@@ -432,7 +422,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 
 	seed := req.Seed
 	if seed == nil {
-		// псевдо-seed из rand
 		b := make([]byte, 8)
 		_, _ = rand.Read(b)
 		v := int64(0)
@@ -481,7 +470,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	}
 	dsid := ins.InsertedID.(primitive.ObjectID)
 
-	// детерминированный PRNG (простая LCG, достаточно для синтетики)
 	rng := newLCG(uint64(*seed))
 
 	var ballots []BallotDoc
@@ -535,7 +523,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		}
 	}
 
-	// сохраняем raw json для download (ограничение voters <= 2000 делает это безопасным)
 	export := map[string]any{
 		"dataset": map[string]any{
 			"id":          dsid.Hex(),
@@ -599,7 +586,6 @@ type lcg struct{ s uint64 }
 
 func newLCG(seed uint64) *lcg { return &lcg{s: seed} }
 func (r *lcg) next() uint64 {
-	// Numerical Recipes LCG
 	r.s = r.s*1664525 + 1013904223
 	return r.s
 }

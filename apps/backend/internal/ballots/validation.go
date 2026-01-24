@@ -11,11 +11,9 @@ func validateIdempotencyKey(k string) bool {
 	if k == "" {
 		return false
 	}
-	// разумное ограничение, чтобы не раздувать Redis keys
 	if len(k) > 200 {
 		return false
 	}
-	// разрешим простой безопасный набор символов
 	for _, r := range k {
 		switch {
 		case r >= 'a' && r <= 'z':

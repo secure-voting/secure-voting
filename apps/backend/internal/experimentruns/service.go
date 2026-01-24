@@ -63,7 +63,6 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		return nil, "dataset_ids_required", nil
 	}
 
-	// доступ: admin видит всё, researcher только свои эксперименты
 	if role != "admin" {
 		var x int
 		err := s.db.QueryRow(ctx, `
@@ -78,7 +77,6 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		}
 	}
 
-	// normalize + dedupe + validate ObjectID hex
 	unique := make([]string, 0, len(req.DatasetIDs))
 	seen := make(map[string]struct{}, len(req.DatasetIDs))
 	oids := make([]primitive.ObjectID, 0, len(req.DatasetIDs))
@@ -100,7 +98,6 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		oids = append(oids, oid)
 	}
 
-	// existence check in Mongo
 	ok, err := s.validateDatasetsExist(ctx, oids)
 	if err != nil {
 		return nil, "", err
@@ -168,7 +165,6 @@ func (s *Service) validateDatasetsExist(ctx context.Context, oids []primitive.Ob
 	}
 	coll := s.mongodb.Collection("datasets")
 
-	// считаем количество найденных документов по $in
 	filter := bson.M{"_id": bson.M{"$in": oids}}
 	cnt, err := coll.CountDocuments(ctx, filter)
 	if err != nil {
@@ -277,7 +273,6 @@ func (s *Service) Get(ctx context.Context, role, userID, runID string) (Run, str
 }
 
 func (s *Service) GetResult(ctx context.Context, role, userID, runID string) (Result, string, error) {
-	// проверяем доступ через Get
 	_, code, err := s.Get(ctx, role, userID, runID)
 	if err != nil {
 		return Result{}, "", err
@@ -311,7 +306,6 @@ func (s *Service) DownloadResult(ctx context.Context, role, userID, runID string
 }
 
 func itoa(i int) string {
-	// локально чтобы не тянуть strconv
 	if i == 0 {
 		return "0"
 	}

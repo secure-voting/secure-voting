@@ -264,13 +264,11 @@ func (w *Worker) consumeResults(ctx context.Context) error {
 }
 
 func (w *Worker) applyExperimentRunResult(ctx context.Context, res ExperimentRunResult) error {
-	// 1) upsert в Mongo по run_id (идемпотентно)
 	oidHex, err := w.upsertExperimentResult(ctx, res)
 	if err != nil {
 		return err
 	}
 
-	// 2) транзакционно обновляем Postgres
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -357,7 +355,6 @@ func (w *Worker) upsertExperimentResult(ctx context.Context, res ExperimentRunRe
 		return "", err
 	}
 
-	// узнаем _id
 	var doc struct {
 		ID primitive.ObjectID `bson:"_id"`
 	}

@@ -135,7 +135,7 @@ function newIdemKey(): string {
     typeof g?.crypto?.randomUUID === "function"
       ? g.crypto.randomUUID()
       : `r${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
-  // допустимые символы по твоей validateIdempotencyKey: буквы/цифры/-_:.@
+  // допустимые символы по validateIdempotencyKey: буквы/цифры/-_:.@
   return `idem-${uuid}`;
 }
 
@@ -143,7 +143,6 @@ function parseApiError(data: any, fallback: string): string {
   if (!data) return fallback;
   if (typeof data === "string") return data;
 
-  // часто backend возвращает {code, message} или {error:{code,message}} или {error, message}
   const direct =
     data.message ||
     data.error ||
@@ -157,7 +156,6 @@ function parseApiError(data: any, fallback: string): string {
 
   if (typeof direct === "string" && direct.trim()) return direct.trim();
 
-  // last resort
   try {
     return JSON.stringify(data);
   } catch {
@@ -356,7 +354,6 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootLoading, setBootLoading] = useState(false);
 
-  // bootstrap: validate token by /auth/me
   useEffect(() => {
     let cancelled = false;
 
@@ -371,7 +368,6 @@ export default function App() {
         const resp = await apiRequest<any>("/api/v1/auth/me", { method: "GET" }, token);
         if (cancelled) return;
 
-        // нормализуем возможные формы ответа
         const obj = resp?.user ?? resp?.data?.user ?? resp?.data ?? resp ?? {};
         const nextMe: Me = {
           id: obj.id ?? obj.user_id ?? obj.uuid,
@@ -396,7 +392,6 @@ export default function App() {
     };
   }, [token]);
 
-  // default routing
   useEffect(() => {
     if (!window.location.hash || window.location.hash === "#/") {
       if (token) go("#/elections");
@@ -412,7 +407,6 @@ export default function App() {
         await apiRequest("/api/v1/auth/logout", { method: "POST", body: "{}" }, token);
       }
     } catch {
-      // не критично
     }
     localStorage.removeItem("sv_token");
     setToken(null);
@@ -553,7 +547,6 @@ function LoginScreen({
         );
         setRawResp(resp);
 
-        // иногда register сразу возвращает токен
         const t = pickToken(resp);
         if (t) onToken(t);
       } else {
@@ -652,7 +645,7 @@ function LoginScreen({
           <>
             <div style={{ height: 12 }} />
             <div style={styles.muted}>
-              Сейчас есть токен в localStorage. Если что-то сломалось — сделай Logout.
+              Сейчас есть токен в localStorage. Если что-то сломалось — сделайте Logout.
             </div>
           </>
         ) : null}
@@ -662,7 +655,7 @@ function LoginScreen({
         <h3 style={{ marginTop: 0 }}>Debug: raw auth response</h3>
         {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>—</div>}
         <div style={{ marginTop: 10, ...styles.muted, fontSize: 12 }}>
-          Если login/register не отдаёт токен, покажи сюда реальный JSON — подстрою парсер.
+          Если login/register не отдаёт токен, покажите сюда реальный JSON, и я подстрою парсер.
         </div>
       </div>
     </div>
@@ -1010,7 +1003,6 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
       );
       setMy(mb);
 
-      // init score defaults (если score и allow_skip=false — сразу проставим min для всех)
       if (m.ballot_format === "score" && m.score_min != null) {
         const next: Record<string, number> = {};
         for (const c of m.candidates) {
@@ -1037,7 +1029,7 @@ function VoteView({ token, me, id, go }: { token: string | null; me: Me | null; 
     setApprovalSet((prev) => {
       const has = prev.includes(cid);
       if (has) return prev.filter((x) => x !== cid);
-      if (max != null && max > 0 && prev.length >= max) return prev; // лимит
+      if (max != null && max > 0 && prev.length >= max) return prev;
       return [...prev, cid];
     });
   };
@@ -1465,13 +1457,11 @@ function AdminCreateElection({ token, me, go }: { token: string | null; me: Me |
   const [rawResp, setRawResp] = useState<any>(null);
 
   useEffect(() => {
-    // простое согласование rule с форматами для твоего MVP tally
     if (ballotFormat === "approval") {
       setTallyRule("approval");
     } else if (ballotFormat === "ranking") {
       if (tallyRule === "approval") setTallyRule("plurality");
     } else if (ballotFormat === "score") {
-      // MVP tally для score мы не делали (пока)
       if (tallyRule !== "plurality" && tallyRule !== "borda" && tallyRule !== "approval") {
         setTallyRule("plurality");
       }

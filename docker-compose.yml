@@ -202,7 +202,7 @@ services:
       - mongo-data:/data/db
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep -q 1"]
+      test: ["CMD-SHELL", "mongosh --username root --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand(\"ping\")' > /dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -248,7 +248,6 @@ services:
       - compute
       - prod
 
-  # Kafka (KRaft, local-dev friendly)
   kafka:
     image: confluentinc/confluent-local:7.6.9-1-ubi8
     container_name: kafka

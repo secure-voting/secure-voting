@@ -19,7 +19,6 @@ type fakeVerifier struct {
 }
 
 func (f fakeVerifier) VerifyAccessToken(ctx context.Context, rawToken string) (userID, email, role string, ok bool, err error) {
-	// token нам не важен — считаем валидным
 	return f.uid, f.email, f.role, true, nil
 }
 
@@ -71,7 +70,6 @@ func TestSubmit_Success(t *testing.T) {
 	h := NewHandlers(svc)
 	ver := fakeVerifier{uid: "u1", email: "voter1@example.com", role: "voter"}
 
-	// Оборачиваем так же, как в реальном роутере: RequireAuth + RequireRole(voter)
 	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", http.HandlerFunc(h.Submit)))
 
 	body := []byte(`{"approval_set":["c1"]}`)
@@ -117,7 +115,6 @@ func TestSubmit_MissingIdempotencyKey_MapsTo400(t *testing.T) {
 	req.SetPathValue("id", "e1")
 	req.Header.Set("Authorization", "Bearer testtoken")
 	req.Header.Set("Content-Type", "application/json")
-	// Idempotency-Key НЕ ставим
 
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)

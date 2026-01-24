@@ -48,7 +48,6 @@ func ComputeFromDB(ctx context.Context, db *pgxpool.Pool, electionID string) (Ou
 		cs = *committeeSize
 	}
 
-	// кандидаты
 	rows, err := db.Query(ctx, `SELECT id::text FROM candidates WHERE election_id=$1::uuid ORDER BY id`, electionID)
 	if err != nil {
 		return Output{}, "", err
@@ -239,7 +238,6 @@ func computeBorda(committeeSize int, candidates []string, ballots [][]string) Ou
 			if _, ok := score[cid]; !ok {
 				continue
 			}
-			// классика: n-1, n-2, ... (частичный ranking: считаем только ранжированные)
 			points := (n - 1) - i
 			if points < 0 {
 				points = 0

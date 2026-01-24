@@ -67,7 +67,6 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-// GET /api/v1/elections/{id}
 func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())

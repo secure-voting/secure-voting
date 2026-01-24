@@ -38,9 +38,9 @@ func TestPluralityTop2(t *testing.T) {
 func TestBorda(t *testing.T) {
 	cands := []string{"a", "b", "c"}
 	ballots := [][]string{
-		{"a", "b", "c"}, // a gets 2, b 1, c 0
-		{"b", "a", "c"}, // b 2, a 1
-		{"b", "c", "a"}, // b 2, c 1
+		{"a", "b", "c"},
+		{"b", "a", "c"},
+		{"b", "c", "a"},
 	}
 	out := computeBorda(1, cands, ballots)
 	if len(out.Winners) != 1 || out.Winners[0] != "b" {

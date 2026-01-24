@@ -51,9 +51,7 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-
-	// Не-admin: показываем только свои записи (actor_user_id = user)
-	// Admin: все
+	
 	q := `
 		SELECT id, occurred_at, actor_user_id::text, event_type, details
 		FROM audit_log

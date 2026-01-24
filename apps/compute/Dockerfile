@@ -13,5 +13,5 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/compute-service .
 
-EXPOSE 8081
+EXPOSE 50051
 CMD ["./compute-service"]

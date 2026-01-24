@@ -50,9 +50,6 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 		return ResultResp{}, "", err
 	}
 
-	// RBAC/доступ к election:
-	// - admin видит только свои election (как и в elections.ListForUser)
-	// - не-admin: видит только если election доступна (open или invite по email)
 	if role == "admin" {
 		if createdBy != userID {
 			return ResultResp{}, "not_found", nil
@@ -88,7 +85,6 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 			return ResultResp{}, "not_found", nil
 		}
 
-		// Публика видит результаты только после publish
 		if eStatus != "published" {
 			return ResultResp{}, "not_published", nil
 		}
@@ -130,8 +126,6 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 		r.PublishedAt = &s
 	}
 
-	// show_aggregates влияет на выдачу для не-admin:
-	// скрываем params/metrics/protocol если show_aggregates=false
 	if role != "admin" && !showAggregates {
 		r.Params = nil
 		r.Metrics = nil

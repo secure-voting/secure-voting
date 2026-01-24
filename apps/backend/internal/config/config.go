@@ -23,14 +23,12 @@ type Config struct {
 
 	MaxUploadBytes int64
 
-	// Kafka / worker
 	KafkaBrokers        []string
 	KafkaTasksTopic     string
 	KafkaResultsTopic   string
 	KafkaGroupID        string
 	WorkerPollInterval  time.Duration
 
-	// Compute gRPC
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
 	ComputeTLSCA         string
@@ -102,7 +100,6 @@ func FromEnv() Config {
 		}
 	}
 
-	// Kafka defaults for compose
 	brokers := splitCSV(os.Getenv("KAFKA_BROKERS"))
 	if len(brokers) == 0 {
 		brokers = []string{"kafka:9092"}
@@ -174,7 +171,7 @@ func FromEnv() Config {
 		KafkaResultsTopic:  resultsTopic,
 		KafkaGroupID:       groupID,
 		WorkerPollInterval: poll,
-		
+
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,
 		ComputeTLSCA:         computeCA,

@@ -36,7 +36,7 @@ type DatasetCandidate struct {
 type ExperimentRunResult struct {
 	Kind      string                 `json:"kind"`
 	RunID     string                 `json:"run_id"`
-	Status    string                 `json:"status"` // done|error
+	Status    string                 `json:"status"`
 	ErrorText string                 `json:"error_text,omitempty"`
 
 	Winners   []any                  `json:"winners,omitempty"`

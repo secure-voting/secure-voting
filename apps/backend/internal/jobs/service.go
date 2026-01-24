@@ -46,7 +46,6 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 		limit = 50
 	}
 
-	// admin видит все; остальные — только свои
 	base := `
 		SELECT id::text, kind, status, progress, created_by::text,
 		       election_id::text, experiment_id::text, experiment_run_id::text,
@@ -158,7 +157,6 @@ func (s *Service) Get(ctx context.Context, role, userID, jobID string) (Job, str
 }
 
 func itoa(i int) string {
-	// без strconv ради минимума импортов
 	if i == 0 {
 		return "0"
 	}

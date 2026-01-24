@@ -70,7 +70,6 @@ func (h *Handlers) Download(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
-	// ограничиваем размер входа
 	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 
 	if err := r.ParseMultipartForm(h.cfg.MaxUploadBytes); err != nil {

@@ -88,8 +88,6 @@ func (s *Service) acceptInviteTx(ctx context.Context, tx pgx.Tx, email, inviteCo
 		return acceptedInvite{}, "invite_code_inactive", nil
 	}
 
-	// Инвайт у нас создается на конкретный email — требуем совпадение.
-	// (Даже если вдруг попадется пустой email, оставим старую логику "если задан — проверяем".)
 	if strings.TrimSpace(inviteEmail) != "" && strings.ToLower(strings.TrimSpace(inviteEmail)) != email {
 		return acceptedInvite{}, "invite_email_mismatch", nil
 	}
