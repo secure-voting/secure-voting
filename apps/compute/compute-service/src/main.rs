@@ -1,5 +1,5 @@
 use tonic::Response;
-use voting_core::{election::run_election, prelude::*};
+use voting_core::prelude::*;
 
 use crate::securevoting::compute::v1::{
     RunChunk, RunResult,
