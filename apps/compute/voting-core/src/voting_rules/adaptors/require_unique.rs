@@ -55,12 +55,19 @@ impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
             }
         }
     }
+
+    fn create_default() -> Self
+    where
+        Self: Sized,
+    {
+        Self::default()
+    }
 }
 
 impl<R: VotingRuleExec> Default for RequireUnique<R> {
     fn default() -> Self {
         Self {
-            rule: Default::default(),
+            rule: R::create_default(),
         }
     }
 }
@@ -80,6 +87,7 @@ mod tests {
             type Error = ();
 
             fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+            fn create_default() -> Self where Self: Sized;
         }
     }
 

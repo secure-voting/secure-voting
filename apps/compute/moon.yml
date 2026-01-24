@@ -83,6 +83,8 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
+    options:
+      runInCI: false
 
   # ---------------------------
   # Dependency & supply-chain
@@ -96,7 +98,7 @@ tasks:
 
   deny-check:
     description: 'Check licenses and crate sources'
-    command: 'cargo deny check'
+    command: 'cargo deny --workspace --all-features check'
     inputs:
       - '@globs(policy)'
 
@@ -125,7 +127,7 @@ tasks:
 
   bloat:
     description: 'Binary size analysis'
-    command: 'cargo bloat --release --bin compute-service'
+    command: 'cargo bloat --release --bin compute-service && cargo bloat --release --bin voting-cli'
     inputs:
       - '@globs(sources)'
     options:

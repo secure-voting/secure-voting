@@ -1,5 +1,5 @@
 unstable_rust:
-  version: '1.92.0'
+  version: '1.93.0'
   bins:
     - 'cargo-audit'
     - 'cargo-deny'
@@ -9,12 +9,13 @@ unstable_rust:
     - 'cargo-nextest'
     - 'cargo-outdated'
     - 'cargo-pgo'
-    - 'cargo-public-api'
+    # - 'cargo-public-api'
     - 'cargo-vet'
   components:
     - 'clippy'
     - 'rustfmt'
     - 'rust-analyzer'
+    - 'llvm-tools-preview'
   targets:
     - 'x86_64-unknown-linux-gnu'
     - 'x86_64-pc-windows-msvc'

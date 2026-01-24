@@ -6,6 +6,7 @@
 # compute service
 
 apps/compute/target
+apps/compute/**/inputs/
 
 # General stuff
 
