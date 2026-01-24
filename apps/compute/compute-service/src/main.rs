@@ -133,6 +133,20 @@ impl Compute for ComputeService {
 
         let result = match header.tally_rule.as_str() {
             "borda" => run_election(ballots, &BordaRule::default()),
+            "plurality" => run_election(ballots, &PluralityRule::default()),
+            "approval-2" => run_election(ballots, &ApprovalRule::<2>::default()),
+            "approval-3" => run_election(ballots, &ApprovalRule::<3>::default()),
+            "inverse-plurality" => run_election(ballots, &AntiPluralityRule::default()),
+            "black" => run_election(ballots, &BlackRule::default()),
+            "copeland-i" => run_election(ballots, &CopelandIRule::default()),
+            "copeland-ii" => run_election(ballots, &CopelandIIRule::default()),
+            "copeland-iii" => run_election(ballots, &CopelandIIIRule::default()),
+            "simpson" => run_election(ballots, &SimpsonRule::default()),
+            "Minmax" => run_election(ballots, &MinmaxRule::default()),
+            "hare" => run_election(ballots, &HareRule::default()),
+            "nanson" => run_election(ballots, &NansonRule::default()),
+            "coombs" => run_election(ballots, &CoombsRule::default()),
+            "inverse-borda" => run_election(ballots, &InverseBordaRule::default()),
             _ => {
                 return Ok(Response::new(create_error_type(
                     tonic::Code::Unimplemented,
