@@ -206,6 +206,7 @@ dependencies = [
  "tonic",
  "tonic-prost",
  "tonic-prost-build",
+ "voting-core",
 ]
 
 [[package]]
@@ -1352,6 +1353,7 @@ dependencies = [
 name = "voting-core"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "ctor",
  "mockall",
  "rayon",
