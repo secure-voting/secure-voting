@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -21,6 +22,13 @@ type Config struct {
 	MongoDBName string
 
 	MaxUploadBytes int64
+
+	// Kafka / worker
+	KafkaBrokers        []string
+	KafkaTasksTopic     string
+	KafkaResultsTopic   string
+	KafkaGroupID        string
+	WorkerPollInterval  time.Duration
 }
 
 func FromEnv() Config {
@@ -69,7 +77,6 @@ func FromEnv() Config {
 
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		// дефолт под compose: пользователь root/rootpass, authSource=admin
 		mu := os.Getenv("MONGO_INITDB_ROOT_USERNAME")
 		if mu == "" {
 			mu = "root"
@@ -88,6 +95,34 @@ func FromEnv() Config {
 		}
 	}
 
+	// Kafka defaults for compose
+	brokers := splitCSV(os.Getenv("KAFKA_BROKERS"))
+	if len(brokers) == 0 {
+		brokers = []string{"kafka:9092"}
+	}
+
+	tasksTopic := os.Getenv("KAFKA_TASKS_TOPIC")
+	if tasksTopic == "" {
+		tasksTopic = "secure-voting.compute.tasks"
+	}
+
+	resultsTopic := os.Getenv("KAFKA_RESULTS_TOPIC")
+	if resultsTopic == "" {
+		resultsTopic = "secure-voting.compute.results"
+	}
+
+	groupID := os.Getenv("KAFKA_GROUP_ID")
+	if groupID == "" {
+		groupID = "secure-voting-backend-worker"
+	}
+
+	poll := 1 * time.Second
+	if s := os.Getenv("WORKER_POLL_INTERVAL"); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			poll = d
+		}
+	}
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
@@ -103,5 +138,27 @@ func FromEnv() Config {
 		MongoDBName: mongoDB,
 
 		MaxUploadBytes: maxUpload,
+
+		KafkaBrokers:       brokers,
+		KafkaTasksTopic:    tasksTopic,
+		KafkaResultsTopic:  resultsTopic,
+		KafkaGroupID:       groupID,
+		WorkerPollInterval: poll,
 	}
+}
+
+func splitCSV(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

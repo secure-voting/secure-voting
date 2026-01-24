@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,9 +27,9 @@ func NewService(db *pgxpool.Pool, rdb *redis.Client, idemTTL time.Duration) *Ser
 }
 
 type SubmitReq struct {
-	ApprovalSet []string         `json:"approval_set,omitempty"`
-	Ranking     []string         `json:"ranking,omitempty"`
-	Scores      map[string]int   `json:"scores,omitempty"`
+	ApprovalSet []string       `json:"approval_set,omitempty"`
+	Ranking     []string       `json:"ranking,omitempty"`
+	Scores      map[string]int `json:"scores,omitempty"`
 }
 
 type SubmitResp struct {
@@ -38,56 +39,155 @@ type SubmitResp struct {
 }
 
 type MyBallotResp struct {
-	Status     string  `json:"status"`
+	Status      string  `json:"status"`
 	SubmittedAt *string `json:"submitted_at,omitempty"`
 	UpdatedAt   *string `json:"updated_at,omitempty"`
 }
 
-func (s *Service) Submit(ctx context.Context, electionID, userID, idemKey string, req SubmitReq) (SubmitResp, string, error) {
+type electionVoteCfg struct {
+	BallotFormat    string
+	Status          string
+	AccessMode      string
+	Allowed         bool
+	ApprovalMax     *int
+	RankingTopK     *int
+	ScoreMin        *int
+	ScoreMax        *int
+	ScoreStep       *int
+	ScoreAllowSkip  bool
+}
+
+func (s *Service) loadElectionVoteCfg(ctx context.Context, electionID, email string) (electionVoteCfg, string, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+
+	var cfg electionVoteCfg
+	err := s.db.QueryRow(ctx, `
+		SELECT e.ballot_format, e.status, e.access_mode,
+		       e.approval_max_choices, e.ranking_top_k,
+		       e.score_min, e.score_max, e.score_step, e.score_allow_skip,
+		       CASE
+		         WHEN e.access_mode = 'open' THEN true
+		         WHEN EXISTS (
+		           SELECT 1 FROM election_invites i
+		           WHERE i.election_id = e.id
+		             AND lower(i.email) = lower($2)
+		             AND i.status IN ('created','sent','accepted')
+		         ) THEN true
+		         ELSE false
+		       END AS allowed
+		FROM elections e
+		WHERE e.id = $1::uuid
+	`, electionID, email).Scan(
+		&cfg.BallotFormat, &cfg.Status, &cfg.AccessMode,
+		&cfg.ApprovalMax, &cfg.RankingTopK,
+		&cfg.ScoreMin, &cfg.ScoreMax, &cfg.ScoreStep, &cfg.ScoreAllowSkip,
+		&cfg.Allowed,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return electionVoteCfg{}, "not_found", nil
+		}
+		return electionVoteCfg{}, "", err
+	}
+	if !cfg.Allowed {
+		// не раскрываем существование election, если нет доступа
+		return electionVoteCfg{}, "not_found", nil
+	}
+	return cfg, "", nil
+}
+
+func (s *Service) tryGetCached(ctx context.Context, rkey string) (SubmitResp, bool) {
+	if s.rdb == nil {
+		return SubmitResp{}, false
+	}
+	val, err := s.rdb.Get(ctx, rkey).Result()
+	if err != nil {
+		return SubmitResp{}, false
+	}
+	if strings.TrimSpace(val) == "" {
+		return SubmitResp{}, false
+	}
+	var cached SubmitResp
+	if json.Unmarshal([]byte(val), &cached) != nil {
+		return SubmitResp{}, false
+	}
+	if cached.BallotID == "" || cached.Status == "" {
+		return SubmitResp{}, false
+	}
+	return cached, true
+}
+
+func (s *Service) cacheResp(ctx context.Context, rkey string, resp SubmitResp) {
+	if s.rdb == nil {
+		return
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	_ = s.rdb.Set(ctx, rkey, string(b), s.idemTTL).Err()
+}
+
+func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey string, req SubmitReq) (SubmitResp, string, error) {
 	if _, err := uuid.Parse(electionID); err != nil {
 		return SubmitResp{}, "invalid_id", nil
 	}
+	idemKey = strings.TrimSpace(idemKey)
 	if idemKey == "" {
 		return SubmitResp{}, "missing_idempotency_key", nil
+	}
+	if !validateIdempotencyKey(idemKey) {
+		return SubmitResp{}, "invalid_idempotency_key", nil
+	}
+
+	// access + election cfg
+	cfg, code, err := s.loadElectionVoteCfg(ctx, electionID, email)
+	if err != nil {
+		return SubmitResp{}, "", err
+	}
+	if code != "" {
+		return SubmitResp{}, code, nil
+	}
+	if cfg.Status != "active" {
+		return SubmitResp{}, "election_not_active", nil
 	}
 
 	voterHash := computeVoterHash(electionID, userID)
 	rkey := fmt.Sprintf("idem:submit:%s:%s:%s", electionID, voterHash, idemKey)
 
-	// idempotency hit
+	// 1) быстрый idempotency hit
+	if cached, ok := s.tryGetCached(ctx, rkey); ok {
+		return cached, "", nil
+	}
+
+	// 2) защита от гонок: lock в Redis, если он есть
+	var unlock func()
 	if s.rdb != nil {
-		if val, err := s.rdb.Get(ctx, rkey).Result(); err == nil && val != "" {
-			var cached SubmitResp
-			if json.Unmarshal([]byte(val), &cached) == nil {
-				return cached, "", nil
+		lockKey := rkey + ":lock"
+		ok, lockErr := s.rdb.SetNX(ctx, lockKey, "1", 15*time.Second).Result()
+		if lockErr == nil && ok {
+			unlock = func() { _ = s.rdb.Del(ctx, lockKey).Err() }
+		} else {
+			// кто-то уже обрабатывает этот же idemKey -> чуть подождем готового ответа
+			deadline := time.Now().Add(2 * time.Second)
+			for time.Now().Before(deadline) {
+				if cached, ok := s.tryGetCached(ctx, rkey); ok {
+					return cached, "", nil
+				}
+				select {
+				case <-ctx.Done():
+					return SubmitResp{}, "", ctx.Err()
+				case <-time.After(50 * time.Millisecond):
+				}
 			}
+			return SubmitResp{}, "idempotency_in_progress", nil
 		}
 	}
-
-	var ballotFormat, status string
-	var approvalMaxChoices *int
-	var rankingTopK *int
-	var scoreMin, scoreMax, scoreStep *int
-	var scoreAllowSkip bool
-
-	err := s.db.QueryRow(ctx, `
-		SELECT ballot_format, status,
-		       approval_max_choices, ranking_top_k,
-		       score_min, score_max, score_step, score_allow_skip
-		FROM elections
-		WHERE id=$1::uuid
-	`, electionID).Scan(&ballotFormat, &status, &approvalMaxChoices, &rankingTopK, &scoreMin, &scoreMax, &scoreStep, &scoreAllowSkip)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return SubmitResp{}, "not_found", nil
-		}
-		return SubmitResp{}, "", err
+	if unlock != nil {
+		defer unlock()
 	}
 
-	if status != "active" {
-		return SubmitResp{}, "election_not_active", nil
-	}
-
+	// candidates set
 	cRows, err := s.db.Query(ctx, `SELECT id::text FROM candidates WHERE election_id=$1::uuid`, electionID)
 	if err != nil {
 		return SubmitResp{}, "", err
@@ -110,84 +210,23 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, idemKey string
 
 	var approvalJSON, rankingJSON, scoresJSON []byte
 
-	switch ballotFormat {
+	switch cfg.BallotFormat {
 	case "approval":
-		if len(req.ApprovalSet) == 0 {
-			return SubmitResp{}, "invalid_ballot", nil
-		}
-		if approvalMaxChoices != nil && len(req.ApprovalSet) > *approvalMaxChoices {
-			return SubmitResp{}, "too_many_choices", nil
-		}
-		seen := map[string]struct{}{}
-		for _, cid := range req.ApprovalSet {
-			if _, err := uuid.Parse(cid); err != nil {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			if _, ok := cset[cid]; !ok {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			if _, ok := seen[cid]; ok {
-				return SubmitResp{}, "duplicate_candidate", nil
-			}
-			seen[cid] = struct{}{}
+		if vcode := validateApprovalBallot(req.ApprovalSet, cset, cfg.ApprovalMax); vcode != "" {
+			return SubmitResp{}, vcode, nil
 		}
 		approvalJSON, _ = json.Marshal(req.ApprovalSet)
 
 	case "ranking":
-		if len(req.Ranking) == 0 {
-			return SubmitResp{}, "invalid_ballot", nil
-		}
-		if rankingTopK != nil && len(req.Ranking) > *rankingTopK {
-			return SubmitResp{}, "too_many_choices", nil
-		}
-		seen := map[string]struct{}{}
-		for _, cid := range req.Ranking {
-			if _, err := uuid.Parse(cid); err != nil {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			if _, ok := cset[cid]; !ok {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			if _, ok := seen[cid]; ok {
-				return SubmitResp{}, "duplicate_candidate", nil
-			}
-			seen[cid] = struct{}{}
+		if vcode := validateRankingBallot(req.Ranking, cset, cfg.RankingTopK); vcode != "" {
+			return SubmitResp{}, vcode, nil
 		}
 		rankingJSON, _ = json.Marshal(req.Ranking)
 
 	case "score":
-		if req.Scores == nil || len(req.Scores) == 0 {
-			return SubmitResp{}, "invalid_ballot", nil
+		if vcode := validateScoreBallot(req.Scores, candidates, cset, cfg.ScoreMin, cfg.ScoreMax, cfg.ScoreStep, cfg.ScoreAllowSkip); vcode != "" {
+			return SubmitResp{}, vcode, nil
 		}
-		if scoreMin == nil || scoreMax == nil || scoreStep == nil || *scoreStep <= 0 {
-			return SubmitResp{}, "score_rules_missing", nil
-		}
-
-		// no extra candidates
-		for cid := range req.Scores {
-			if _, err := uuid.Parse(cid); err != nil {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			if _, ok := cset[cid]; !ok {
-				return SubmitResp{}, "invalid_candidate_id", nil
-			}
-			v := req.Scores[cid]
-			if v < *scoreMin || v > *scoreMax {
-				return SubmitResp{}, "score_out_of_range", nil
-			}
-			if (v-*scoreMin)%*scoreStep != 0 {
-				return SubmitResp{}, "score_invalid_step", nil
-			}
-		}
-
-		if !scoreAllowSkip {
-			for _, cid := range candidates {
-				if _, ok := req.Scores[cid]; !ok {
-					return SubmitResp{}, "score_missing_candidate", nil
-				}
-			}
-		}
-
 		scoresJSON, _ = json.Marshal(req.Scores)
 
 	default:
@@ -203,8 +242,16 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, idemKey string
 	// insert or update only if draft
 	var ballotID string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO ballots (election_id, voter_hash, format, approval_set, ranking, scores, status)
-		VALUES ($1::uuid, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, 'accepted')
+		INSERT INTO ballots (
+			election_id, voter_hash, format,
+			approval_set, ranking, scores,
+			status, submitted_at, updated_at
+		)
+		VALUES (
+			$1::uuid, $2, $3,
+			$4::jsonb, $5::jsonb, $6::jsonb,
+			'accepted', now(), now()
+		)
 		ON CONFLICT (election_id, voter_hash)
 		DO UPDATE SET
 			format = EXCLUDED.format,
@@ -212,10 +259,11 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, idemKey string
 			ranking = EXCLUDED.ranking,
 			scores = EXCLUDED.scores,
 			status = 'accepted',
+			submitted_at = now(),
 			updated_at = now()
 		WHERE ballots.status = 'draft'
 		RETURNING id::text
-	`, electionID, voterHash, ballotFormat,
+	`, electionID, voterHash, cfg.BallotFormat,
 		toJSONBOrNull(approvalJSON),
 		toJSONBOrNull(rankingJSON),
 		toJSONBOrNull(scoresJSON),
@@ -229,37 +277,52 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, idemKey string
 		return SubmitResp{}, "", err
 	}
 
+	// audit (без раскрытия содержимого бюллетеня)
+	// actor_user_id фиксируем, details минимальные
+	_ = insertAuditTx(ctx, tx, userID, "ballot_submitted", map[string]any{
+		"target_type": "ballot",
+		"target_id":   ballotID,
+		"election_id": electionID,
+		"status":      "accepted",
+	})
+
 	if err := tx.Commit(ctx); err != nil {
 		return SubmitResp{}, "", err
 	}
 
 	resp := SubmitResp{Ok: true, BallotID: ballotID, Status: "accepted"}
-
-	if s.rdb != nil {
-		if b, err := json.Marshal(resp); err == nil {
-			_ = s.rdb.Set(ctx, rkey, string(b), s.idemTTL).Err()
-		}
-	}
+	s.cacheResp(ctx, rkey, resp)
 
 	return resp, "", nil
 }
 
-func (s *Service) MyBallot(ctx context.Context, electionID, userID string) (MyBallotResp, string, error) {
+func (s *Service) MyBallot(ctx context.Context, electionID, userID, email string) (MyBallotResp, string, error) {
 	if _, err := uuid.Parse(electionID); err != nil {
 		return MyBallotResp{}, "invalid_id", nil
 	}
+
+	// проверяем доступ к election (invite/open). если нет доступа -> not_found
+	_, code, err := s.loadElectionVoteCfg(ctx, electionID, email)
+	if err != nil {
+		return MyBallotResp{}, "", err
+	}
+	if code != "" {
+		return MyBallotResp{}, code, nil
+	}
+
 	voterHash := computeVoterHash(electionID, userID)
 
 	var st string
-	var sub time.Time
+	var sub *time.Time
 	var upd *time.Time
 
-	err := s.db.QueryRow(ctx, `
+	err = s.db.QueryRow(ctx, `
 		SELECT status, submitted_at, updated_at
 		FROM ballots
 		WHERE election_id=$1::uuid AND voter_hash=$2
 		LIMIT 1
 	`, electionID, voterHash).Scan(&st, &sub, &upd)
+
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return MyBallotResp{Status: "none"}, "", nil
@@ -267,16 +330,21 @@ func (s *Service) MyBallot(ctx context.Context, electionID, userID string) (MyBa
 		return MyBallotResp{}, "", err
 	}
 
-	subS := sub.UTC().Format(time.RFC3339)
+	var subS *string
+	if sub != nil {
+		v := sub.UTC().Format(time.RFC3339)
+		subS = &v
+	}
+
 	var updS *string
 	if upd != nil {
-		s := upd.UTC().Format(time.RFC3339)
-		updS = &s
+		v := upd.UTC().Format(time.RFC3339)
+		updS = &v
 	}
 
 	return MyBallotResp{
 		Status:      st,
-		SubmittedAt: &subS,
+		SubmittedAt: subS,
 		UpdatedAt:   updS,
 	}, "", nil
 }
@@ -291,4 +359,20 @@ func toJSONBOrNull(b []byte) any {
 		return nil
 	}
 	return string(b)
+}
+
+func insertAuditTx(ctx context.Context, tx pgx.Tx, actorUserID, eventType string, details map[string]any) error {
+	if details == nil {
+		details = map[string]any{}
+	}
+	b, err := json.Marshal(details)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx,
+		`INSERT INTO audit_log (actor_user_id, event_type, details)
+		 VALUES ($1::uuid, $2, $3::jsonb)`,
+		actorUserID, eventType, string(b),
+	)
+	return err
 }

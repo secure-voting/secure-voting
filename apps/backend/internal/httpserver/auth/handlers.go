@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -9,27 +10,39 @@ import (
 	"secure-voting/apps/backend/internal/httpserver/middleware"
 )
 
-type Handlers struct {
-	svc *asvc.Service
+type AuthService interface {
+	Register(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 }
 
-func NewHandlers(svc *asvc.Service) *Handlers {
+type Handlers struct {
+	svc AuthService
+}
+
+func NewHandlers(svc AuthService) *Handlers {
 	return &Handlers{svc: svc}
 }
 
 type registerReq struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	InviteCode string `json:"invite_code,omitempty"`
 }
 
 func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
 	var req registerReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
 		return
 	}
 
-	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password)
+	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password, req.InviteCode)
 	if err != nil {
 		log.Printf("auth.register error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "register failed")
@@ -43,6 +56,12 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "password must be at least 8 characters")
 		case "email_taken":
 			httputil.WriteError(w, http.StatusConflict, "conflict", "email already registered")
+		case "invalid_invite_code":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid invite_code")
+		case "invite_code_inactive":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invite_code is not active")
+		case "invite_email_mismatch":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invite_code does not match email")
 		default:
 			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid input")
 		}
@@ -53,25 +72,46 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginReq struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	InviteCode string `json:"invite_code,omitempty"`
 }
 
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
 	var req loginReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
 		return
 	}
 
-	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password)
+	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password, req.InviteCode)
 	if err != nil {
 		log.Printf("auth.login error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "login failed")
 		return
 	}
 	if code != "" {
-		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
+		switch code {
+		case "invalid_credentials":
+			httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid credentials")
+		case "invalid_email":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid email")
+		case "invalid_password":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid password")
+		case "invalid_invite_code":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid invite_code")
+		case "invite_code_inactive":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invite_code is not active")
+		case "invite_email_mismatch":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invite_code does not match email")
+		default:
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid input")
+		}
 		return
 	}
 
@@ -79,6 +119,11 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
 	uid, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
 		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
@@ -95,14 +140,24 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+
 	rawToken, ok := middleware.TokenFromContext(r.Context())
 	if !ok {
 		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
 		return
 	}
-	uid, _ := middleware.UserIDFromContext(r.Context())
 
-	_, err := h.svc.Logout(r.Context(), rawToken, &uid)
+	uid, okUID := middleware.UserIDFromContext(r.Context())
+	var actor *string
+	if okUID {
+		actor = &uid
+	}
+
+	_, err := h.svc.Logout(r.Context(), rawToken, actor)
 	if err != nil {
 		log.Printf("auth.logout error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "logout failed")

@@ -78,6 +78,7 @@ func Routes(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mongo.D
 
 	// Elections
 	mux.Handle("GET /api/v1/elections", middleware.RequireAuth(authSvc, http.HandlerFunc(electionsH.List)))
+	mux.Handle("GET /api/v1/elections/{id}", middleware.RequireAuth(authSvc, http.HandlerFunc(electionsH.Get)))
 	mux.Handle("POST /api/v1/elections",
 		middleware.RequireAuth(authSvc,
 			middleware.RequireRole("admin", http.HandlerFunc(electionsH.Create)),

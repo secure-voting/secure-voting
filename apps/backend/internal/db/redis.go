@@ -8,14 +8,13 @@ import (
 )
 
 func NewRedisClient(ctx context.Context, addr, password string) (*redis.Client, error) {
-	rdb := redis.NewClient(&redis.Options{
-		Addr:         addr,
-		Password:     password,
-		DB:           0,
-		DialTimeout:  3 * time.Second,
-		ReadTimeout:  3 * time.Second,
-		WriteTimeout: 3 * time.Second,
-	})
+	opt := &redis.Options{
+		Addr:        addr,
+		Password:    password,
+		DB:          0,
+		DialTimeout: 3 * time.Second,
+	}
+	rdb := redis.NewClient(opt)
 
 	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()

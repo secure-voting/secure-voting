@@ -37,6 +37,12 @@ type AuthResult struct {
 	User        User   `json:"user"`
 }
 
+type RegisterInput struct {
+	Email      string
+	Password   string
+	InviteCode string
+}
+
 func ValidateEmail(email string) bool {
 	email = strings.TrimSpace(email)
 	if email == "" {
@@ -50,8 +56,63 @@ func ValidatePassword(password string) bool {
 	return len(password) >= 8
 }
 
-func (s *Service) Register(ctx context.Context, email, password string) (AuthResult, string, error) {
+type acceptedInvite struct {
+	ID         string
+	ElectionID string
+}
+
+func (s *Service) acceptInviteTx(ctx context.Context, tx pgx.Tx, email, inviteCode string) (acceptedInvite, string, error) {
+	inviteCode = strings.TrimSpace(inviteCode)
+	if inviteCode == "" {
+		return acceptedInvite{}, "", nil
+	}
+
+	inviteHashHex := sha256Hex(inviteCode)
+
+	var inviteID, inviteEmail, inviteStatus, inviteElectionID string
+	err := tx.QueryRow(ctx, `
+		SELECT id::text, email, status, election_id::text
+		FROM election_invites
+		WHERE invite_code_hash = $1
+		LIMIT 1
+	`, inviteHashHex).Scan(&inviteID, &inviteEmail, &inviteStatus, &inviteElectionID)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return acceptedInvite{}, "invalid_invite_code", nil
+	}
+	if err != nil {
+		return acceptedInvite{}, "", err
+	}
+
+	if inviteStatus != "created" && inviteStatus != "sent" {
+		return acceptedInvite{}, "invite_code_inactive", nil
+	}
+
+	// Инвайт у нас создается на конкретный email — требуем совпадение.
+	// (Даже если вдруг попадется пустой email, оставим старую логику "если задан — проверяем".)
+	if strings.TrimSpace(inviteEmail) != "" && strings.ToLower(strings.TrimSpace(inviteEmail)) != email {
+		return acceptedInvite{}, "invite_email_mismatch", nil
+	}
+
+	ct, err := tx.Exec(ctx, `
+		UPDATE election_invites
+		SET status = 'accepted', accepted_at = now()
+		WHERE id = $1::uuid AND status IN ('created','sent')
+	`, inviteID)
+	if err != nil {
+		return acceptedInvite{}, "", err
+	}
+	if ct.RowsAffected() == 0 {
+		return acceptedInvite{}, "invite_code_inactive", nil
+	}
+
+	return acceptedInvite{ID: inviteID, ElectionID: inviteElectionID}, "", nil
+}
+
+func (s *Service) Register(ctx context.Context, email, password, inviteCode string) (AuthResult, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
+	inviteCode = strings.TrimSpace(inviteCode)
+
 	if !ValidateEmail(email) {
 		return AuthResult{}, "invalid_email", nil
 	}
@@ -71,17 +132,31 @@ func (s *Service) Register(ctx context.Context, email, password string) (AuthRes
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	var inv acceptedInvite
+	if inviteCode != "" {
+		got, code, err := s.acceptInviteTx(ctx, tx, email, inviteCode)
+		if err != nil {
+			return AuthResult{}, "", err
+		}
+		if code != "" {
+			return AuthResult{}, code, nil
+		}
+		inv = got
+	}
+
 	role := "voter"
 	var userID string
+
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (email, password_hash, role)
 		 VALUES ($1, $2, $3)
 		 RETURNING id::text`,
 		email, passHash, role,
 	).Scan(&userID)
+
 	if err != nil {
-		low := strings.ToLower(err.Error())
-		if strings.Contains(low, "duplicate") || strings.Contains(low, "unique") {
+		le := strings.ToLower(err.Error())
+		if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") {
 			return AuthResult{}, "email_taken", nil
 		}
 		return AuthResult{}, "", err
@@ -92,14 +167,22 @@ func (s *Service) Register(ctx context.Context, email, password string) (AuthRes
 		return AuthResult{}, "", err
 	}
 
-	_ = s.insertAudit(ctx, tx, &userID, "user_registered", map[string]any{
+	details := map[string]any{
 		"target_type": "user",
 		"target_id":   userID,
 		"after": map[string]any{
 			"email": email,
 			"role":  role,
 		},
-	})
+	}
+	if inviteCode != "" {
+		details["invite"] = map[string]any{
+			"id":          inv.ID,
+			"election_id": inv.ElectionID,
+		}
+	}
+
+	_ = s.insertAudit(ctx, tx, &userID, "user_registered", details)
 
 	if err := tx.Commit(ctx); err != nil {
 		return AuthResult{}, "", err
@@ -116,8 +199,10 @@ func (s *Service) Register(ctx context.Context, email, password string) (AuthRes
 	}, "", nil
 }
 
-func (s *Service) Login(ctx context.Context, email, password string) (AuthResult, string, error) {
+func (s *Service) Login(ctx context.Context, email, password, inviteCode string) (AuthResult, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
+	inviteCode = strings.TrimSpace(inviteCode)
+
 	if !ValidateEmail(email) {
 		return AuthResult{}, "invalid_email", nil
 	}
@@ -149,15 +234,43 @@ func (s *Service) Login(ctx context.Context, email, password string) (AuthResult
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	var inv acceptedInvite
+	if inviteCode != "" {
+		got, code, err := s.acceptInviteTx(ctx, tx, email, inviteCode)
+		if err != nil {
+			return AuthResult{}, "", err
+		}
+		if code != "" {
+			return AuthResult{}, code, nil
+		}
+		inv = got
+
+		_ = s.insertAudit(ctx, tx, &userID, "invite_accepted", map[string]any{
+			"target_type": "election_invite",
+			"target_id":   inv.ID,
+			"details": map[string]any{
+				"election_id": inv.ElectionID,
+				"email":       email,
+			},
+		})
+	}
+
 	token, _, expiresAt, err := s.issueToken(ctx, tx, userID)
 	if err != nil {
 		return AuthResult{}, "", err
 	}
 
-	_ = s.insertAudit(ctx, tx, &userID, "user_logged_in", map[string]any{
+	loginDetails := map[string]any{
 		"target_type": "user",
 		"target_id":   userID,
-	})
+	}
+	if inviteCode != "" {
+		loginDetails["invite"] = map[string]any{
+			"id":          inv.ID,
+			"election_id": inv.ElectionID,
+		}
+	}
+	_ = s.insertAudit(ctx, tx, &userID, "user_logged_in", loginDetails)
 
 	if err := tx.Commit(ctx); err != nil {
 		return AuthResult{}, "", err
@@ -174,13 +287,12 @@ func (s *Service) Login(ctx context.Context, email, password string) (AuthResult
 	}, "", nil
 }
 
-// TokenVerifier interface implementation (used by middleware)
 func (s *Service) VerifyAccessToken(ctx context.Context, rawToken string) (userID, email, role string, ok bool, err error) {
 	rawToken = strings.TrimSpace(rawToken)
 	if rawToken == "" {
 		return "", "", "", false, nil
 	}
-	tokenHashHex := hashToken(rawToken)
+	tokenHashHex := sha256Hex(rawToken)
 
 	var expiresAt time.Time
 	err = s.db.QueryRow(ctx,
@@ -198,6 +310,7 @@ func (s *Service) VerifyAccessToken(ctx context.Context, rawToken string) (userI
 		}
 		return "", "", "", false, err
 	}
+
 	_ = expiresAt
 	return userID, email, role, true, nil
 }
@@ -207,7 +320,7 @@ func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *stri
 	if rawToken == "" {
 		return false, nil
 	}
-	tokenHashHex := hashToken(rawToken)
+	tokenHashHex := sha256Hex(rawToken)
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -237,7 +350,8 @@ func (s *Service) issueToken(ctx context.Context, tx pgx.Tx, userID string) (tok
 		return "", "", time.Time{}, err
 	}
 	token = hex.EncodeToString(b)
-	tokenHashHex = hashToken(token)
+
+	tokenHashHex = sha256Hex(token)
 	expiresAt = time.Now().UTC().Add(s.tokenTTL)
 
 	scopes := []string{}
@@ -279,7 +393,7 @@ func (s *Service) insertAudit(ctx context.Context, tx pgx.Tx, actorUserID *strin
 	return err
 }
 
-func hashToken(raw string) string {
-	h := sha256.Sum256([]byte(raw))
+func sha256Hex(s string) string {
+	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
 }

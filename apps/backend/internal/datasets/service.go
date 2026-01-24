@@ -29,14 +29,15 @@ type Candidate struct {
 }
 
 type Dataset struct {
-	ID          string      `json:"id" bson:"-"`
-	Name        string      `json:"name" bson:"name"`
-	Description string      `json:"description,omitempty" bson:"description,omitempty"`
-	Source      string      `json:"source" bson:"source"`
-	Format      string      `json:"format" bson:"format"`
-	Candidates  []Candidate `json:"candidates" bson:"candidates"`
-	CreatedAt   string      `json:"created_at" bson:"-"`
-	Seed        *int64      `json:"seed,omitempty" bson:"seed,omitempty"`
+	ID          string      	`json:"id" bson:"-"`
+	Name        string      	`json:"name" bson:"name"`
+	Description string      	`json:"description,omitempty" bson:"description,omitempty"`
+	Source      string      	`json:"source" bson:"source"`
+	Format      string      	`json:"format" bson:"format"`
+	Candidates  []Candidate 	`json:"candidates" bson:"candidates"`
+	CreatedAt   string      	`json:"created_at" bson:"-"`
+	Seed        *int64      	`json:"seed,omitempty" bson:"seed,omitempty"`
+	Parameters map[string]any 	`json:"parameters,omitempty" bson:"-"`
 }
 
 type ListItem struct {
@@ -82,6 +83,7 @@ type DatasetDoc struct {
 	Raw         primitive.Binary `bson:"raw,omitempty"`
 	RawFilename string           `bson:"raw_filename,omitempty"`
 	RawMime     string           `bson:"raw_mime,omitempty"`
+	Parameters map[string]any 	 `bson:"parameters,omitempty"`
 }
 
 type BallotDoc struct {
@@ -91,6 +93,23 @@ type BallotDoc struct {
 	Ranking   []string           `bson:"ranking,omitempty"`
 	Scores    map[string]int     `bson:"scores,omitempty"`
 	VoterRef  string             `bson:"voter_ref,omitempty"`
+}
+
+type importFile struct {
+	Dataset struct {
+		Name        string      `json:"name"`
+		Description string      `json:"description,omitempty"`
+		Format      string      `json:"format"`
+		Candidates  []Candidate `json:"candidates"`
+		Seed        *int64      `json:"seed,omitempty"`
+		Parameters  map[string]any `json:"parameters,omitempty"`
+	} `json:"dataset"`
+	Ballots []struct {
+		VoterRef string            `json:"voter_ref,omitempty"`
+		Approval []string          `json:"approval,omitempty"`
+		Ranking  []string          `json:"ranking,omitempty"`
+		Scores   map[string]int    `json:"scores,omitempty"`
+	} `json:"ballots"`
 }
 
 func (s *Service) List(ctx context.Context) ([]ListItem, error) {
@@ -142,6 +161,7 @@ func (s *Service) Get(ctx context.Context, id string) (Dataset, string, error) {
 		Candidates:  d.Candidates,
 		CreatedAt:   d.CreatedAt.UTC().Format(time.RFC3339),
 		Seed:        d.Seed,
+		Parameters:  d.Parameters,
 	}, "", nil
 }
 
@@ -189,13 +209,7 @@ func (s *Service) Download(ctx context.Context, id string) ([]byte, string, stri
 
 func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multipart.FileHeader, file multipart.File) (string, string, error) {
 	name := strings.TrimSpace(meta.Name)
-	if name == "" {
-		return "", "invalid_name", nil
-	}
 	format := strings.TrimSpace(meta.Format)
-	if format == "" {
-		format = "external"
-	}
 
 	// читаем файл в память (ограничение на уровне handler)
 	b, err := io.ReadAll(file)
@@ -208,13 +222,50 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 		mime = "application/octet-stream"
 	}
 
+	// попробуем распарсить JSON в формате export: {dataset:{...}, ballots:[...]}
+	var parsed importFile
+	if strings.Contains(strings.ToLower(mime), "json") {
+		if err := json.Unmarshal(b, &parsed); err == nil && strings.TrimSpace(parsed.Dataset.Format) != "" {
+			// meta имеет приоритет
+			if name == "" {
+				name = strings.TrimSpace(parsed.Dataset.Name)
+			}
+			if format == "" {
+				format = strings.TrimSpace(parsed.Dataset.Format)
+			}
+		}
+	}
+
+	if name == "" {
+		return "", "invalid_name", nil
+	}
+
+	switch format {
+	case "approval", "ranking", "score":
+	default:
+		// если формат не задан/невалиден — импорт всё равно сохраним как raw,
+		// но вернем код, чтобы клиент понимал что датасет не пригоден для экспериментов
+		// (можешь сделать строго invalid_format, если хочешь “жестко”)
+		return "", "invalid_format", nil
+	}
+
+	candidates := parsed.Dataset.Candidates
+	params := parsed.Dataset.Parameters
+	seed := parsed.Dataset.Seed
+	desc := strings.TrimSpace(meta.Description)
+	if desc == "" {
+		desc = strings.TrimSpace(parsed.Dataset.Description)
+	}
+
 	doc := DatasetDoc{
 		Name:        name,
-		Description: strings.TrimSpace(meta.Description),
+		Description: desc,
 		Source:      "import",
 		Format:      format,
-		Candidates:  []Candidate{},
+		Candidates:  candidates,
 		CreatedAt:   time.Now().UTC(),
+		Seed:        seed,
+		Parameters:  params,
 		Raw:         primitive.Binary{Subtype: 0x00, Data: b},
 		RawFilename: fileHeader.Filename,
 		RawMime:     mime,
@@ -224,26 +275,160 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 	if err != nil {
 		return "", "", err
 	}
+	dsid := res.InsertedID.(primitive.ObjectID)
 
-	oid := res.InsertedID.(primitive.ObjectID)
-	return oid.Hex(), "", nil
+	// если JSON распознан и есть ballots — запишем в dataset_ballots, чтобы датасет можно было гонять в экспериментах
+	if len(parsed.Ballots) > 0 && len(candidates) > 0 {
+		cset := map[string]struct{}{}
+		for _, c := range candidates {
+			id := strings.TrimSpace(c.ID)
+			if id != "" {
+				cset[id] = struct{}{}
+			}
+		}
+
+		bdocs := make([]BallotDoc, 0, len(parsed.Ballots))
+		for i, it := range parsed.Ballots {
+			vref := strings.TrimSpace(it.VoterRef)
+			if vref == "" {
+				vref = "v" + itoa(i+1)
+			}
+
+			bd := BallotDoc{
+				DatasetID: dsid,
+				VoterRef:  vref,
+			}
+
+			switch format {
+			case "approval":
+				if len(it.Approval) == 0 {
+					continue
+				}
+				seen := map[string]struct{}{}
+				for _, cid := range it.Approval {
+					cid = strings.TrimSpace(cid)
+					if cid == "" {
+						continue
+					}
+					if _, ok := cset[cid]; !ok {
+						continue
+					}
+					if _, ok := seen[cid]; ok {
+						continue
+					}
+					seen[cid] = struct{}{}
+					bd.Approval = append(bd.Approval, cid)
+				}
+				if len(bd.Approval) == 0 {
+					continue
+				}
+
+			case "ranking":
+				if len(it.Ranking) == 0 {
+					continue
+				}
+				seen := map[string]struct{}{}
+				for _, cid := range it.Ranking {
+					cid = strings.TrimSpace(cid)
+					if cid == "" {
+						continue
+					}
+					if _, ok := cset[cid]; !ok {
+						continue
+					}
+					if _, ok := seen[cid]; ok {
+						continue
+					}
+					seen[cid] = struct{}{}
+					bd.Ranking = append(bd.Ranking, cid)
+				}
+				if len(bd.Ranking) == 0 {
+					continue
+				}
+
+			case "score":
+				if len(it.Scores) == 0 {
+					continue
+				}
+				bd.Scores = map[string]int{}
+				for cid, v := range it.Scores {
+					cid = strings.TrimSpace(cid)
+					if cid == "" {
+						continue
+					}
+					if _, ok := cset[cid]; !ok {
+						continue
+					}
+					bd.Scores[cid] = v
+				}
+				if len(bd.Scores) == 0 {
+					continue
+				}
+			}
+
+			bdocs = append(bdocs, bd)
+		}
+
+		if len(bdocs) > 0 {
+			_, err = s.db.Collection("dataset_ballots").InsertMany(ctx, toAny(bdocs))
+			if err != nil {
+				return "", "", err
+			}
+		}
+	}
+
+	return dsid.Hex(), "", nil
 }
 
 func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string, error) {
 	if strings.TrimSpace(req.Name) == "" {
 		return "", "invalid_name", nil
 	}
-	switch req.Format {
-	case "approval", "ranking", "score":
-	default:
-		return "", "invalid_format", nil
-	}
-	if len(req.Candidates) < 2 {
-		return "", "candidates_required", nil
-	}
-	if req.Voters <= 0 || req.Voters > 2000 {
-		return "", "invalid_voters", nil
-	}
+			switch req.Format {
+		case "approval":
+			// q: максимум выбираемых, по умолчанию = все кандидаты
+			q := len(cids)
+			if req.ApprovalMaxChoices != nil && *req.ApprovalMaxChoices > 0 {
+				q = *req.ApprovalMaxChoices
+			}
+			if q > len(cids) {
+				q = len(cids)
+			}
+			if q < 1 {
+				q = 1
+			}
+
+			// k в [1..q]
+			k := 1 + int(rng.next()%uint64(q))
+			b.Approval = pickSubset(rng, cids, k)
+
+		case "ranking":
+			top := len(cids)
+			if req.RankingTopK != nil && *req.RankingTopK > 0 && *req.RankingTopK < top {
+				top = *req.RankingTopK
+			}
+			sh := shuffle(rng, cids)
+			b.Ranking = sh[:top]
+
+		case "score":
+			if req.ScoreMin == nil || req.ScoreMax == nil || req.ScoreStep == nil || *req.ScoreStep <= 0 {
+				return "", "score_rules_missing", nil
+			}
+			if *req.ScoreMin > *req.ScoreMax {
+				return "", "score_rules_invalid_range", nil
+			}
+			if ((*req.ScoreMax - *req.ScoreMin) % *req.ScoreStep) != 0 {
+				return "", "score_rules_invalid_step", nil
+			}
+
+			b.Scores = map[string]int{}
+			steps := ((*req.ScoreMax - *req.ScoreMin) / *req.ScoreStep) + 1
+			for _, id := range cids {
+				v := int(rng.next() % uint64(steps))
+				b.Scores[id] = *req.ScoreMin + v*(*req.ScoreStep)
+			}
+		}
+
 
 	seed := req.Seed
 	if seed == nil {
@@ -257,7 +442,28 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		seed = &v
 	}
 
-	// генерим бюллетени
+	params := map[string]any{}
+	switch req.Format {
+	case "approval":
+		if req.ApprovalMaxChoices != nil {
+			params["approval_max_choices"] = *req.ApprovalMaxChoices
+		}
+	case "ranking":
+		if req.RankingTopK != nil {
+			params["ranking_top_k"] = *req.RankingTopK
+		}
+	case "score":
+		if req.ScoreMin != nil {
+			params["score_min"] = *req.ScoreMin
+		}
+		if req.ScoreMax != nil {
+			params["score_max"] = *req.ScoreMax
+		}
+		if req.ScoreStep != nil {
+			params["score_step"] = *req.ScoreStep
+		}
+	}
+
 	dsDoc := DatasetDoc{
 		Name:        strings.TrimSpace(req.Name),
 		Description: strings.TrimSpace(req.Description),
@@ -266,6 +472,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		Candidates:  req.Candidates,
 		CreatedAt:   time.Now().UTC(),
 		Seed:        seed,
+		Parameters:  params,
 	}
 
 	ins, err := s.db.Collection("datasets").InsertOne(ctx, dsDoc)
@@ -339,6 +546,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 			"candidates":  dsDoc.Candidates,
 			"created_at":  dsDoc.CreatedAt.UTC().Format(time.RFC3339),
 			"seed":        dsDoc.Seed,
+			"parameters":  dsDoc.Parameters,
 		},
 		"ballots": ballotsToJSON(ballots),
 	}

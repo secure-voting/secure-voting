@@ -1,6 +1,7 @@
 package elections
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strings"
@@ -10,11 +11,22 @@ import (
 	"secure-voting/apps/backend/internal/httpserver/middleware"
 )
 
-type Handlers struct {
-	svc *elections.Service
+type Service interface {
+	Create(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error)
+	ListForUser(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error)
+	Get(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error)
+	GetBallotMeta(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error)
+	UpdateRules(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error)
+	Action(ctx context.Context, electionID, adminUserID, action string) (string, error)
+	CreateInvite(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error)
+	ListInvites(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error)
 }
 
-func NewHandlers(svc *elections.Service) *Handlers {
+type Handlers struct {
+	svc Service
+}
+
+func NewHandlers(svc Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
@@ -53,6 +65,34 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+// GET /api/v1/elections/{id}
+func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
+	eid := strings.TrimSpace(r.PathValue("id"))
+	uid, _ := middleware.UserIDFromContext(r.Context())
+	email, _ := middleware.EmailFromContext(r.Context())
+	role, _ := middleware.RoleFromContext(r.Context())
+
+	item, code, err := h.svc.Get(r.Context(), eid, uid, email, role)
+	if err != nil {
+		log.Printf("elections.get error: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get election failed")
+		return
+	}
+	if code != "" {
+		switch code {
+		case "not_found":
+			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+		case "invalid_id":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid id")
+		default:
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+		}
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, item)
 }
 
 func (h *Handlers) BallotMeta(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +139,8 @@ func (h *Handlers) UpdateRules(w http.ResponseWriter, r *http.Request) {
 		switch code {
 		case "not_found":
 			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+		case "invalid_status":
+			httputil.WriteError(w, http.StatusConflict, "conflict", "rules can be updated only in draft/scheduled")
 		default:
 			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
 		}

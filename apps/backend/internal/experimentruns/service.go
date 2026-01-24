@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"secure-voting/apps/backend/internal/auditlog"
 )
@@ -54,7 +55,8 @@ type Result struct {
 }
 
 func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req BatchReq) ([]BatchItem, string, error) {
-	if _, err := uuid.Parse(strings.TrimSpace(req.ExperimentID)); err != nil {
+	expID := strings.TrimSpace(req.ExperimentID)
+	if _, err := uuid.Parse(expID); err != nil {
 		return nil, "invalid_experiment_id", nil
 	}
 	if len(req.DatasetIDs) == 0 {
@@ -64,7 +66,10 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 	// доступ: admin видит всё, researcher только свои эксперименты
 	if role != "admin" {
 		var x int
-		err := s.db.QueryRow(ctx, `SELECT 1 FROM experiments WHERE id=$1::uuid AND created_by=$2::uuid`, req.ExperimentID, createdBy).Scan(&x)
+		err := s.db.QueryRow(ctx, `
+			SELECT 1 FROM experiments
+			WHERE id=$1::uuid AND created_by=$2::uuid
+		`, expID, createdBy).Scan(&x)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, "not_found", nil
@@ -73,32 +78,58 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		}
 	}
 
+	// normalize + dedupe + validate ObjectID hex
+	unique := make([]string, 0, len(req.DatasetIDs))
+	seen := make(map[string]struct{}, len(req.DatasetIDs))
+	oids := make([]primitive.ObjectID, 0, len(req.DatasetIDs))
+
+	for _, dsidRaw := range req.DatasetIDs {
+		dsid := strings.TrimSpace(dsidRaw)
+		if dsid == "" {
+			return nil, "invalid_dataset_id", nil
+		}
+		if _, ok := seen[dsid]; ok {
+			continue
+		}
+		oid, err := primitive.ObjectIDFromHex(dsid)
+		if err != nil {
+			return nil, "invalid_dataset_id", nil
+		}
+		seen[dsid] = struct{}{}
+		unique = append(unique, dsid)
+		oids = append(oids, oid)
+	}
+
+	// existence check in Mongo
+	ok, err := s.validateDatasetsExist(ctx, oids)
+	if err != nil {
+		return nil, "", err
+	}
+	if !ok {
+		return nil, "dataset_not_found", nil
+	}
+
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return nil, "", err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	var out []BatchItem
+	out := make([]BatchItem, 0, len(unique))
 
-	for _, dsid := range req.DatasetIDs {
-		dsid = strings.TrimSpace(dsid)
-		if dsid == "" {
-			return nil, "invalid_dataset_id", nil
-		}
-
+	for _, dsid := range unique {
 		var runID string
 		err := tx.QueryRow(ctx, `
 			INSERT INTO experiment_runs (experiment_id, dataset_id, status)
 			VALUES ($1::uuid, $2, 'queued')
 			RETURNING id::text
-		`, req.ExperimentID, dsid).Scan(&runID)
+		`, expID, dsid).Scan(&runID)
 		if err != nil {
 			return nil, "", err
 		}
 
 		payload := map[string]any{
-			"experiment_id": req.ExperimentID,
+			"experiment_id": expID,
 			"dataset_id":    dsid,
 			"run_id":        runID,
 		}
@@ -109,7 +140,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 			INSERT INTO jobs (kind, status, progress, created_by, experiment_id, experiment_run_id, payload)
 			VALUES ('experiment_run', 'queued', 0, $1::uuid, $2::uuid, $3::uuid, $4::jsonb)
 			RETURNING id::text
-		`, createdBy, req.ExperimentID, runID, string(pb)).Scan(&jobID)
+		`, createdBy, expID, runID, string(pb)).Scan(&jobID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -119,7 +150,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 
 	_ = auditlog.Insert(ctx, tx, &createdBy, "experiment_runs_batch_created", map[string]any{
 		"target_type": "experiment",
-		"target_id":   req.ExperimentID,
+		"target_id":   expID,
 		"after": map[string]any{
 			"count": len(out),
 		},
@@ -128,8 +159,22 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 	if err := tx.Commit(ctx); err != nil {
 		return nil, "", err
 	}
-
 	return out, "", nil
+}
+
+func (s *Service) validateDatasetsExist(ctx context.Context, oids []primitive.ObjectID) (bool, error) {
+	if len(oids) == 0 {
+		return false, nil
+	}
+	coll := s.mongodb.Collection("datasets")
+
+	// считаем количество найденных документов по $in
+	filter := bson.M{"_id": bson.M{"$in": oids}}
+	cnt, err := coll.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+	return int(cnt) == len(oids), nil
 }
 
 func (s *Service) List(ctx context.Context, role, userID, experimentID string) ([]Run, string, error) {
