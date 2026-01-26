@@ -749,22 +749,21 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return "", err
 		}
 
-		// 2) проставляем published_at в последнем results
 		tag, err := tx.Exec(ctx, `
-			WITH latest AS (
-				SELECT id
-				FROM results
-				WHERE election_id=$1::uuid
-				ORDER BY version DESC
-				LIMIT 1
-			)
-			UPDATE results r
-			SET published_at=$2
-			FROM latest
-			WHERE r.id = latest.id
+		WITH latest AS (
+		SELECT id
+		FROM results
+		WHERE election_id = $1::uuid
+		ORDER BY version DESC
+		LIMIT 1
+		)
+		UPDATE results r
+		SET published_at = COALESCE(r.published_at, $2)
+		FROM latest
+		WHERE r.id = latest.id
 		`, electionID, now)
 		if err != nil {
-			return "", err
+			return "internal", err
 		}
 		if tag.RowsAffected() == 0 {
 			return "no_results", nil
@@ -903,31 +902,40 @@ func (s *Service) ListInvites(ctx context.Context, electionID, adminUserID strin
 
 func (s *Service) isAccessible(ctx context.Context, electionID, userID, email, role string) (bool, error) {
 	if role == "admin" {
-		var x int
-		err := s.db.QueryRow(ctx, `SELECT 1 FROM elections WHERE id=$1::uuid AND created_by=$2::uuid`, electionID, userID).Scan(&x)
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return false, nil
-			}
-			return false, err
+		return true, nil
+	}
+
+	var accessMode string
+	var createdBy string
+
+	err := s.pg.QueryRow(ctx, `
+		SELECT access_mode, created_by::text
+		FROM elections
+		WHERE id=$1::uuid
+	`, electionID).Scan(&accessMode, &createdBy)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
 		}
+		return false, err
+	}
+
+	if userID != "" && createdBy == userID {
+		return true, nil
+	}
+
+	if accessMode == "open" {
 		return true, nil
 	}
 
 	var x int
-	err := s.db.QueryRow(ctx, `
+	err = s.pg.QueryRow(ctx, `
 		SELECT 1
-		FROM elections e
-		WHERE e.id=$1::uuid
-		  AND (
-			e.access_mode='open'
-			OR EXISTS (
-				SELECT 1 FROM election_invites i
-				WHERE i.election_id=e.id
-				  AND lower(i.email)=lower($2)
-				  AND i.status IN ('created','sent','accepted')
-			)
-		  )
+		FROM election_invites i
+		WHERE i.election_id=$1::uuid
+		  AND lower(i.email)=lower($2)
+		  AND i.status IN ('created','sent','accepted')
+		LIMIT 1
 	`, electionID, email).Scan(&x)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -935,8 +943,10 @@ func (s *Service) isAccessible(ctx context.Context, electionID, userID, email, r
 		}
 		return false, err
 	}
+
 	return true, nil
 }
+
 
 func nextStatus(cur, action string) (string, bool) {
 	switch action {
@@ -951,7 +961,6 @@ func nextStatus(cur, action string) (string, bool) {
 	case "close":
 		return "closed", cur == "active" || cur == "paused"
 	case "publish":
-		// сейчас допускаем publish из closed/results_ready (как у тебя было)
 		return "published", cur == "closed" || cur == "results_ready"
 	default:
 		return "", false

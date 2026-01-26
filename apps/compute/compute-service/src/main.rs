@@ -19,6 +19,9 @@ pub mod securevoting {
 
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
     RunResult {
+        method: String::new(),
+        params_json: vec![],
+
         status: "error".to_owned(),
         error_text: format!("ErrorCode: {code}, details: {}", message.into()),
         winners_json: vec![],
@@ -40,6 +43,9 @@ fn create_winner_response(winners: Vec<String>) -> RunResult {
     );
 
     RunResult {
+        method: String::new(),
+        params_json: vec![],
+        
         status: "done".to_owned(),
         error_text: String::new(),
         winners_json: winner_json.as_bytes().to_vec(),

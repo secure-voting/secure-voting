@@ -15,15 +15,14 @@ message RunHeader {
   string kind = 1;
   string run_id = 2;
   string election_id = 3;
-  string dataset_id = 4;
+  string experiment_id = 4;
+  string dataset_id = 5;
 
-  string tally_rule = 5;
-  string ballot_format = 6;
+  string tally_rule = 6;
+  string ballot_format = 7;
 
-  google.protobuf.Int32Value committee_size = 7;
-  google.protobuf.StringValue quota_type = 8;
-
-  google.protobuf.BoolValue show_aggregates = 9;
+  google.protobuf.Int32Value committee_size = 8;
+  google.protobuf.StringValue quota_type = 9;
 
   google.protobuf.Int32Value approval_max_choices = 10;
   google.protobuf.Int32Value ranking_top_k = 11;
@@ -35,6 +34,9 @@ message RunHeader {
 
   bytes params_json = 16;
   repeated Candidate candidates = 17;
+
+  google.protobuf.BoolValue show_aggregates = 18;
+
 }
 
 message ApprovalBallot {
@@ -78,15 +80,18 @@ message RunResult {
   string status = 1;
   string error_text = 2;
 
-  bytes winners_json = 3;
-  bytes metrics_json = 4;
-  bytes protocol_json = 5;
+  string method = 3;
+  bytes params_json = 4;
 
-  bytes timings_json = 6;
-  bytes artifacts_json = 7;
+  bytes winners_json = 5;
+  bytes metrics_json = 6;
+  bytes protocol_json = 7;
+
+  bytes timings_json   = 8;
+  bytes artifacts_json = 9;
+
 }
 
 service Compute {
   rpc Run (stream RunChunk) returns (RunResult);
 }
-

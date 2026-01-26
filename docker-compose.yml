@@ -3,7 +3,7 @@ services:
     build: apps/frontend
     container_name: ts-frontend
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     networks:
       - app_network
     restart: unless-stopped

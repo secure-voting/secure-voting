@@ -34,6 +34,9 @@ message RunHeader {
 
   bytes params_json = 16;
   repeated Candidate candidates = 17;
+
+  google.protobuf.BoolValue show_aggregates = 18;
+
 }
 
 message ApprovalBallot {
@@ -83,6 +86,10 @@ message RunResult {
   bytes winners_json = 5;
   bytes metrics_json = 6;
   bytes protocol_json = 7;
+
+  bytes timings_json   = 8;
+  bytes artifacts_json = 9;
+
 }
 
 service Compute {

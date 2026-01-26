@@ -93,6 +93,7 @@ type RunHeader struct {
 	ScoreAllowSkip     *wrappers.BoolValue    `protobuf:"bytes,15,opt,name=score_allow_skip,json=scoreAllowSkip,proto3" json:"score_allow_skip,omitempty"`
 	ParamsJson         []byte                 `protobuf:"bytes,16,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`
 	Candidates         []*Candidate           `protobuf:"bytes,17,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	ShowAggregates     *wrappers.BoolValue    `protobuf:"bytes,18,opt,name=show_aggregates,json=showAggregates,proto3" json:"show_aggregates,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -242,6 +243,13 @@ func (x *RunHeader) GetParamsJson() []byte {
 func (x *RunHeader) GetCandidates() []*Candidate {
 	if x != nil {
 		return x.Candidates
+	}
+	return nil
+}
+
+func (x *RunHeader) GetShowAggregates() *wrappers.BoolValue {
+	if x != nil {
+		return x.ShowAggregates
 	}
 	return nil
 }
@@ -671,6 +679,8 @@ type RunResult struct {
 	WinnersJson   []byte                 `protobuf:"bytes,5,opt,name=winners_json,json=winnersJson,proto3" json:"winners_json,omitempty"`
 	MetricsJson   []byte                 `protobuf:"bytes,6,opt,name=metrics_json,json=metricsJson,proto3" json:"metrics_json,omitempty"`
 	ProtocolJson  []byte                 `protobuf:"bytes,7,opt,name=protocol_json,json=protocolJson,proto3" json:"protocol_json,omitempty"`
+	TimingsJson   []byte                 `protobuf:"bytes,8,opt,name=timings_json,json=timingsJson,proto3" json:"timings_json,omitempty"`
+	ArtifactsJson []byte                 `protobuf:"bytes,9,opt,name=artifacts_json,json=artifactsJson,proto3" json:"artifacts_json,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -754,6 +764,20 @@ func (x *RunResult) GetProtocolJson() []byte {
 	return nil
 }
 
+func (x *RunResult) GetTimingsJson() []byte {
+	if x != nil {
+		return x.TimingsJson
+	}
+	return nil
+}
+
+func (x *RunResult) GetArtifactsJson() []byte {
+	if x != nil {
+		return x.ArtifactsJson
+	}
+	return nil
+}
+
 var File_compute_v1_proto protoreflect.FileDescriptor
 
 const file_compute_v1_proto_rawDesc = "" +
@@ -761,7 +785,7 @@ const file_compute_v1_proto_rawDesc = "" +
 	"\x10compute_v1.proto\x12\x17securevoting.compute.v1\x1a\x1egoogle/protobuf/wrappers.proto\"/\n" +
 	"\tCandidate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xcb\x06\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x90\a\n" +
 	"\tRunHeader\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x12\x1f\n" +
@@ -788,7 +812,8 @@ const file_compute_v1_proto_rawDesc = "" +
 	"paramsJson\x12B\n" +
 	"\n" +
 	"candidates\x18\x11 \x03(\v2\".securevoting.compute.v1.CandidateR\n" +
-	"candidates\".\n" +
+	"candidates\x12C\n" +
+	"\x0fshow_aggregates\x18\x12 \x01(\v2\x1a.google.protobuf.BoolValueR\x0eshowAggregates\".\n" +
 	"\x0eApprovalBallot\x12\x1c\n" +
 	"\tapprovals\x18\x01 \x03(\tR\tapprovals\")\n" +
 	"\rRankingBallot\x12\x18\n" +
@@ -810,7 +835,7 @@ const file_compute_v1_proto_rawDesc = "" +
 	"\bRunChunk\x12<\n" +
 	"\x06header\x18\x01 \x01(\v2\".securevoting.compute.v1.RunHeaderH\x00R\x06header\x12<\n" +
 	"\x05batch\x18\x02 \x01(\v2$.securevoting.compute.v1.BallotBatchH\x00R\x05batchB\x06\n" +
-	"\x04part\"\xe6\x01\n" +
+	"\x04part\"\xb0\x02\n" +
 	"\tRunResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +
@@ -820,7 +845,9 @@ const file_compute_v1_proto_rawDesc = "" +
 	"paramsJson\x12!\n" +
 	"\fwinners_json\x18\x05 \x01(\fR\vwinnersJson\x12!\n" +
 	"\fmetrics_json\x18\x06 \x01(\fR\vmetricsJson\x12#\n" +
-	"\rprotocol_json\x18\a \x01(\fR\fprotocolJson2Y\n" +
+	"\rprotocol_json\x18\a \x01(\fR\fprotocolJson\x12!\n" +
+	"\ftimings_json\x18\b \x01(\fR\vtimingsJson\x12%\n" +
+	"\x0eartifacts_json\x18\t \x01(\fR\rartifactsJson2Y\n" +
 	"\aCompute\x12N\n" +
 	"\x03Run\x12!.securevoting.compute.v1.RunChunk\x1a\".securevoting.compute.v1.RunResult(\x01B3Z1secure-voting/apps/backend/internal/compute/pb;pbb\x06proto3"
 
@@ -862,20 +889,21 @@ var file_compute_v1_proto_depIdxs = []int32{
 	10, // 6: securevoting.compute.v1.RunHeader.score_step:type_name -> google.protobuf.Int32Value
 	12, // 7: securevoting.compute.v1.RunHeader.score_allow_skip:type_name -> google.protobuf.BoolValue
 	0,  // 8: securevoting.compute.v1.RunHeader.candidates:type_name -> securevoting.compute.v1.Candidate
-	4,  // 9: securevoting.compute.v1.ScoreBallot.scores:type_name -> securevoting.compute.v1.ScoreEntry
-	2,  // 10: securevoting.compute.v1.Ballot.approval:type_name -> securevoting.compute.v1.ApprovalBallot
-	3,  // 11: securevoting.compute.v1.Ballot.ranking:type_name -> securevoting.compute.v1.RankingBallot
-	5,  // 12: securevoting.compute.v1.Ballot.score:type_name -> securevoting.compute.v1.ScoreBallot
-	6,  // 13: securevoting.compute.v1.BallotBatch.ballots:type_name -> securevoting.compute.v1.Ballot
-	1,  // 14: securevoting.compute.v1.RunChunk.header:type_name -> securevoting.compute.v1.RunHeader
-	7,  // 15: securevoting.compute.v1.RunChunk.batch:type_name -> securevoting.compute.v1.BallotBatch
-	8,  // 16: securevoting.compute.v1.Compute.Run:input_type -> securevoting.compute.v1.RunChunk
-	9,  // 17: securevoting.compute.v1.Compute.Run:output_type -> securevoting.compute.v1.RunResult
-	17, // [17:18] is the sub-list for method output_type
-	16, // [16:17] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	12, // 9: securevoting.compute.v1.RunHeader.show_aggregates:type_name -> google.protobuf.BoolValue
+	4,  // 10: securevoting.compute.v1.ScoreBallot.scores:type_name -> securevoting.compute.v1.ScoreEntry
+	2,  // 11: securevoting.compute.v1.Ballot.approval:type_name -> securevoting.compute.v1.ApprovalBallot
+	3,  // 12: securevoting.compute.v1.Ballot.ranking:type_name -> securevoting.compute.v1.RankingBallot
+	5,  // 13: securevoting.compute.v1.Ballot.score:type_name -> securevoting.compute.v1.ScoreBallot
+	6,  // 14: securevoting.compute.v1.BallotBatch.ballots:type_name -> securevoting.compute.v1.Ballot
+	1,  // 15: securevoting.compute.v1.RunChunk.header:type_name -> securevoting.compute.v1.RunHeader
+	7,  // 16: securevoting.compute.v1.RunChunk.batch:type_name -> securevoting.compute.v1.BallotBatch
+	8,  // 17: securevoting.compute.v1.Compute.Run:input_type -> securevoting.compute.v1.RunChunk
+	9,  // 18: securevoting.compute.v1.Compute.Run:output_type -> securevoting.compute.v1.RunResult
+	18, // [18:19] is the sub-list for method output_type
+	17, // [17:18] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_compute_v1_proto_init() }
