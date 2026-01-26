@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"mime/multipart"
 
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
@@ -133,7 +134,7 @@ func (h *Handlers) Generate(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"id": id})
 }
 
-func getFileHeader(r *http.Request, field string) (*http.FileHeader, error) {
+func getFileHeader(r *http.Request, field string) (*multipart.FileHeader, error) {
 	_, fh, err := r.FormFile(field)
 	if err == nil && fh != nil {
 		return fh, nil

@@ -11,7 +11,7 @@ import (
 )
 
 type AuthService interface {
-	Register(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error)
 	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 }
@@ -27,6 +27,7 @@ func NewHandlers(svc AuthService) *Handlers {
 type registerReq struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
+	Role       string `json:"role,omitempty"`
 	InviteCode string `json:"invite_code,omitempty"`
 }
 
@@ -42,7 +43,7 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password, req.InviteCode)
+	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Role, req.InviteCode)
 	if err != nil {
 		log.Printf("auth.register error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "register failed")
@@ -54,6 +55,8 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid email")
 		case "invalid_password":
 			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "password must be at least 8 characters")
+		case "invalid_role":
+			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid role")
 		case "email_taken":
 			httputil.WriteError(w, http.StatusConflict, "conflict", "email already registered")
 		case "invalid_invite_code":

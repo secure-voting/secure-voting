@@ -24,11 +24,13 @@ type fakeAuthService struct {
 	logoutErr error
 
 	lastRegisterInvite string
+	lastRegisterRole   string
 	lastLoginInvite    string
 }
 
-func (f *fakeAuthService) Register(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error) {
+func (f *fakeAuthService) Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error) {
 	f.lastRegisterInvite = inviteCode
+	f.lastRegisterRole = role
 	return f.registerRes, f.registerCode, f.registerErr
 }
 

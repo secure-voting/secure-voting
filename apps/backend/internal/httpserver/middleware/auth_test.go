@@ -47,11 +47,9 @@ func TestRequireAuth_SetsContext(t *testing.T) {
 func TestRequireRole_Forbid(t *testing.T) {
 	v := fakeVerifier{ok: true, role: "voter"}
 
-	base := RequireAuth(v, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	protected := RequireAuth(v, RequireRole("admin", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	}))
-
-	protected := RequireRole("admin", base)
+	})))
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 	req.Header.Set("Authorization", "Bearer token123")
@@ -63,3 +61,4 @@ func TestRequireRole_Forbid(t *testing.T) {
 		t.Fatalf("expected 403, got %d body=%s", rr.Code, rr.Body.String())
 	}
 }
+

@@ -40,6 +40,7 @@ type AuthResult struct {
 type RegisterInput struct {
 	Email      string
 	Password   string
+	Role       string
 	InviteCode string
 }
 
@@ -107,15 +108,30 @@ func (s *Service) acceptInviteTx(ctx context.Context, tx pgx.Tx, email, inviteCo
 	return acceptedInvite{ID: inviteID, ElectionID: inviteElectionID}, "", nil
 }
 
-func (s *Service) Register(ctx context.Context, email, password, inviteCode string) (AuthResult, string, error) {
+func (s *Service) Register(ctx context.Context, email, password, role, inviteCode string) (AuthResult, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	inviteCode = strings.TrimSpace(inviteCode)
+	role = strings.TrimSpace(strings.ToLower(role))
 
 	if !ValidateEmail(email) {
 		return AuthResult{}, "invalid_email", nil
 	}
 	if !ValidatePassword(password) {
 		return AuthResult{}, "invalid_password", nil
+	}
+
+	if role == "" {
+		role = "voter"
+	}
+
+	if inviteCode != "" {
+		role = "voter"
+	}
+
+	switch role {
+	case "admin", "voter", "researcher":
+	default:
+		return AuthResult{}, "invalid_role", nil
 	}
 
 	passHashBytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
@@ -142,9 +158,7 @@ func (s *Service) Register(ctx context.Context, email, password, inviteCode stri
 		inv = got
 	}
 
-	role := "voter"
 	var userID string
-
 	err = tx.QueryRow(ctx,
 		`INSERT INTO users (email, password_hash, role)
 		 VALUES ($1, $2, $3)

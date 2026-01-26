@@ -373,66 +373,57 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 }
 
 func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string, error) {
-	if strings.TrimSpace(req.Name) == "" {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
 		return "", "invalid_name", nil
 	}
-			switch req.Format {
-		case "approval":
-			q := len(cids)
-			if req.ApprovalMaxChoices != nil && *req.ApprovalMaxChoices > 0 {
-				q = *req.ApprovalMaxChoices
-			}
-			if q > len(cids) {
-				q = len(cids)
-			}
-			if q < 1 {
-				q = 1
-			}
 
-			k := 1 + int(rng.next()%uint64(q))
-			b.Approval = pickSubset(rng, cids, k)
+	format := strings.TrimSpace(req.Format)
+	switch format {
+	case "approval", "ranking", "score":
+	default:
+		return "", "invalid_format", nil
+	}
 
-		case "ranking":
-			top := len(cids)
-			if req.RankingTopK != nil && *req.RankingTopK > 0 && *req.RankingTopK < top {
-				top = *req.RankingTopK
-			}
-			sh := shuffle(rng, cids)
-			b.Ranking = sh[:top]
+	if req.Voters <= 0 {
+		return "", "invalid_voters", nil
+	}
+	if len(req.Candidates) == 0 {
+		return "", "invalid_candidates", nil
+	}
 
-		case "score":
-			if req.ScoreMin == nil || req.ScoreMax == nil || req.ScoreStep == nil || *req.ScoreStep <= 0 {
-				return "", "score_rules_missing", nil
-			}
-			if *req.ScoreMin > *req.ScoreMax {
-				return "", "score_rules_invalid_range", nil
-			}
-			if ((*req.ScoreMax - *req.ScoreMin) % *req.ScoreStep) != 0 {
-				return "", "score_rules_invalid_step", nil
-			}
-
-			b.Scores = map[string]int{}
-			steps := ((*req.ScoreMax - *req.ScoreMin) / *req.ScoreStep) + 1
-			for _, id := range cids {
-				v := int(rng.next() % uint64(steps))
-				b.Scores[id] = *req.ScoreMin + v*(*req.ScoreStep)
-			}
+	// normalize candidates: trim IDs, require non-empty and unique
+	seen := map[string]struct{}{}
+	candidates := make([]Candidate, 0, len(req.Candidates))
+	cids := make([]string, 0, len(req.Candidates))
+	for _, c := range req.Candidates {
+		id := strings.TrimSpace(c.ID)
+		nm := strings.TrimSpace(c.Name)
+		if id == "" {
+			return "", "invalid_candidate_id", nil
 		}
-
+		if _, ok := seen[id]; ok {
+			return "", "duplicate_candidate_id", nil
+		}
+		seen[id] = struct{}{}
+		candidates = append(candidates, Candidate{ID: id, Name: nm})
+		cids = append(cids, id)
+	}
 
 	seed := req.Seed
 	if seed == nil {
-		b := make([]byte, 8)
-		_, _ = rand.Read(b)
+		sb := make([]byte, 8)
+		_, _ = rand.Read(sb)
 		v := int64(0)
 		for i := 0; i < 8; i++ {
-			v = (v << 8) | int64(b[i])
+			v = (v << 8) | int64(sb[i])
 		}
 		seed = &v
 	}
 
+	// params for dataset doc
 	params := map[string]any{}
-	switch req.Format {
+	switch format {
 	case "approval":
 		if req.ApprovalMaxChoices != nil {
 			params["approval_max_choices"] = *req.ApprovalMaxChoices
@@ -454,11 +445,11 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	}
 
 	dsDoc := DatasetDoc{
-		Name:        strings.TrimSpace(req.Name),
+		Name:        name,
 		Description: strings.TrimSpace(req.Description),
 		Source:      "generate",
-		Format:      req.Format,
-		Candidates:  req.Candidates,
+		Format:      format,
+		Candidates:  candidates,
 		CreatedAt:   time.Now().UTC(),
 		Seed:        seed,
 		Parameters:  params,
@@ -473,9 +464,22 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	rng := newLCG(uint64(*seed))
 
 	var ballots []BallotDoc
-	cids := make([]string, 0, len(req.Candidates))
-	for _, c := range req.Candidates {
-		cids = append(cids, c.ID)
+	ballots = make([]BallotDoc, 0, req.Voters)
+
+	// pre-validate score rules once
+	var scoreMin, scoreMax, scoreStep, scoreSteps int
+	if format == "score" {
+		if req.ScoreMin == nil || req.ScoreMax == nil || req.ScoreStep == nil || *req.ScoreStep <= 0 {
+			return "", "score_rules_missing", nil
+		}
+		if *req.ScoreMin > *req.ScoreMax {
+			return "", "score_rules_invalid_range", nil
+		}
+		if ((*req.ScoreMax - *req.ScoreMin) % *req.ScoreStep) != 0 {
+			return "", "score_rules_invalid_step", nil
+		}
+		scoreMin, scoreMax, scoreStep = *req.ScoreMin, *req.ScoreMax, *req.ScoreStep
+		scoreSteps = ((scoreMax - scoreMin) / scoreStep) + 1
 	}
 
 	for i := 0; i < req.Voters; i++ {
@@ -483,13 +487,18 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 			DatasetID: dsid,
 			VoterRef:  "v" + itoa(i+1),
 		}
-		switch req.Format {
+
+		switch format {
 		case "approval":
-			q := 1
+			q := len(cids)
 			if req.ApprovalMaxChoices != nil && *req.ApprovalMaxChoices > 0 {
 				q = *req.ApprovalMaxChoices
-			} else if q > len(cids) {
+			}
+			if q > len(cids) {
 				q = len(cids)
+			}
+			if q < 1 {
+				q = 1
 			}
 			k := 1 + int(rng.next()%uint64(q))
 			b.Approval = pickSubset(rng, cids, k)
@@ -503,16 +512,13 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 			b.Ranking = sh[:top]
 
 		case "score":
-			if req.ScoreMin == nil || req.ScoreMax == nil || req.ScoreStep == nil || *req.ScoreStep <= 0 {
-				return "", "score_rules_missing", nil
-			}
 			b.Scores = map[string]int{}
 			for _, id := range cids {
-				steps := ((*req.ScoreMax - *req.ScoreMin) / *req.ScoreStep) + 1
-				v := int(rng.next()%uint64(steps))
-				b.Scores[id] = *req.ScoreMin + v*(*req.ScoreStep)
+				v := int(rng.next() % uint64(scoreSteps))
+				b.Scores[id] = scoreMin + v*scoreStep
 			}
 		}
+
 		ballots = append(ballots, b)
 	}
 
@@ -553,6 +559,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 
 	return dsid.Hex(), "", nil
 }
+
 
 func ballotsToJSON(in []BallotDoc) []map[string]any {
 	out := make([]map[string]any, 0, len(in))

@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func Insert(ctx context.Context, tx pgx.Tx, actorUserID *string, eventType string, details map[string]any) error {
+type Executor interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+func Insert(ctx context.Context, ex Executor, actorUserID *string, eventType string, details map[string]any) error {
 	if details == nil {
 		details = map[string]any{}
 	}
@@ -17,7 +21,7 @@ func Insert(ctx context.Context, tx pgx.Tx, actorUserID *string, eventType strin
 	}
 
 	if actorUserID == nil {
-		_, err = tx.Exec(ctx,
+		_, err = ex.Exec(ctx,
 			`INSERT INTO audit_log (actor_user_id, event_type, details)
 			 VALUES (NULL, $1, $2::jsonb)`,
 			eventType, string(b),
@@ -25,7 +29,7 @@ func Insert(ctx context.Context, tx pgx.Tx, actorUserID *string, eventType strin
 		return err
 	}
 
-	_, err = tx.Exec(ctx,
+	_, err = ex.Exec(ctx,
 		`INSERT INTO audit_log (actor_user_id, event_type, details)
 		 VALUES ($1::uuid, $2, $3::jsonb)`,
 		*actorUserID, eventType, string(b),

@@ -166,7 +166,9 @@ impl Compute for ComputeService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse()?;
+    let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
+    .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
+    .parse()?;
     let greeter = ComputeService;
 
     tonic::transport::Server::builder()

@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,18 +20,18 @@ func NewService(db *pgxpool.Pool) *Service {
 }
 
 type Job struct {
-	ID             string  `json:"id"`
-	Kind           string  `json:"kind"`
-	Status         string  `json:"status"`
-	Progress       int     `json:"progress"`
-	CreatedBy      string  `json:"created_by"`
-	ElectionID     *string `json:"election_id,omitempty"`
-	ExperimentID   *string `json:"experiment_id,omitempty"`
+	ID              string  `json:"id"`
+	Kind            string  `json:"kind"`
+	Status          string  `json:"status"`
+	Progress        int     `json:"progress"`
+	CreatedBy       string  `json:"created_by"`
+	ElectionID      *string `json:"election_id,omitempty"`
+	ExperimentID    *string `json:"experiment_id,omitempty"`
 	ExperimentRunID *string `json:"experiment_run_id,omitempty"`
-	ErrorText      *string `json:"error_text,omitempty"`
-	CreatedAt      string  `json:"created_at"`
-	StartedAt      *string `json:"started_at,omitempty"`
-	FinishedAt     *string `json:"finished_at,omitempty"`
+	ErrorText       *string `json:"error_text,omitempty"`
+	CreatedAt       string  `json:"created_at"`
+	StartedAt       *string `json:"started_at,omitempty"`
+	FinishedAt      *string `json:"finished_at,omitempty"`
 }
 
 type ListFilter struct {
@@ -57,23 +58,23 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	argn := 1
 
 	if role != "admin" {
-		base += ` AND created_by = $` + itoa(argn)
+		base += ` AND created_by = $` + strconv.Itoa(argn)
 		args = append(args, userID)
 		argn++
 	}
 
 	if f.Status != nil {
-		base += ` AND status = $` + itoa(argn)
+		base += ` AND status = $` + strconv.Itoa(argn)
 		args = append(args, *f.Status)
 		argn++
 	}
 	if f.Kind != nil {
-		base += ` AND kind = $` + itoa(argn)
+		base += ` AND kind = $` + strconv.Itoa(argn)
 		args = append(args, *f.Kind)
 		argn++
 	}
 
-	base += ` ORDER BY created_at DESC LIMIT $` + itoa(argn) + ` OFFSET $` + itoa(argn+1)
+	base += ` ORDER BY created_at DESC LIMIT $` + strconv.Itoa(argn) + ` OFFSET $` + strconv.Itoa(argn+1)
 	args = append(args, limit, f.Offset)
 
 	rows, err := s.db.Query(ctx, base, args...)
@@ -98,12 +99,12 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 
 		j.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 		if startedAt != nil {
-			s := startedAt.UTC().Format(time.RFC3339)
-			j.StartedAt = &s
+			st := startedAt.UTC().Format(time.RFC3339)
+			j.StartedAt = &st
 		}
 		if finishedAt != nil {
-			s := finishedAt.UTC().Format(time.RFC3339)
-			j.FinishedAt = &s
+			ft := finishedAt.UTC().Format(time.RFC3339)
+			j.FinishedAt = &ft
 		}
 
 		out = append(out, j)
@@ -145,36 +146,13 @@ func (s *Service) Get(ctx context.Context, role, userID, jobID string) (Job, str
 
 	j.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 	if startedAt != nil {
-		s := startedAt.UTC().Format(time.RFC3339)
-		j.StartedAt = &s
+		st := startedAt.UTC().Format(time.RFC3339)
+		j.StartedAt = &st
 	}
 	if finishedAt != nil {
-		s := finishedAt.UTC().Format(time.RFC3339)
-		j.FinishedAt = &s
+		ft := finishedAt.UTC().Format(time.RFC3339)
+		j.FinishedAt = &ft
 	}
 
 	return j, "", nil
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	neg := false
-	if i < 0 {
-		neg = true
-		i = -i
-	}
-	var b [32]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + (i % 10))
-		i /= 10
-	}
-	if neg {
-		pos--
-		b[pos] = '-'
-	}
-	return string(b[pos:])
 }

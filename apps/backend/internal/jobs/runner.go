@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func (r *Runner) ClaimNext(ctx context.Context, kinds []string) (ClaimedJob, boo
 	placeholders := make([]string, 0, len(kinds))
 	args := make([]any, 0, len(kinds))
 	for i, k := range kinds {
-		placeholders = append(placeholders, "$"+itoa(i+1))
+		placeholders = append(placeholders, "$"+strconv.Itoa(i+1))
 		args = append(args, k)
 	}
 
@@ -153,27 +154,4 @@ func normalizeKinds(in []string) []string {
 		out = append(out, k)
 	}
 	return out
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	neg := false
-	if i < 0 {
-		neg = true
-		i = -i
-	}
-	var b [32]byte
-	pos := len(b)
-	for i > 0 {
-		pos--
-		b[pos] = byte('0' + (i % 10))
-		i /= 10
-	}
-	if neg {
-		pos--
-		b[pos] = '-'
-	}
-	return string(b[pos:])
 }

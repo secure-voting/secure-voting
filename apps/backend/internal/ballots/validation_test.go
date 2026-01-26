@@ -109,10 +109,11 @@ func TestValidateScoreBallot(t *testing.T) {
 	}
 
 	step2 := 2
-	scores3 := map[string]int{c1: 3}
+	scores3 := map[string]int{c1: 4} // 4 не попадает в шкалу 1,3,5 при step=2
 	if code := validateScoreBallot(scores3, candidates, cset, &min, &max, &step2, true); code != "score_invalid_step" {
 		t.Fatalf("expected score_invalid_step, got %s", code)
 	}
+
 
 	scores4 := map[string]int{c1: 3, c2: 5}
 	if code := validateScoreBallot(scores4, candidates, cset, &min, &max, &step, false); code != "" {
