@@ -12,13 +12,11 @@ SRV_CSR="$OUT/compute.csr"
 SRV_PEM="$OUT/compute.pem"
 SRV_EXT="$OUT/compute.ext"
 
-# 1) CA
 openssl genrsa -out "$CA_KEY" 4096
 openssl req -x509 -new -nodes -key "$CA_KEY" -sha256 -days 3650 \
   -subj "/C=NL/ST=Noord-Holland/L=Amsterdam/O=secure-voting/OU=dev/CN=secure-voting-dev-ca" \
   -out "$CA_PEM"
 
-# 2) server cert for compute (CN + SAN)
 openssl genrsa -out "$SRV_KEY" 4096
 openssl req -new -key "$SRV_KEY" \
   -subj "/C=NL/ST=Noord-Holland/L=Amsterdam/O=secure-voting/OU=compute/CN=rust-compute" \

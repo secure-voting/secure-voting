@@ -93,7 +93,7 @@ func FromEnv() Config {
 		mongoURI = "mongodb://" + mu + ":" + mp + "@mongo:27017/?authSource=admin"
 	}
 
-	maxUpload := int64(10 << 20) // 10 MiB
+	maxUpload := int64(10 << 20)
 	if s := os.Getenv("MAX_UPLOAD_BYTES"); s != "" {
 		if v, err := strconv.ParseInt(s, 10, 64); err == nil && v > 0 {
 			maxUpload = v

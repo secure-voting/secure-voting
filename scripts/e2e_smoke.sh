@@ -129,7 +129,6 @@ VOTER_PASS="voterpass1"
 echo "admin=$ADMIN_EMAIL pass=$ADMIN_PASS"
 echo "voter=$VOTER_EMAIL pass=$VOTER_PASS"
 
-# register admin (обычно возвращает access_token)
 do_curl POST "$API_BASE/api/v1/auth/register" -H 'content-type: application/json' \
   -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\",\"role\":\"admin\"}"
 
@@ -153,7 +152,6 @@ if [[ -z "${ADMIN_TOKEN:-}" ]]; then
 fi
 AUTH="Authorization: Bearer $ADMIN_TOKEN"
 
-# register voter
 do_curl POST "$API_BASE/api/v1/auth/register" -H 'content-type: application/json' \
   -d "{\"email\":\"$VOTER_EMAIL\",\"password\":\"$VOTER_PASS\",\"role\":\"voter\"}"
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 set -euo pipefail
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing $1"; exit 1; }; }
@@ -99,7 +98,6 @@ fi
 echo "dataset_id=$DATASET_ID"
 
 echo "[4/7] seed experiment + experiment_run + job into postgres"
-# генерим uuid внутри postgres, чтобы не зависеть от uuidgen на хосте
 PSQL_OUT="$(
 docker exec -i postgres-db psql -U admin -d secure-voting -At <<SQL
 WITH exp AS (

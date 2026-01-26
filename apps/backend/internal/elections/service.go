@@ -42,7 +42,6 @@ var allowedQuotaTypes = map[string]bool{
 	"droop": true,
 }
 
-// Под твой Rust-core (и под ТЗ). Можно расширять без миграций.
 var allowedTallyRules = map[string]bool{
 	"plurality":            true,
 	"approval":             true,
@@ -257,7 +256,6 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		return "", "invalid_access_mode", nil
 	}
 
-	// кандидаты
 	if len(in.Candidates) == 0 {
 		return "", "candidates_required", nil
 	}
@@ -274,7 +272,6 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		seen[key] = struct{}{}
 	}
 
-	// committee/quota (минимально безопасно)
 	if in.CommitteeSize != nil && *in.CommitteeSize <= 0 {
 		return "", "invalid_committee_size", nil
 	}
@@ -288,11 +285,9 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		}
 		in.QuotaType = &qt
 	} else {
-		// single-winner: quota_type не нужен
 		in.QuotaType = nil
 	}
 
-	// publish_at
 	var publishAt *time.Time
 	if in.PublishAt != nil {
 		p := strings.TrimSpace(*in.PublishAt)
@@ -307,7 +302,6 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		}
 	}
 
-	// ballot params
 	code := validateBallotParams(format, len(in.Candidates), in.ApprovalMaxChoices, in.RankingTopK, in.ScoreMin, in.ScoreMax, in.ScoreStep)
 	if code != "" {
 		return "", code, nil
@@ -492,7 +486,6 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		return "invalid_id", nil
 	}
 
-	// грузим текущее состояние (и проверяем ownership)
 	var curStatus string
 	var curTally, curFormat, curAccess string
 	var curCommittee *int
@@ -528,18 +521,15 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		return "", err
 	}
 
-	// Безопасно: правила меняем только пока выборы не стартовали
 	if curStatus != "draft" && curStatus != "scheduled" {
 		return "invalid_status", nil
 	}
 
-	// candidates count для проверки параметров (top-k, top-q)
 	var candCount int
 	if err := s.db.QueryRow(ctx, `SELECT count(*) FROM candidates WHERE election_id=$1::uuid`, electionID).Scan(&candCount); err != nil {
 		return "", err
 	}
 
-	// применяем изменения поверх текущих значений
 	finalTally := curTally
 	if in.TallyRule != nil {
 		t, ok := validateTallyRule(*in.TallyRule)
@@ -576,7 +566,6 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		finalQuota = &q
 	}
 
-	// committee/quota консистентность
 	cs := 1
 	if finalCommittee != nil {
 		cs = *finalCommittee
@@ -647,7 +636,6 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		finalScoreAllowSkip = *in.ScoreAllowSkip
 	}
 
-	// ballot params consistency
 	if code := validateBallotParams(finalFormat, candCount, finalApproval, finalTopK, finalScoreMin, finalScoreMax, finalScoreStep); code != "" {
 		return code, nil
 	}
@@ -743,7 +731,6 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		}
 
 	case "publish":
-		// 1) публикуем election
 		_, err = tx.Exec(ctx, `UPDATE elections SET status=$2, published_at=$3 WHERE id=$1::uuid`, electionID, next, now)
 		if err != nil {
 			return "", err
@@ -832,7 +819,6 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 		return InviteCreated{}, "", err
 	}
 
-	// audit (не критично, но полезно)
 	_ = insertAudit(ctx, s.db, &adminUserID, "invite_created", map[string]any{
 		"target_type": "election_invite",
 		"target_id":   inviteID,
@@ -983,7 +969,6 @@ func nullableJSON(b []byte) any {
 	return string(b)
 }
 
-// insertAudit: поддерживает tx и pool (оба имеют Exec). Это удобно, чтобы не плодить два варианта.
 type execer interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconnCommandTag, error)
 }
@@ -1001,8 +986,6 @@ func insertAudit(ctx context.Context, tx any, actorUserID *string, eventType str
 		return err
 	}
 
-	// tx может быть pgx.Tx или *pgxpool.Pool — у обоих есть Exec, но типы разные.
-	// Здесь делаем через небольшую унификацию:
 	switch v := tx.(type) {
 	case pgx.Tx:
 		if actorUserID == nil {
@@ -1035,7 +1018,6 @@ func insertAudit(ctx context.Context, tx any, actorUserID *string, eventType str
 		)
 		return err
 	default:
-		// неизвестный executor — молча не пишем, но и не валим основной флоу
 		return nil
 	}
 }

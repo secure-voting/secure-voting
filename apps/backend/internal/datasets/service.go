@@ -392,7 +392,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		return "", "invalid_candidates", nil
 	}
 
-	// normalize candidates: trim IDs, require non-empty and unique
 	seen := map[string]struct{}{}
 	candidates := make([]Candidate, 0, len(req.Candidates))
 	cids := make([]string, 0, len(req.Candidates))
@@ -421,7 +420,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		seed = &v
 	}
 
-	// params for dataset doc
 	params := map[string]any{}
 	switch format {
 	case "approval":
@@ -466,7 +464,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	var ballots []BallotDoc
 	ballots = make([]BallotDoc, 0, req.Voters)
 
-	// pre-validate score rules once
 	var scoreMin, scoreMax, scoreStep, scoreSteps int
 	if format == "score" {
 		if req.ScoreMin == nil || req.ScoreMax == nil || req.ScoreStep == nil || *req.ScoreStep <= 0 {

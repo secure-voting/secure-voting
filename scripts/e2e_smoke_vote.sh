@@ -39,8 +39,6 @@ ADMIN_TOKEN="$(auth_register_login admin)"
 VOTER_TOKEN="$(auth_register_login voter)"
 
 echo "[3/8] create election (ranking, plurality) and hope CreateElectionInput matches"
-# если ваш CreateElectionInput требует candidates внутри запроса — тут упадёт с bad_request кодом
-# тогда самый быстрый фикс: пришли apps/backend/internal/elections/service.go (CreateElectionInput), и я дам точный payload.
 NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 END="$(date -u -d "+1 hour" +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -73,7 +71,6 @@ echo "[5/8] get ballot meta and extract candidate ids"
 meta="$(curl -sS -H "Authorization: Bearer $VOTER_TOKEN" "$BASE/elections/$ELECTION_ID/ballot")"
 echo "$meta" | jq '.' >/dev/null
 
-# пробуем вытащить ids из нескольких возможных структур
 CIDS="$(echo "$meta" | jq -r '
   (
     .candidates // .items // .options // []
@@ -88,7 +85,6 @@ if [[ -z "$CIDS" ]]; then
 fi
 echo "candidate_ids: $CIDS"
 
-# берём первые 3 кандидата как ранжирование
 read -r C1 C2 C3 _ <<<"$CIDS"
 RANK_JSON_ARR="$(jq -n --arg c1 "$C1" --arg c2 "$C2" --arg c3 "$C3" '[ $c1, $c2, $c3 ]')"
 
@@ -107,7 +103,6 @@ try_submit() {
   echo "$out"
 }
 
-# Вариант A: { "ranking": ["c1","c2","c3"] }
 A="$(jq -n --argjson r "$RANK_JSON_ARR" '{ ranking: $r }')"
 OUT="$(try_submit "$A")"
 CODE="$(echo "$OUT" | jq -r '.error.code // empty' 2>/dev/null || true)"
@@ -116,7 +111,6 @@ if [[ -z "$CODE" ]]; then
 else
   echo "variant A failed: $CODE"
 
-  # Вариант B: { "format":"ranking", "ranking":[...] }
   B="$(jq -n --argjson r "$RANK_JSON_ARR" '{ format:"ranking", ranking:$r }')"
   OUT="$(try_submit "$B")"
   CODE="$(echo "$OUT" | jq -r '.error.code // empty' 2>/dev/null || true)"
@@ -125,7 +119,6 @@ else
   else
     echo "variant B failed: $CODE"
 
-    # Вариант C: { "ranking": [{"candidate_id":"c1","rank":1}, ...] }
     C="$(jq -n --arg c1 "$C1" --arg c2 "$C2" --arg c3 "$C3" '{
       ranking: [
         {candidate_id:$c1, rank:1},
