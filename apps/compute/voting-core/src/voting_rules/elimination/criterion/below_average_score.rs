@@ -1,4 +1,3 @@
-
 //! `BelowAverageElimination` module.
 
 use crate::{
