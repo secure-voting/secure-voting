@@ -43,24 +43,24 @@ var allowedQuotaTypes = map[string]bool{
 }
 
 var allowedTallyRules = map[string]bool{
-	"plurality":            true,
-	"approval":             true,
-	"inverse_plurality":    true,
-	"borda":                true,
-	"black":                true,
-	"copeland_i":           true,
-	"copeland_ii":          true,
-	"copeland_iii":         true,
-	"simpson":              true,
-	"minmax":               true,
-	"minimax":              true,
-	"hare":                 true,
-	"inverse_borda":        true,
-	"nanson":               true,
-	"coombs":               true,
-	"practical_condorcet":  true,
-	"condorcet_practical":  true,
-	"threshold":            true,
+	"plurality":           true,
+	"approval":            true,
+	"inverse_plurality":   true,
+	"borda":               true,
+	"black":               true,
+	"copeland_i":          true,
+	"copeland_ii":         true,
+	"copeland_iii":        true,
+	"simpson":             true,
+	"minmax":              true,
+	"minimax":             true,
+	"hare":                true,
+	"inverse_borda":       true,
+	"nanson":              true,
+	"coombs":              true,
+	"practical_condorcet": true,
+	"condorcet_practical": true,
+	"threshold":           true,
 }
 
 func validateTallyRule(v string) (string, bool) {
@@ -894,7 +894,7 @@ func (s *Service) isAccessible(ctx context.Context, electionID, userID, email, r
 	var accessMode string
 	var createdBy string
 
-	err := s.pg.QueryRow(ctx, `
+	err := s.db.QueryRow(ctx, `
 		SELECT access_mode, created_by::text
 		FROM elections
 		WHERE id=$1::uuid
@@ -915,7 +915,7 @@ func (s *Service) isAccessible(ctx context.Context, electionID, userID, email, r
 	}
 
 	var x int
-	err = s.pg.QueryRow(ctx, `
+	err = s.db.QueryRow(ctx, `
 		SELECT 1
 		FROM election_invites i
 		WHERE i.election_id=$1::uuid
@@ -932,7 +932,6 @@ func (s *Service) isAccessible(ctx context.Context, electionID, userID, email, r
 
 	return true, nil
 }
-
 
 func nextStatus(cur, action string) (string, bool) {
 	switch action {
@@ -1128,4 +1127,3 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 
 	return d, "", nil
 }
-
