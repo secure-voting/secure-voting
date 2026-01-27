@@ -1,0 +1,143 @@
+language: 'rust'
+layer: 'application'
+
+env:
+  CARGO_TERM_COLOR: 'always'
+
+fileGroups:
+  sources:
+    - '*/src/**/*'
+    - '*/Cargo.toml'
+    - 'Cargo.toml'
+    - 'clippy.toml'
+  tests:
+    - '*/benches/**/*'
+    - '*/tests/**/*'
+  policy:
+    - 'deny.toml'
+    - 'supply-chain/**/*'
+
+tasks:
+  # ---------------------------
+  # Compilation & correctness
+  # ---------------------------
+
+  check:
+    description: 'Fast compile check'
+    command: 'cargo check --workspace --all-targets --all-features'
+    inputs:
+      - '@globs(sources)'
+
+  build:
+    description: 'Build the project in release mode'
+    command: 'cargo build --release'
+    inputs:
+      - '@globs(sources)'
+
+  test:
+    description: 'Run the test suite'
+    command: 'cargo nextest run --workspace --all-features'
+    toolchain: 'rust'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  # ---------------------------
+  # Linting & formatting
+  # ---------------------------
+
+  lint:
+    description: 'Run clippy'
+    command: 'cargo clippy --workspace --all-targets --all-features'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  format:
+    description: 'Check formatting'
+    command: 'cargo fmt --all --check'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  # ---------------------------
+  # Coverage (semantic dep)
+  # ---------------------------
+
+  coverage:
+    description: 'Calculate line coverage'
+    command: >
+      cargo llvm-cov --workspace --all-features --json
+      | jq ".data[].totals.lines.percent"
+    deps:
+      - test
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  coverage-html:
+    description: 'Open coverage report'
+    command: 'cargo llvm-cov --workspace --all-features --open'
+    deps:
+      - test
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+    options:
+      runInCI: false
+
+  # ---------------------------
+  # Dependency & supply-chain
+  # ---------------------------
+
+  audit:
+    description: 'Check for known vulnerabilities'
+    command: 'cargo audit --deny warnings'
+    inputs:
+      - '@globs(sources)'
+
+  deny-check:
+    description: 'Check licenses and crate sources'
+    command: 'cargo deny --workspace --all-features check'
+    inputs:
+      - '@globs(policy)'
+
+  vet:
+    description: 'Verify dependency audits'
+    command: 'cargo vet'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(policy)'
+
+  machete:
+    description: 'Find unused dependencies'
+    command: 'cargo machete'
+    inputs:
+      - '@globs(sources)'
+
+  outdated:
+    description: 'Find outdated dependencies'
+    command: 'cargo outdated --workspace'
+    inputs:
+      - '@globs(sources)'
+
+  # ---------------------------
+  # Size & profiling (manual)
+  # ---------------------------
+
+  bloat:
+    description: 'Binary size analysis'
+    command: 'cargo bloat --release --bin compute-service && cargo bloat --release --bin voting-cli'
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+  profile:
+    description: 'Generate flamegraph'
+    command: 'cargo flamegraph'
+    inputs:
+      - '@globs(sources)'
+    env:
+      CARGO_PROFILE_RELEASE_DEBUG: 'true'
+    options:
+      runInCI: false

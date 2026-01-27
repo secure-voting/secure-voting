@@ -1,0 +1,41 @@
+name: "Compute-core pipeline"
+on:
+  push:
+    branches:
+      - 'dev'
+      - 'master'
+      - 'ci/**'
+
+jobs:
+  ci:
+    name: rust-ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout"
+        uses: "actions/checkout@v6"
+        with:
+          fetch-depth: 0
+
+      - name: "Setup Toolchain"
+        uses: "moonrepo/setup-toolchain@v0"
+
+      - name: Cache Cargo tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/.binstall
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-tools-${{ runner.os }}-${{ hashFiles('.moon/toolchain.yml') }}
+          restore-keys: |
+            cargo-tools-${{ runner.os }}-
+
+      - name: "Execute pipeline"
+        run: "moon ci"
+
+      - name: "Collect results"
+        uses: "appthrust/moon-ci-retrospect@v2"
+        if: success() || failure()
+      

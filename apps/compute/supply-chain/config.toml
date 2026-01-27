@@ -1,0 +1,103 @@
+
+# cargo-vet config file
+
+[cargo-vet]
+version = "0.10"
+
+[imports.bytecode-alliance]
+url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
+
+[imports.embark-studios]
+url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
+
+[imports.google]
+url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+
+[imports.isrg]
+url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
+
+[imports.mozilla]
+url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
+
+[imports.zcash]
+url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
+
+[[exemptions.crossbeam-deque]]
+version = "0.8.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.crossbeam-epoch]]
+version = "0.9.18"
+criteria = "safe-to-deploy"
+
+[[exemptions.crossbeam-utils]]
+version = "0.8.21"
+criteria = "safe-to-deploy"
+
+[[exemptions.ctor]]
+version = "0.6.3"
+criteria = "safe-to-run"
+
+[[exemptions.ctor-proc-macro]]
+version = "0.0.7"
+criteria = "safe-to-run"
+
+[[exemptions.dtor]]
+version = "0.1.1"
+criteria = "safe-to-run"
+
+[[exemptions.dtor-proc-macro]]
+version = "0.0.6"
+criteria = "safe-to-run"
+
+[[exemptions.fragile]]
+version = "2.0.1"
+criteria = "safe-to-run"
+
+[[exemptions.log]]
+version = "0.4.29"
+criteria = "safe-to-deploy"
+
+[[exemptions.mockall]]
+version = "0.14.0"
+criteria = "safe-to-run"
+
+[[exemptions.mockall_derive]]
+version = "0.14.0"
+criteria = "safe-to-run"
+
+[[exemptions.once_cell]]
+version = "1.21.3"
+criteria = "safe-to-deploy"
+
+[[exemptions.test-case]]
+version = "3.3.1"
+criteria = "safe-to-run"
+
+[[exemptions.test-case-core]]
+version = "3.3.1"
+criteria = "safe-to-run"
+
+[[exemptions.test-case-macros]]
+version = "3.3.1"
+criteria = "safe-to-run"
+
+[[exemptions.tracing]]
+version = "0.1.44"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-attributes]]
+version = "0.1.31"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-core]]
+version = "0.1.36"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-subscriber]]
+version = "0.3.22"
+criteria = "safe-to-deploy"
+
+[[exemptions.windows-sys]]
+version = "0.61.2"
+criteria = "safe-to-deploy"

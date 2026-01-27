@@ -1,0 +1,390 @@
+services:
+  frontend:
+    build: apps/frontend
+    container_name: ts-frontend
+    ports:
+      - "127.0.0.1:8080:80"
+    networks:
+      - app_network
+    restart: unless-stopped
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:80 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    read_only: false
+    profiles:
+      - frontend
+      - prod
+
+  backend:
+    build: apps/backend
+    container_name: go-backend
+    networks:
+      - app_network
+      - rpc_network
+      - db_network
+      - kafka_network
+      - redis_network
+    environment:
+      - HTTP_ADDR=:3001
+      - TOKEN_TTL=720h
+      - MAX_UPLOAD_BYTES=10485760
+
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+
+      - REDIS_ADDR=cache:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - IDEMPOTENCY_TTL=24h
+
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_DB=secure_voting
+
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
+      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
+      - KAFKA_GROUP_ID=secure-voting-backend-worker
+      - WORKER_POLL_INTERVAL=1s
+
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:3001:3001"
+    profiles:
+      - backend
+      - prod
+
+  worker:
+    build: apps/backend
+    container_name: go-worker
+    networks:
+      - db_network
+      - rpc_network
+      - kafka_network
+    environment:
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_DB=secure_voting
+      - COMPUTE_GRPC_ADDR=rust-compute:50051
+      - COMPUTE_TLS=false
+      #- COMPUTE_TLS_CA=/certs/ca.pem
+      #- COMPUTE_TLS_SERVER_NAME=rust-compute
+      - WORKER_POLL_INTERVAL=1s
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
+      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
+      - KAFKA_GROUP_ID=secure-voting-backend-worker
+    volumes:
+      - ./scripts/certs/out:/certs:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+      compute:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint: ["/app/worker"]
+    profiles:
+      - prod
+
+  db:
+    image: postgres:18.1
+    container_name: postgres-db
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=secure-voting
+      - POSTGRES_USER=admin
+    networks:
+      - db_network
+    volumes:
+      - db-data:/var/lib/postgresql
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - db
+      - prod
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: postgres-webui
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.dev
+      PGADMIN_DEFAULT_PASSWORD: admin
+      GUNICORN_CMD_ARGS: "--bind 0.0.0.0:80"
+    ports:
+      - "15433:80"
+    networks:
+      - db_network
+      - debug_network
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - db
+    read_only: false
+    profiles:
+      - db
+      - debug
+
+  cache:
+    image: redis:8.4
+    container_name: redis-cache
+    networks:
+      - app_network
+      - redis_network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c 'redis-server --save 20 1 --loglevel warning --requirepass "$$REDIS_PASSWORD"'
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-webui:
+    image: redis/redisinsight:2.70
+    container_name: redis-webui
+    ports:
+      - "127.0.0.1:5540:5540"
+    networks:
+      - redis_network
+    restart: unless-stopped
+    volumes:
+      - redisinsight-data:/data
+    depends_on:
+      - cache
+    read_only: true
+    profiles:
+      - db
+      - debug
+
+  mongo:
+    image: mongo:8.0
+    container_name: mongo-db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    networks:
+      - db_network
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --username root --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand(\"ping\")' > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - db
+      - prod
+
+  mongodb-webui:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: mongodb-webui
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    ports:
+      - "127.0.0.1:8082:8081"
+    networks:
+      - db_network
+      - debug_network
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    read_only: false
+    profiles:
+      - db
+      - debug
+
+  compute:
+    build: apps/compute
+    container_name: rust-compute
+    networks:
+      - rpc_network
+      - kafka_network
+    environment:
+      - GRPC_ADDR=0.0.0.0:50051
+      - TLS_CERT=/certs/compute.pem
+      - TLS_KEY=/certs/compute.key
+
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
+      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
+      - KAFKA_GROUP_ID=secure-voting-compute
+    volumes:
+      - ./scripts/certs/out:/certs:ro
+    restart: unless-stopped
+    read_only: true
+    profiles:
+      - compute
+      - prod
+
+  compute-runner:
+    build: apps/backend
+    container_name: go-compute-runner
+    networks:
+      - kafka_network
+      - db_network
+      - rpc_network
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
+      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
+      - KAFKA_GROUP_ID=secure-voting-compute-runner
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_DB=secure_voting
+      - COMPUTE_GRPC_ADDR=rust-compute:50051
+      - COMPUTE_TLS=false
+    depends_on:
+      mongo:
+        condition: service_healthy
+      compute:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    entrypoint: ["/app/compute-runner"]
+    profiles:
+      - prod
+
+
+  kafka:
+    image: confluentinc/confluent-local:7.6.9-1-ubi8
+    container_name: kafka
+    networks:
+      - kafka_network
+    environment:
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+    profiles:
+      - kafka
+      - prod
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    ports:
+      - "127.0.0.1:8089:8080"
+    networks:
+      - kafka_network
+      - debug_network
+    restart: unless-stopped
+    profiles:
+      - debug
+  
+  kafka-init:
+    image: confluentinc/confluent-local:7.6.9-1-ubi8
+    container_name: kafka-init
+    networks:
+      - kafka_network
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-lc"]
+    command: |
+      set -e
+      kafka-topics --bootstrap-server kafka:9092 \
+        --create --if-not-exists \
+        --topic secure-voting.compute.tasks \
+        --partitions 1 --replication-factor 1
+
+      kafka-topics --bootstrap-server kafka:9092 \
+        --create --if-not-exists \
+        --topic secure-voting.compute.results \
+        --partitions 1 --replication-factor 1
+
+      kafka-topics --bootstrap-server kafka:9092 --list | sort
+      echo "kafka-init done"
+    restart: "no"
+    profiles:
+      - prod
+      - debug
+      - kafka
+
+
+
+networks:
+  app_network:
+    driver: bridge
+  db_network:
+    driver: bridge
+    internal: true
+  rpc_network:
+    driver: bridge
+    internal: true
+  redis_network:
+    driver: bridge
+  kafka_network:
+    driver: bridge
+    internal: true
+  debug_network:
+    driver: bridge
+
+volumes:
+  db-data:
+    driver: local
+  redis-data:
+    driver: local
+  mongo-data:
+    driver: local
+  kafka-data:
+    driver: local
+  pgadmin-data:
+    driver: local
+  redisinsight-data:
+    driver: local
