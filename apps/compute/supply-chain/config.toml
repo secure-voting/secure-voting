@@ -98,6 +98,8 @@ criteria = "safe-to-deploy"
 version = "0.3.22"
 criteria = "safe-to-deploy"
 
-[[exemptions.windows-sys]]
-version = "0.61.2"
-criteria = "safe-to-deploy"
+[policy.compute-service]
+dependency-exemptions = [
+  "tonic",
+  "prost"
+]
