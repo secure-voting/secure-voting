@@ -3,33 +3,10 @@
 //! A [`Profile`] represents a validated collection of voters' ballots.
 //! Each ballot is a ranking of candidates.
 
-use std::{collections::HashSet, fmt::Display, ops::Index};
+use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
-/// Strongly-typed Candidate ID.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, PartialOrd, Ord)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct CandidateId(usize);
-
-impl Display for CandidateId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl CandidateId {
-    /// Create a new `CandidateId` instance.
-    #[must_use]
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-
-    /// Get an inner numeric id.
-    #[must_use]
-    pub fn into_inner(self) -> usize {
-        self.0
-    }
-}
+use crate::models::candidate_id::CandidateId;
 
 /// Profile type.
 ///
