@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::{profile::Profile, tie_breaker::RuleOutcome};
+use crate::{models::profile::Profile, tie_breaker::RuleOutcome};
 
 pub mod adaptors;
 pub mod elimination;

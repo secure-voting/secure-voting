@@ -2,7 +2,7 @@
 //!
 //! This module contains the struct `RankingBallot`
 
-use crate::models::profile::CandidateId;
+use crate::models::candidate_id::CandidateId;
 
 /// Ranking ballot type.
 ///

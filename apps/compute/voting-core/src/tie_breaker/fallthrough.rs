@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 
 use crate::{
-    profile::{CandidateId, Profile},
+    models::{candidate_id::CandidateId, profile::Profile},
     tie_breaker::{RuleOutcome, TieBreaker},
 };
 

@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::{profile::CandidateId, scorer::Score};
+use crate::{models::candidate_id::CandidateId, scorer::Score};
 
 pub mod condorcet;
 pub mod maxscore;

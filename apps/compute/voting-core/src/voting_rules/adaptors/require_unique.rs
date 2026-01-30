@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{models::profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
 
 /// Require unique adaptor.
 ///
@@ -75,7 +75,7 @@ impl<R: VotingRuleExec> Default for RequireUnique<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::CandidateId;
+    use crate::models::profile::CandidateId;
     use mockall::mock;
 
     mock! {

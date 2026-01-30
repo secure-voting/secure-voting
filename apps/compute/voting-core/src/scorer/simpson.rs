@@ -49,7 +49,7 @@ impl Scorer for SimpsonScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::Profile;
+    use crate::models::profile::Profile;
 
     #[test]
     fn simpson_single_vote_linear_order() {

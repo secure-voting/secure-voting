@@ -60,7 +60,7 @@ pub use crate::voting_rules::adaptors::*;
 pub use crate::{
     election::run_election,
     matrix::{CondorcetMatrix, PairwiseMatrix},
-    profile::{CandidateId, Profile},
+    models::{candidate_id::CandidateId, profile::Profile},
     tie_breaker::RuleOutcome,
     voting_rules::{
         elimination::rule::{Elimination, EliminationRuleError},

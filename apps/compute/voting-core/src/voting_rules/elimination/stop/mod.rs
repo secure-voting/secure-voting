@@ -2,7 +2,7 @@
 //!
 //! This module defines the [`EliminationStopCondition`] trait.
 
-use crate::profile::Profile;
+use crate::models::profile::Profile;
 use crate::scorer::Score;
 use crate::tie_breaker::RuleOutcome;
 

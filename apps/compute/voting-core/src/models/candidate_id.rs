@@ -1,3 +1,5 @@
+//! Module containing the `CandidateId` type implementatino
+
 use std::fmt::Display;
 
 /// Strongly-typed Candidate ID.

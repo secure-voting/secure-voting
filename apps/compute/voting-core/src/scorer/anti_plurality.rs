@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use rayon::prelude::*;
 
 use crate::{
-    profile::Profile,
+    models::profile::Profile,
     scorer::{Score, Scorer},
 };
 

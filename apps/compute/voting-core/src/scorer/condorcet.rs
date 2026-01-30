@@ -6,7 +6,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::{CondorcetMatrix, PairwiseMatrix},
-    profile::Profile,
+    models::profile::Profile,
     scorer::{Score, Scorer},
 };
 

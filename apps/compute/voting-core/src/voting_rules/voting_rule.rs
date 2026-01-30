@@ -10,7 +10,7 @@ use tracing::instrument;
 
 use crate::{
     decider::Decider,
-    profile::Profile,
+    models::profile::Profile,
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::VotingRuleExec,

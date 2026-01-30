@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::profile::Profile;
+use crate::models::profile::Profile;
 
 /// Pairwise voting result matrix.
 ///

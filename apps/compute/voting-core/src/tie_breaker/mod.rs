@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::profile::{CandidateId, Profile};
+use crate::models::{candidate_id::CandidateId, profile::Profile};
 
 pub mod fallthrough;
 

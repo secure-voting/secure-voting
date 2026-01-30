@@ -9,7 +9,7 @@ use tracing::instrument;
 
 use crate::{
     decider::Decider,
-    profile::{CandidateRemovalError, Profile},
+    models::profile::{CandidateRemovalError, Profile},
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{

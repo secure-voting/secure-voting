@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::{
-    profile::Profile,
+    models::profile::Profile,
     scorer::{Score, Scorer},
 };
 

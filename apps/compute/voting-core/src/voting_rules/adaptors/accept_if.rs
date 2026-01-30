@@ -2,7 +2,7 @@
 
 use tracing::instrument;
 
-use crate::profile::Profile;
+use crate::models::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
 use crate::voting_rules::VotingRuleExec;
 
@@ -68,7 +68,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::profile::CandidateId;
+    use crate::models::profile::CandidateId;
 
     use super::*;
     use mockall::mock;
