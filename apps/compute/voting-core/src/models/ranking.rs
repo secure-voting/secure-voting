@@ -39,6 +39,7 @@ impl RankingBallot {
     }
 
     /// Move out into an inner representation
+    #[must_use]
     pub fn into_inner(self) -> Vec<CandidateId> {
         self.votes
     }

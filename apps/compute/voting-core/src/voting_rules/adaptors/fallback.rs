@@ -10,6 +10,7 @@ use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRule
 ///
 /// If the primary rule can't decide a single winner, a fallback rule will be used to determine the winner instead.
 #[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_field_names)]
 pub struct Fallback<R1, R2, Ballot> {
     /// Primary voting Rule
     primary: R1,

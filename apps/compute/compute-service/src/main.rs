@@ -8,7 +8,9 @@ use crate::securevoting::compute::v1::{
     run_chunk::Part,
 };
 
-#[allow(clippy::all)]
+#[allow(clippy::default_trait_access)]
+#[allow(clippy::doc_markdown)]
+#[allow(clippy::large_enum_variant)]
 pub mod securevoting {
     pub mod compute {
         pub mod v1 {

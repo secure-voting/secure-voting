@@ -161,7 +161,7 @@ mod tests {
             result
                 .votes
                 .into_iter()
-                .map(|x| x.into_inner())
+                .map(RankingBallot::into_inner)
                 .collect::<Vec<_>>(),
             expected_votes
         );
@@ -192,7 +192,7 @@ mod tests {
             result
                 .votes
                 .into_iter()
-                .map(|x| x.into_inner())
+                .map(RankingBallot::into_inner)
                 .collect::<Vec<_>>(),
             expected_votes
         );
@@ -219,7 +219,7 @@ mod tests {
             result
                 .votes
                 .into_iter()
-                .map(|x| x.into_inner())
+                .map(RankingBallot::into_inner)
                 .collect::<Vec<_>>(),
             expected_votes
         );
@@ -248,7 +248,7 @@ mod tests {
             result
                 .votes
                 .into_iter()
-                .map(|x| x.into_inner())
+                .map(RankingBallot::into_inner)
                 .collect::<Vec<_>>(),
             vec![vec![]]
         );
@@ -315,7 +315,7 @@ mod tests {
             result
                 .votes
                 .into_iter()
-                .map(|x| x.into_inner())
+                .map(RankingBallot::into_inner)
                 .collect::<Vec<_>>(),
             expected_votes
         );
