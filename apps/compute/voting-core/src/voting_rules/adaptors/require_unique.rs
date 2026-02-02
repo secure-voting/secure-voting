@@ -1,6 +1,6 @@
 //! The require unique adaptor module.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use thiserror::Error;
 use tracing::instrument;
@@ -11,15 +11,20 @@ use crate::{models::profile::Profile, tie_breaker::RuleOutcome, voting_rules::Vo
 ///
 /// Explicitly ensure that there is a single winner.
 #[derive(Debug, Clone, Copy)]
-pub struct RequireUnique<R> {
+pub struct RequireUnique<R, Ballot> {
     /// The rule to ensure a single winner in.
     rule: R,
+    /// Ballot type marker.
+    _ballot_type: PhantomData<Ballot>,
 }
 
-impl<R> RequireUnique<R> {
+impl<R, Ballot> RequireUnique<R, Ballot> {
     /// Construct a `RequireUnique` adaptor from given rule.
     pub fn new(rule: R) -> Self {
-        Self { rule }
+        Self {
+            rule,
+            _ballot_type: PhantomData,
+        }
     }
 }
 
@@ -39,11 +44,11 @@ pub enum RequireUniqueError<RE: Debug> {
     RuleError(#[from] RE),
 }
 
-impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
+impl<R: VotingRuleExec<Ballot>, Ballot> VotingRuleExec<Ballot> for RequireUnique<R, Ballot> {
     type Error = RequireUniqueError<R::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
+    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
         match self.rule.execute(profile)? {
             outcome @ RuleOutcome::UniqueWinner(_) => {
                 tracing::debug!("Rule returned a unique winner");
@@ -64,10 +69,11 @@ impl<R: VotingRuleExec> VotingRuleExec for RequireUnique<R> {
     }
 }
 
-impl<R: VotingRuleExec> Default for RequireUnique<R> {
+impl<R: VotingRuleExec<Ballot>, Ballot> Default for RequireUnique<R, Ballot> {
     fn default() -> Self {
         Self {
             rule: R::create_default(),
+            _ballot_type: PhantomData,
         }
     }
 }
@@ -75,7 +81,7 @@ impl<R: VotingRuleExec> Default for RequireUnique<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::profile::CandidateId;
+    use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
     use mockall::mock;
 
     mock! {
@@ -83,15 +89,15 @@ mod tests {
 
         }
 
-        impl VotingRuleExec for VotingRule {
+        impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = ();
 
-            fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
 
-    fn fake_profile() -> Profile {
+    fn fake_profile() -> Profile<RankingBallot> {
         Profile::try_from(vec![vec![0, 2, 1]])
             .expect("Profile is constructed incorrectly, revise test example.")
     }

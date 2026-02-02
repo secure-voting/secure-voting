@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io;
 
 use clap::Parser;
+use voting_core::models::ranking::RankingBallot;
 use voting_core::prelude::*;
 
 use crate::args::{Args, InputFormat, RuleName};
@@ -36,13 +37,16 @@ fn main() -> anyhow::Result<()> {
 fn get_profile_and_mappings<R: io::Read>(
     format: InputFormat,
     reader: R,
-) -> anyhow::Result<(Profile, HashMap<CandidateId, String>)> {
+) -> anyhow::Result<(Profile<RankingBallot>, HashMap<CandidateId, String>)> {
     match format {
         InputFormat::Cvr => Ok(CVRParser.parse(reader)?),
     }
 }
 
-fn compute_result(rule_enum: RuleName, input_data: &Profile) -> anyhow::Result<RuleOutcome> {
+fn compute_result(
+    rule_enum: RuleName,
+    input_data: &Profile<RankingBallot>,
+) -> anyhow::Result<RuleOutcome> {
     match rule_enum {
         RuleName::Plurality => Ok(PluralityRule::default().execute(input_data)?),
         RuleName::Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),

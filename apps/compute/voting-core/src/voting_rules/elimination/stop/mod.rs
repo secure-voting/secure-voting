@@ -10,9 +10,14 @@ pub mod majority_stop;
 pub mod no_early_stop;
 
 /// Trait that encodes whether to stop the elimination process here.
-pub trait EliminationStopCondition<S> {
+pub trait EliminationStopCondition<S, Ballot> {
     /// Checks whether it is already time to stop the elimination process.
-    fn should_stop(&self, scores: &Score<S>, outcome: &RuleOutcome, profile: &Profile) -> bool;
+    fn should_stop(
+        &self,
+        scores: &Score<S>,
+        outcome: &RuleOutcome,
+        profile: &Profile<Ballot>,
+    ) -> bool;
 
     /// Construct a new Stopper.
     fn new() -> Self;

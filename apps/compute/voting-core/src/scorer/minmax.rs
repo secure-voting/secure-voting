@@ -4,6 +4,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::PairwiseMatrix,
+    models::ranking::RankingBallot,
     prelude::Profile,
     scorer::{Score, Scorer},
 };
@@ -15,11 +16,14 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub struct MinmaxScorer;
 
-impl Scorer for MinmaxScorer {
+impl Scorer<RankingBallot> for MinmaxScorer {
     type Output = Vec<isize>;
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise_matrix = PairwiseMatrix::from(profile);
         let n = pairwise_matrix.n();
 

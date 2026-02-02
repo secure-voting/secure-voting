@@ -16,13 +16,13 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct FallthroughTieBreaker;
 
-impl TieBreaker for FallthroughTieBreaker {
+impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
     type Error = Infallible;
 
     fn tie_break(
         &self,
         candidates: &[CandidateId],
-        _profile: &Profile,
+        _profile: &Profile<Ballot>,
     ) -> Result<RuleOutcome, Self::Error> {
         match candidates.len() {
             1 => Ok(RuleOutcome::UniqueWinner(candidates[0])),

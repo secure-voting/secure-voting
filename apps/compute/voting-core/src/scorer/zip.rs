@@ -1,5 +1,7 @@
 //! Zip scorer module.
 
+use std::marker::PhantomData;
+
 use thiserror::Error;
 
 use crate::{
@@ -11,17 +13,23 @@ use crate::{
 ///
 /// Runs two scorer and returns a tuple of their computed scores.
 #[derive(Debug, Clone, Copy)]
-pub struct ZipScorer<S1, S2> {
+pub struct ZipScorer<S1, S2, Ballot> {
     /// The first scorer.
     scorer1: S1,
     /// The second scorer.
     scorer2: S2,
+    /// Ballot type marker.
+    _ballot_type: PhantomData<Ballot>,
 }
 
-impl<S1, S2> ZipScorer<S1, S2> {
+impl<S1, S2, Ballot> ZipScorer<S1, S2, Ballot> {
     /// Construct a `ZipScorer` from 2 scorers.
     pub fn new(scorer1: S1, scorer2: S2) -> Self {
-        Self { scorer1, scorer2 }
+        Self {
+            scorer1,
+            scorer2,
+            _ballot_type: PhantomData,
+        }
     }
 }
 
@@ -36,12 +44,14 @@ pub enum ZipScorerError<SE1, SE2> {
     SecondScorerError(SE2),
 }
 
-impl<T1, T2, S1: Scorer<Output = T1>, S2: Scorer<Output = T2>> Scorer for ZipScorer<S1, S2> {
+impl<T1, T2, S1: Scorer<Ballot, Output = T1>, S2: Scorer<Ballot, Output = T2>, Ballot>
+    Scorer<Ballot> for ZipScorer<S1, S2, Ballot>
+{
     type Output = (T1, T2);
 
     type Error = ZipScorerError<S1::Error, S2::Error>;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(&self, profile: &Profile<Ballot>) -> Result<Score<Self::Output>, Self::Error> {
         let score1 = self
             .scorer1
             .compute_score(profile)
@@ -61,6 +71,7 @@ impl<T1, T2, S1: Scorer<Output = T1>, S2: Scorer<Output = T2>> Scorer for ZipSco
         Self {
             scorer1: S1::new(),
             scorer2: S2::new(),
+            _ballot_type: PhantomData,
         }
     }
 }

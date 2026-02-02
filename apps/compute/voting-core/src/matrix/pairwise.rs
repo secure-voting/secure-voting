@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::models::profile::Profile;
+use crate::models::{profile::Profile, ranking::RankingBallot};
 
 /// Pairwise voting result matrix.
 ///
@@ -172,8 +172,8 @@ fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: &[Vec<usize>]) -> Vec<Vec
     matrix_a
 }
 
-impl From<&Profile> for PairwiseMatrix {
-    fn from(profile: &Profile) -> Self {
+impl From<&Profile<RankingBallot>> for PairwiseMatrix {
+    fn from(profile: &Profile<RankingBallot>) -> Self {
         let n_candidates = profile.n_candidates();
         let n_voters = profile.n_voters();
 

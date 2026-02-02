@@ -2,22 +2,22 @@
 //!
 //! This module defines the [`Elimination`] struct.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
     decider::Decider,
-    models::profile::{CandidateRemovalError, Profile},
+    models::{
+        profile::{CandidateRemovalError, Profile},
+        ranking::RankingBallot,
+    },
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
         VotingRuleExec,
-        elimination::{
-            criterion::EliminationCriterion,
-            stop::{EliminationStopCondition, no_early_stop::NoEarlyStop},
-        },
+        elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
     },
 };
 
@@ -27,7 +27,7 @@ use crate::{
 /// then the lowest candidate is eliminated and the process
 /// is rerun until the winner is unique.
 #[derive(Debug)]
-pub struct Elimination<S, E, D, T, Stop = NoEarlyStop> {
+pub struct Elimination<S, E, D, T, Ballot, Stop> {
     /// The scorer step of the pipeline.
     scorer: S,
     /// The eliminator step of the pipeline.
@@ -38,9 +38,11 @@ pub struct Elimination<S, E, D, T, Stop = NoEarlyStop> {
     tiebreaker: T,
     /// The elimination stop checker.
     stop: Stop,
+    /// Ballot type marker.
+    _ballot_type: PhantomData<Ballot>,
 }
 
-impl<S, E, D, T, Stop> Elimination<S, E, D, T, Stop> {
+impl<S, E, D, T, Stop, Ballot> Elimination<S, E, D, T, Ballot, Stop> {
     /// Construct an eliminator rule instance.
     pub fn new(scorer: S, eliminator: E, decider: D, tiebreaker: T, stop: Stop) -> Self {
         Self {
@@ -49,6 +51,7 @@ impl<S, E, D, T, Stop> Elimination<S, E, D, T, Stop> {
             decider,
             tiebreaker,
             stop,
+            _ballot_type: PhantomData,
         }
     }
 }
@@ -76,18 +79,19 @@ where
     TieBreakError(TE),
 }
 
-impl<S, E, D, T, Stop> VotingRuleExec for Elimination<S, E, D, T, Stop>
+impl<S, E, D, T, Stop> VotingRuleExec<RankingBallot>
+    for Elimination<S, E, D, T, RankingBallot, Stop>
 where
-    S: Scorer<Output = D::Input>,
+    S: Scorer<RankingBallot, Output = D::Input>,
     E: EliminationCriterion<Score = S::Output>,
     D: Decider,
-    T: TieBreaker,
-    Stop: EliminationStopCondition<S::Output>,
+    T: TieBreaker<RankingBallot>,
+    Stop: EliminationStopCondition<S::Output, RankingBallot>,
 {
     type Error = EliminationRuleError<S::Error, D::Error, T::Error, CandidateRemovalError>;
 
     #[instrument(skip(self, profile), ret)]
-    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
+    fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, Self::Error> {
         let mut current_profile = profile.clone();
 
         loop {
@@ -142,13 +146,13 @@ where
     }
 }
 
-impl<S, E, D, T, Stop> Default for Elimination<S, E, D, T, Stop>
+impl<S, E, D, T, Ballot, Stop> Default for Elimination<S, E, D, T, Ballot, Stop>
 where
-    S: Scorer<Output = D::Input>,
+    S: Scorer<Ballot, Output = D::Input>,
     E: EliminationCriterion<Score = S::Output>,
     D: Decider,
-    T: TieBreaker,
-    Stop: EliminationStopCondition<S::Output>,
+    T: TieBreaker<Ballot>,
+    Stop: EliminationStopCondition<S::Output, Ballot>,
 {
     fn default() -> Self {
         Self {
@@ -157,6 +161,7 @@ where
             decider: D::new(),
             tiebreaker: T::new(),
             stop: Stop::new(),
+            _ballot_type: PhantomData,
         }
     }
 }
