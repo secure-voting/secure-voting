@@ -6,7 +6,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::{CondorcetMatrix, PairwiseMatrix},
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct CondorcetScorer;
 
-impl Scorer for CondorcetScorer {
+impl Scorer<RankingBallot> for CondorcetScorer {
     /// Matrix of head-to-head preferences.
     ///
     /// Each row describes a candidate.
@@ -26,7 +26,10 @@ impl Scorer for CondorcetScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let vote_counts = PairwiseMatrix::from(profile);
         // The construction process ensures the invariants of the matrix are upheld
         Ok(Score::new(

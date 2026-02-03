@@ -17,9 +17,10 @@
 #![forbid(unsafe_code)]
 
 pub mod decider;
+pub mod election;
 pub mod matrix;
+pub mod models;
 pub mod prelude;
-pub mod profile;
 pub mod scorer;
 pub mod tie_breaker;
 pub mod voting_rules;

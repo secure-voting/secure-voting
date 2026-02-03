@@ -2,7 +2,7 @@ use std::sync::Once;
 
 use ctor::ctor;
 use tracing_subscriber::{EnvFilter, fmt};
-use voting_core::profile::Profile;
+use voting_core::models::{profile::Profile, ranking::RankingBallot};
 
 pub const MEMPHIS: usize = 0;
 pub const NASHVILLE: usize = 1;
@@ -19,7 +19,7 @@ pub const KNOXVILLE: usize = 3;
     clippy::expect_used,
     reason = "This is a utility function solely used by tests. Expect here is justified."
 )]
-pub fn construct_tennessee_wiki_example() -> Profile {
+pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
     let mut votes = Vec::with_capacity(100);
 
     (0..42).for_each(|_| votes.push(vec![MEMPHIS, NASHVILLE, CHATTANOOGA, KNOXVILLE]));

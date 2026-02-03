@@ -1,0 +1,71 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"secure-voting/apps/backend/internal/config"
+	"secure-voting/apps/backend/internal/db"
+	"secure-voting/apps/backend/internal/worker"
+)
+
+func main() {
+	cfg := config.FromEnv()
+
+	bootCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	pg, err := db.NewPostgresPool(bootCtx, cfg.PostgresDSN)
+	if err != nil {
+		log.Fatalf("failed to init postgres: %v", err)
+	}
+	defer pg.Close()
+
+	mc, err := db.NewMongoClient(bootCtx, cfg.MongoURI)
+	if err != nil {
+		log.Fatalf("failed to init mongo: %v", err)
+	}
+	defer func() { _ = mc.Disconnect(context.Background()) }()
+
+	mdb := mc.Database(cfg.MongoDBName)
+
+	w := worker.New(pg, mdb, worker.Config{
+		PollInterval: cfg.WorkerPollInterval,
+		TasksTopic:   cfg.KafkaTasksTopic,
+		ResultsTopic: cfg.KafkaResultsTopic,
+		GroupID:      cfg.KafkaGroupID,
+		Brokers:      cfg.KafkaBrokers,
+	})
+	defer w.Close()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("worker started: poll=%s brokers=%v tasks=%s results=%s group=%s",
+			cfg.WorkerPollInterval, cfg.KafkaBrokers, cfg.KafkaTasksTopic, cfg.KafkaResultsTopic, cfg.KafkaGroupID)
+		errCh <- w.Run(ctx)
+	}()
+
+	select {
+	case <-stop:
+		log.Printf("shutdown signal received")
+		cancelRun()
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			log.Printf("worker stopped with error: %v", err)
+		}
+		cancelRun()
+	}
+
+	log.Printf("bye")
+}

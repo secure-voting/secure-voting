@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::profile::{CandidateId, Profile};
+use crate::models::{candidate_id::CandidateId, profile::Profile};
 
 pub mod anti_plurality;
 pub mod approval;
@@ -65,7 +65,7 @@ impl<T> Score<T> {
 }
 
 /// Computes the scores for the profile of voters.
-pub trait Scorer {
+pub trait Scorer<Ballot> {
     /// Output type produced by this scorer.
     ///
     /// Usually a matrix or a vector.
@@ -83,7 +83,7 @@ pub trait Scorer {
     /// An error is returned if the scoring step can fail.
     /// Usually happens due to invariants of the scoring step
     /// not being upheld or supported by the type system.
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error>;
+    fn compute_score(&self, profile: &Profile<Ballot>) -> Result<Score<Self::Output>, Self::Error>;
 
     /// Construct a new scorer.
     fn new() -> Self;

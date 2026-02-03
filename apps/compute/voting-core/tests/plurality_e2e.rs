@@ -1,6 +1,6 @@
 mod common;
 
-use voting_core::{prelude::*, profile::CandidateId};
+use voting_core::{models::candidate_id::CandidateId, prelude::*};
 
 use crate::common::{MEMPHIS, construct_tennessee_wiki_example};
 

@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use rayon::prelude::*;
 
 use crate::{
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -17,11 +17,14 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct PluralityScorer;
 
-impl Scorer for PluralityScorer {
+impl Scorer<RankingBallot> for PluralityScorer {
     type Error = Infallible;
     type Output = Vec<usize>;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 

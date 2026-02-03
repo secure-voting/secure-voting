@@ -21,3 +21,5 @@ iggy/
 # Profiling artifacts
 flamegraph.svg
 perf.data*
+
+apps/frontend/node_modules

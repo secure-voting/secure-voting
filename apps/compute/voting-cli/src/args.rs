@@ -60,6 +60,7 @@ pub enum RuleName {
     /// Candidates are scored based on their worst defeat in head-to-head. Best winning margin is chosen.
     Simpson,
     /// Minmax rule.
+    ///
     /// Each candidate's score is the maximum margin of them against opponents.
     /// The candidate(-s) with the minimum score are winners.
     Minmax,

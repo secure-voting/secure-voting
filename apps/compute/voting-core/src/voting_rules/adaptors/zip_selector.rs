@@ -100,14 +100,14 @@ impl<A: EliminationCriterion<Score = T2>, T1, T2: Clone> EliminationCriterion
     }
 }
 
-impl<A: EliminationStopCondition<T1>, T1: Clone, T2> EliminationStopCondition<(T1, T2)>
-    for ZipSelector<0, A, T1, T2>
+impl<Ballot, A: EliminationStopCondition<T1, Ballot>, T1: Clone, T2>
+    EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<0, A, T1, T2>
 {
     fn should_stop(
         &self,
         scores: &Score<(T1, T2)>,
         outcome: &RuleOutcome,
-        profile: &Profile,
+        profile: &Profile<Ballot>,
     ) -> bool {
         let new_score = scores.score().0.clone();
         let new_candidates = scores.candidates();
@@ -124,14 +124,14 @@ impl<A: EliminationStopCondition<T1>, T1: Clone, T2> EliminationStopCondition<(T
     }
 }
 
-impl<A: EliminationStopCondition<T2>, T1, T2: Clone> EliminationStopCondition<(T1, T2)>
-    for ZipSelector<1, A, T1, T2>
+impl<Ballot, A: EliminationStopCondition<T2, Ballot>, T1, T2: Clone>
+    EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<1, A, T1, T2>
 {
     fn should_stop(
         &self,
         scores: &Score<(T1, T2)>,
         outcome: &RuleOutcome,
-        profile: &Profile,
+        profile: &Profile<Ballot>,
     ) -> bool {
         let new_score = scores.score().1.clone();
         let new_candidates = scores.candidates();
