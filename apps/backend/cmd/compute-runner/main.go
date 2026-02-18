@@ -371,7 +371,7 @@ func processTask(ctx context.Context, mdb *mongo.Database, compute pb.ComputeCli
 	}
 }
 
-func main() {
+func run() error {
 	brokers := splitCSV(envOr("KAFKA_BROKERS", "kafka:9092"))
 	tasksTopic := envOr("KAFKA_TASKS_TOPIC", "secure-voting.compute.tasks")
 	resultsTopic := envOr("KAFKA_RESULTS_TOPIC", "secure-voting.compute.results")
@@ -390,7 +390,9 @@ func main() {
 
 	mc, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
-		log.Fatalf("mongo connect: %v", err)
+		log.Printf("mongo connect: %v", err)
+		stop()
+		return err
 	}
 	defer func() { _ = mc.Disconnect(context.Background()) }()
 	mdb := mc.Database(mongoDB)
@@ -402,7 +404,9 @@ func main() {
 		ServerName: serverName,
 	})
 	if err != nil {
-		log.Fatalf("grpc dial: %v", err)
+		log.Printf("grpc dial: %v", err)
+		stop()
+		return err
 	}
 	defer func() { _ = cc.Close() }()
 
@@ -430,7 +434,7 @@ func main() {
 		msg, err := reader.FetchMessage(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				return
+				return nil
 			}
 			log.Printf("kafka fetch: %v", err)
 			continue
@@ -457,5 +461,12 @@ func main() {
 		}
 
 		_ = reader.CommitMessages(ctx, msg)
+	}
+}
+
+func main() {
+	if err := run(); err != nil {
+		log.Printf("fatal: %v", err)
+		os.Exit(1)
 	}
 }

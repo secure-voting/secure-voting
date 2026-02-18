@@ -86,9 +86,15 @@ func TestGet_InvalidID_MapsTo400(t *testing.T) {
 		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
 			return elections.ElectionDetail{}, "invalid_id", nil
 		},
-		listFn:       func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:     func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
 		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
 			return "", nil
 		},
@@ -96,7 +102,9 @@ func TestGet_InvalidID_MapsTo400(t *testing.T) {
 		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
 			return elections.InviteCreated{}, "", nil
 		},
-		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) { return nil, "", nil },
+		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
+			return nil, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)
@@ -124,9 +132,15 @@ func TestGet_NotFound_MapsTo404(t *testing.T) {
 		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
 			return elections.ElectionDetail{}, "not_found", nil
 		},
-		listFn:       func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:     func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
 		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
 			return "", nil
 		},
@@ -134,7 +148,9 @@ func TestGet_NotFound_MapsTo404(t *testing.T) {
 		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
 			return elections.InviteCreated{}, "", nil
 		},
-		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) { return nil, "", nil },
+		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
+			return nil, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)
@@ -158,13 +174,25 @@ func TestUpdateRules_InvalidStatus_MapsTo409(t *testing.T) {
 		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
 			return "invalid_status", nil
 		},
-		getFn:         func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) { return elections.ElectionDetail{}, "", nil },
-		listFn:        func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:      func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn:  func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
-		actionFn:      func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
-		createInvFn:   func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) { return elections.InviteCreated{}, "", nil },
-		listInvFn:     func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) { return nil, "", nil },
+		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
+			return elections.ElectionDetail{}, "", nil
+		},
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
+		actionFn: func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
+		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
+			return elections.InviteCreated{}, "", nil
+		},
+		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
+			return nil, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)
@@ -193,13 +221,27 @@ func TestAction_InvalidTransition_MapsTo409(t *testing.T) {
 		actionFn: func(ctx context.Context, electionID, adminUserID, action string) (string, error) {
 			return "invalid_transition", nil
 		},
-		getFn:         func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) { return elections.ElectionDetail{}, "", nil },
-		listFn:        func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:      func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn:  func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
-		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) { return "", nil },
-		createInvFn:   func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) { return elections.InviteCreated{}, "", nil },
-		listInvFn:     func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) { return nil, "", nil },
+		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
+			return elections.ElectionDetail{}, "", nil
+		},
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
+		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
+			return "", nil
+		},
+		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
+			return elections.InviteCreated{}, "", nil
+		},
+		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
+			return nil, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)
@@ -224,13 +266,25 @@ func TestCreateInvite_EmailAlreadyInvited_MapsTo409(t *testing.T) {
 		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
 			return elections.InviteCreated{}, "email_already_invited", nil
 		},
-		getFn:         func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) { return elections.ElectionDetail{}, "", nil },
-		listFn:        func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:      func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn:  func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
-		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) { return "", nil },
-		actionFn:      func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
-		listInvFn:     func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) { return nil, "", nil },
+		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
+			return elections.ElectionDetail{}, "", nil
+		},
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
+		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
+			return "", nil
+		},
+		actionFn: func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
+		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
+			return nil, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)
@@ -255,13 +309,25 @@ func TestListInvites_NotFound_MapsTo404(t *testing.T) {
 		listInvFn: func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
 			return nil, "not_found", nil
 		},
-		getFn:         func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) { return elections.ElectionDetail{}, "", nil },
-		listFn:        func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) { return nil, nil },
-		createFn:      func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) { return "", "", nil },
-		ballotMetaFn:  func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) { return elections.BallotMeta{}, "", nil },
-		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) { return "", nil },
-		actionFn:      func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
-		createInvFn:   func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) { return elections.InviteCreated{}, "", nil },
+		getFn: func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error) {
+			return elections.ElectionDetail{}, "", nil
+		},
+		listFn: func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error) {
+			return nil, nil
+		},
+		createFn: func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
+			return "", "", nil
+		},
+		ballotMetaFn: func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error) {
+			return elections.BallotMeta{}, "", nil
+		},
+		updateRulesFn: func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error) {
+			return "", nil
+		},
+		actionFn: func(ctx context.Context, electionID, adminUserID, action string) (string, error) { return "", nil },
+		createInvFn: func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error) {
+			return elections.InviteCreated{}, "", nil
+		},
 	}
 
 	h := NewHandlers(svc)

@@ -967,15 +967,6 @@ func nullableJSON(b []byte) any {
 	}
 	return string(b)
 }
-
-type execer interface {
-	Exec(ctx context.Context, sql string, arguments ...any) (pgconnCommandTag, error)
-}
-
-type pgconnCommandTag interface {
-	RowsAffected() int64
-}
-
 func insertAudit(ctx context.Context, tx any, actorUserID *string, eventType string, details map[string]any) error {
 	if details == nil {
 		details = map[string]any{}

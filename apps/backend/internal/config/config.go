@@ -23,17 +23,16 @@ type Config struct {
 
 	MaxUploadBytes int64
 
-	KafkaBrokers        []string
-	KafkaTasksTopic     string
-	KafkaResultsTopic   string
-	KafkaGroupID        string
-	WorkerPollInterval  time.Duration
+	KafkaBrokers       []string
+	KafkaTasksTopic    string
+	KafkaResultsTopic  string
+	KafkaGroupID       string
+	WorkerPollInterval time.Duration
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
 	ComputeTLSCA         string
 	ComputeTLSServerName string
-
 }
 
 func FromEnv() Config {
@@ -149,7 +148,6 @@ func FromEnv() Config {
 		computeSN = "rust-compute"
 	}
 
-
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
@@ -176,7 +174,6 @@ func FromEnv() Config {
 		ComputeTLS:           computeTLS,
 		ComputeTLSCA:         computeCA,
 		ComputeTLSServerName: computeSN,
-
 	}
 }
 

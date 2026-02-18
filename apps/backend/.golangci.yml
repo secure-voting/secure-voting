@@ -1,0 +1,42 @@
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - errcheck
+    - revive
+    - gofmt
+    - gocritic
+    - unconvert
+    - misspell
+    - bodyclose
+
+issues:
+  exclude-use-default: false
+  exclude-dirs:
+    - internal/compute/pb
+  exclude-files:
+    - ".*\\.pb\\.go$"
+  exclude-rules:
+    - linters: [staticcheck]
+      text: "SA1019: grpc\\.DialContext is deprecated: use NewClient instead"
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        disabled: true
+      - name: package-comments
+        disabled: true
+      - name: var-declaration
+        disabled: true
+
+  gocritic:
+    disabled-checks:
+      - dupBranchBody
+      - ifElseChain

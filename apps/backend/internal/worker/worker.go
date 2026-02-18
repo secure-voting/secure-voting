@@ -196,15 +196,15 @@ func (w *Worker) handleExperimentRun(ctx context.Context, job jobs.ClaimedJob) e
 	}
 
 	task := ExperimentRunTask{
-		Kind:            "experiment_run",
-		JobID:           job.ID,
-		RunID:           pl.RunID,
-		ExperimentID:    pl.ExperimentID,
-		DatasetID:       pl.DatasetID,
-		ExperimentType:  expType,
-		ExperimentSeed:  expSeed,
+		Kind:             "experiment_run",
+		JobID:            job.ID,
+		RunID:            pl.RunID,
+		ExperimentID:     pl.ExperimentID,
+		DatasetID:        pl.DatasetID,
+		ExperimentType:   expType,
+		ExperimentSeed:   expSeed,
 		ExperimentParams: expParams,
-		Dataset:         ds,
+		Dataset:          ds,
 	}
 
 	value, err := json.Marshal(task)
@@ -289,7 +289,7 @@ WHERE id=$1::uuid
 
 		ref := map[string]any{
 			"mongo_experiment_result_id": oidHex,
-			"run_id": res.RunID,
+			"run_id":                     res.RunID,
 		}
 		refJSON, _ := json.Marshal(ref)
 
@@ -338,11 +338,11 @@ func (w *Worker) upsertExperimentResult(ctx context.Context, res ExperimentRunRe
 
 	update := bson.M{
 		"$set": bson.M{
-			"run_id":    res.RunID,
-			"winners":   res.Winners,
-			"metrics":   res.Metrics,
-			"timings":   res.Timings,
-			"artifacts": res.Artifacts,
+			"run_id":     res.RunID,
+			"winners":    res.Winners,
+			"metrics":    res.Metrics,
+			"timings":    res.Timings,
+			"artifacts":  res.Artifacts,
 			"updated_at": time.Now().UTC(),
 		},
 		"$setOnInsert": bson.M{
@@ -569,4 +569,3 @@ func (w *Worker) handleTallyLocal(ctx context.Context, job jobs.ClaimedJob) erro
 
 	return nil
 }
-

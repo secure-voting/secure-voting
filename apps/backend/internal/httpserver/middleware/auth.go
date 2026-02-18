@@ -11,10 +11,10 @@ import (
 type ctxKey string
 
 const (
-	ctxUserID  ctxKey = "user_id"
-	ctxEmail   ctxKey = "email"
-	ctxRole    ctxKey = "role"
-	ctxToken   ctxKey = "token"
+	ctxUserID ctxKey = "user_id"
+	ctxEmail  ctxKey = "email"
+	ctxRole   ctxKey = "role"
+	ctxToken  ctxKey = "token"
 )
 
 type TokenVerifier interface {

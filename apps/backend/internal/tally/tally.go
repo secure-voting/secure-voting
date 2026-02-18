@@ -13,11 +13,11 @@ import (
 )
 
 type Output struct {
-	Method   string                 `json:"method"`
-	Params   map[string]any         `json:"params,omitempty"`
-	Winners  []string               `json:"winners"`
-	Metrics  map[string]any         `json:"metrics,omitempty"`
-	Protocol map[string]any         `json:"protocol,omitempty"`
+	Method   string         `json:"method"`
+	Params   map[string]any `json:"params,omitempty"`
+	Winners  []string       `json:"winners"`
+	Metrics  map[string]any `json:"metrics,omitempty"`
+	Protocol map[string]any `json:"protocol,omitempty"`
 }
 
 func ComputeFromDB(ctx context.Context, db *pgxpool.Pool, electionID string) (Output, string, error) {

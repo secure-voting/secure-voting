@@ -29,15 +29,15 @@ type Candidate struct {
 }
 
 type Dataset struct {
-	ID          string      	`json:"id" bson:"-"`
-	Name        string      	`json:"name" bson:"name"`
-	Description string      	`json:"description,omitempty" bson:"description,omitempty"`
-	Source      string      	`json:"source" bson:"source"`
-	Format      string      	`json:"format" bson:"format"`
-	Candidates  []Candidate 	`json:"candidates" bson:"candidates"`
-	CreatedAt   string      	`json:"created_at" bson:"-"`
-	Seed        *int64      	`json:"seed,omitempty" bson:"seed,omitempty"`
-	Parameters map[string]any 	`json:"parameters,omitempty" bson:"-"`
+	ID          string         `json:"id" bson:"-"`
+	Name        string         `json:"name" bson:"name"`
+	Description string         `json:"description,omitempty" bson:"description,omitempty"`
+	Source      string         `json:"source" bson:"source"`
+	Format      string         `json:"format" bson:"format"`
+	Candidates  []Candidate    `json:"candidates" bson:"candidates"`
+	CreatedAt   string         `json:"created_at" bson:"-"`
+	Seed        *int64         `json:"seed,omitempty" bson:"seed,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty" bson:"-"`
 }
 
 type ListItem struct {
@@ -82,7 +82,7 @@ type DatasetDoc struct {
 	Raw         primitive.Binary `bson:"raw,omitempty"`
 	RawFilename string           `bson:"raw_filename,omitempty"`
 	RawMime     string           `bson:"raw_mime,omitempty"`
-	Parameters map[string]any 	 `bson:"parameters,omitempty"`
+	Parameters  map[string]any   `bson:"parameters,omitempty"`
 }
 
 type BallotDoc struct {
@@ -96,18 +96,18 @@ type BallotDoc struct {
 
 type importFile struct {
 	Dataset struct {
-		Name        string      `json:"name"`
-		Description string      `json:"description,omitempty"`
-		Format      string      `json:"format"`
-		Candidates  []Candidate `json:"candidates"`
-		Seed        *int64      `json:"seed,omitempty"`
+		Name        string         `json:"name"`
+		Description string         `json:"description,omitempty"`
+		Format      string         `json:"format"`
+		Candidates  []Candidate    `json:"candidates"`
+		Seed        *int64         `json:"seed,omitempty"`
 		Parameters  map[string]any `json:"parameters,omitempty"`
 	} `json:"dataset"`
 	Ballots []struct {
-		VoterRef string            `json:"voter_ref,omitempty"`
-		Approval []string          `json:"approval,omitempty"`
-		Ranking  []string          `json:"ranking,omitempty"`
-		Scores   map[string]int    `json:"scores,omitempty"`
+		VoterRef string         `json:"voter_ref,omitempty"`
+		Approval []string       `json:"approval,omitempty"`
+		Ranking  []string       `json:"ranking,omitempty"`
+		Scores   map[string]int `json:"scores,omitempty"`
 	} `json:"ballots"`
 }
 
@@ -117,7 +117,7 @@ func (s *Service) List(ctx context.Context) ([]ListItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer cur.Close(ctx)
+	defer func() { _ = cur.Close(ctx) }()
 
 	var out []ListItem
 	for cur.Next(ctx) {
@@ -556,7 +556,6 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 
 	return dsid.Hex(), "", nil
 }
-
 
 func ballotsToJSON(in []BallotDoc) []map[string]any {
 	out := make([]map[string]any, 0, len(in))

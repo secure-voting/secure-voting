@@ -13,7 +13,7 @@ import (
 	"secure-voting/apps/backend/internal/httpserver"
 )
 
-func main() {
+func run() error {
 	cfg := config.FromEnv()
 
 	bootCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -21,19 +21,25 @@ func main() {
 
 	pg, err := db.NewPostgresPool(bootCtx, cfg.PostgresDSN)
 	if err != nil {
-		log.Fatalf("failed to init postgres: %v", err)
+		log.Printf("failed to init postgres: %v", err)
+		cancel()
+		return err
 	}
 	defer pg.Close()
 
 	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword)
 	if err != nil {
-		log.Fatalf("failed to init redis: %v", err)
+		log.Printf("failed to init redis: %v", err)
+		cancel()
+		return err
 	}
 	defer func() { _ = rdb.Close() }()
 
 	mc, err := db.NewMongoClient(bootCtx, cfg.MongoURI)
 	if err != nil {
-		log.Fatalf("failed to init mongo: %v", err)
+		log.Printf("failed to init mongo: %v", err)
+		cancel()
+		return err
 	}
 	defer func() { _ = mc.Disconnect(context.Background()) }()
 
@@ -68,4 +74,12 @@ func main() {
 	}
 
 	log.Printf("bye")
+	return nil
+}
+
+func main() {
+	if err := run(); err != nil {
+		log.Printf("fatal: %v", err)
+		os.Exit(1)
+	}
 }

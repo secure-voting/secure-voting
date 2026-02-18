@@ -23,8 +23,8 @@ func NewService(db *pgxpool.Pool) *Service {
 
 type CreateReq struct {
 	Type   string         `json:"type"`
-	Params map[string]any  `json:"params,omitempty"`
-	Seed   *int64          `json:"seed,omitempty"`
+	Params map[string]any `json:"params,omitempty"`
+	Seed   *int64         `json:"seed,omitempty"`
 }
 
 type Experiment struct {

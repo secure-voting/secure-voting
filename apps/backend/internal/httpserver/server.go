@@ -7,11 +7,9 @@ import (
 	"time"
 )
 
-
 type Server struct {
 	httpServer *http.Server
 }
-
 
 func New(addr string, handler http.Handler) *Server {
 	return &Server{
@@ -22,7 +20,6 @@ func New(addr string, handler http.Handler) *Server {
 		},
 	}
 }
-
 
 func (s *Server) Run() error {
 	err := s.httpServer.ListenAndServe()

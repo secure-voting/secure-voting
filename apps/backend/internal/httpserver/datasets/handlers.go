@@ -2,9 +2,9 @@ package datasets
 
 import (
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
-	"mime/multipart"
 
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
@@ -93,7 +93,7 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "cannot open file")
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	id, code, err := h.svc.Import(r.Context(), datasets.ImportMeta{
 		Name:        name,

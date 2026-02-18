@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 
 	"secure-voting/apps/backend/internal/auditlog"
 )
@@ -37,20 +37,20 @@ type BatchItem struct {
 }
 
 type Run struct {
-	ID          string  `json:"id"`
-	ExperimentID string `json:"experiment_id"`
-	DatasetID   string  `json:"dataset_id"`
-	Status      string  `json:"status"`
+	ID           string  `json:"id"`
+	ExperimentID string  `json:"experiment_id"`
+	DatasetID    string  `json:"dataset_id"`
+	Status       string  `json:"status"`
 	KernelTaskID *string `json:"kernel_task_id,omitempty"`
-	StartedAt   *string `json:"started_at,omitempty"`
-	FinishedAt  *string `json:"finished_at,omitempty"`
+	StartedAt    *string `json:"started_at,omitempty"`
+	FinishedAt   *string `json:"finished_at,omitempty"`
 }
 
 type Result struct {
-	RunID    string         `json:"run_id" bson:"run_id"`
-	Winners  []any          `json:"winners,omitempty" bson:"winners,omitempty"`
-	Metrics  map[string]any `json:"metrics,omitempty" bson:"metrics,omitempty"`
-	Timings  map[string]any `json:"timings,omitempty" bson:"timings,omitempty"`
+	RunID     string         `json:"run_id" bson:"run_id"`
+	Winners   []any          `json:"winners,omitempty" bson:"winners,omitempty"`
+	Metrics   map[string]any `json:"metrics,omitempty" bson:"metrics,omitempty"`
+	Timings   map[string]any `json:"timings,omitempty" bson:"timings,omitempty"`
 	Artifacts map[string]any `json:"artifacts,omitempty" bson:"artifacts,omitempty"`
 }
 
@@ -190,13 +190,11 @@ func (s *Service) List(ctx context.Context, role, userID, experimentID string) (
 		}
 		q += ` AND r.experiment_id = $` + itoa(argn) + `::uuid`
 		args = append(args, experimentID)
-		argn++
 	}
 
 	if role != "admin" {
 		q += ` AND e.created_by = $` + itoa(argn) + `::uuid`
 		args = append(args, userID)
-		argn++
 	}
 
 	q += ` ORDER BY r.started_at NULLS LAST, r.id DESC`

@@ -45,16 +45,16 @@ type MyBallotResp struct {
 }
 
 type electionVoteCfg struct {
-	BallotFormat    string
-	Status          string
-	AccessMode      string
-	Allowed         bool
-	ApprovalMax     *int
-	RankingTopK     *int
-	ScoreMin        *int
-	ScoreMax        *int
-	ScoreStep       *int
-	ScoreAllowSkip  bool
+	BallotFormat   string
+	Status         string
+	AccessMode     string
+	Allowed        bool
+	ApprovalMax    *int
+	RankingTopK    *int
+	ScoreMin       *int
+	ScoreMax       *int
+	ScoreStep      *int
+	ScoreAllowSkip bool
 }
 
 func (s *Service) loadElectionVoteCfg(ctx context.Context, electionID, email string) (electionVoteCfg, string, error) {
