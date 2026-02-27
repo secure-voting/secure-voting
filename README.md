@@ -17,7 +17,7 @@ The .env is not commited to .git, but .env.example is provided.
 
 **Full dev stack**
 ```shell
-docker compose --profile prod --profile debug up -d
+docker compose --profile prod --profile debug --profile observability up -d
 ```
 
 **Backend-only**
