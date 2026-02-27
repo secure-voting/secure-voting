@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
 
 use opentelemetry::{KeyValue, global};
 use opentelemetry_appender_tracing::layer;
@@ -246,11 +246,12 @@ fn get_resource() -> Resource {
 #[allow(clippy::unwrap_used)]
 fn init_logs() -> SdkLoggerProvider {
     let exporter = opentelemetry_otlp::LogExporter::builder()
-        .with_http()
-        .with_protocol(Protocol::HttpBinary)
+        .with_tonic()
         .with_endpoint(
             std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
         )
+        .with_protocol(Protocol::Grpc)
+        .with_timeout(Duration::from_secs(10))
         .build()
         .expect("Failed to create a log exporter");
     let logger_provider = SdkLoggerProvider::builder()
@@ -258,11 +259,15 @@ fn init_logs() -> SdkLoggerProvider {
         .with_resource(get_resource())
         .build();
 
-    let filter_otel = EnvFilter::new("info").add_directive("tonic=off".parse().unwrap());
+    let filter_otel = EnvFilter::new("info")
+        .add_directive("tonic=off".parse().unwrap())
+        .add_directive("hyper=off".parse().unwrap())
+        .add_directive("h2=off".parse().unwrap())
+        .add_directive("reqwest=off".parse().unwrap());
     let otel_layer =
         layer::OpenTelemetryTracingBridge::new(&logger_provider).with_filter(filter_otel);
 
-    let filter_fmt = EnvFilter::new("info").add_directive("opentelemetry=debug".parse().unwrap());
+    let filter_fmt = EnvFilter::new("info");
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_thread_names(true)
         .with_filter(filter_fmt);
@@ -278,11 +283,12 @@ fn init_logs() -> SdkLoggerProvider {
 #[allow(clippy::expect_used)]
 fn init_traces() -> SdkTracerProvider {
     let exporter = SpanExporter::builder()
-        .with_http()
-        .with_protocol(Protocol::HttpBinary)
+        .with_tonic()
         .with_endpoint(
             std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
         )
+        .with_protocol(Protocol::Grpc)
+        .with_timeout(Duration::from_secs(10))
         .build()
         .expect("Failed to create a trace exporter");
 
@@ -295,11 +301,12 @@ fn init_traces() -> SdkTracerProvider {
 #[allow(clippy::expect_used)]
 fn init_metrics() -> SdkMeterProvider {
     let exporter = MetricExporter::builder()
-        .with_http()
-        .with_protocol(Protocol::HttpBinary)
+        .with_tonic()
         .with_endpoint(
             std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
         )
+        .with_protocol(Protocol::Grpc)
+        .with_timeout(Duration::from_secs(10))
         .build()
         .expect("Failed to create a metric exporter");
 
