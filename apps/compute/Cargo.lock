@@ -943,6 +943,8 @@ dependencies = [
  "prost",
  "reqwest",
  "thiserror",
+ "tokio",
+ "tonic",
  "tracing",
 ]
 
