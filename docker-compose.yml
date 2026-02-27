@@ -241,7 +241,7 @@ services:
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute
 
-      - OTEL_COLLECTOR_URL=http://otel-collector:4318
+      - OTEL_COLLECTOR_URL=http://otel-collector:4317
     volumes:
       - ./scripts/certs/out:/certs:ro
     restart: unless-stopped
@@ -249,6 +249,7 @@ services:
     profiles:
       - compute
       - prod
+      - observability
 
   compute-runner:
     build: apps/backend
@@ -359,7 +360,7 @@ services:
       - kafka
 
   otel-collector:
-    image: otel/opentelemetry-collector:0.146.1
+    image: otel/opentelemetry-collector-contrib:0.146.1
     container_name: otel-collector
     command: ["--config=/etc/otelcol/config.yaml"]
     networks:
@@ -370,6 +371,16 @@ services:
         source: observability/otel-collector.yaml
         target: /etc/otelcol/config.yaml
     restart: unless-stopped
+    depends_on:
+      # loki:
+      #   condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:13133 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     profiles:
       - prod
       - observability
@@ -385,14 +396,13 @@ services:
       - debug_network
     restart: unless-stopped
     profiles:
-      - observability  
+      - observability
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:2.15.0
     container_name: jaeger
     ports:
       - "127.0.0.1:16686:16686"
-      - "4317:4317"
     networks:
       - debug_network
       - rpc_network
@@ -400,13 +410,19 @@ services:
     profiles:
       - observability
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.6.7
     container_name: loki
     ports:
       - "127.0.0.1:3100:3100"
     networks:
       - debug_network
     restart: unless-stopped
+    # healthcheck:
+    #   test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+    #   start_period: 15s
     profiles:
       - observability
 

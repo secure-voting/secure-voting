@@ -24,10 +24,14 @@ exporters:
   # Metrics → Prometheus scrape endpoint
   prometheus:
     endpoint: "0.0.0.0:8889"
+    namespace: "otel_collector"
 
   # Logs → Loki
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
+
+  debug:
+    verbosity: detailed
 
 service:
   pipelines:
@@ -35,14 +39,14 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/jaeger]
+      exporters: [otlp/jaeger, debug]
 
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus]
+      exporters: [prometheus, debug]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [loki]
+      exporters: [otlp_http/loki, debug]
