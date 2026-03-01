@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, time::Duration};
+use std::{fmt::Debug, sync::OnceLock, time::Duration};
 
 use opentelemetry::{KeyValue, global};
 use opentelemetry_appender_tracing::layer;
@@ -7,7 +7,7 @@ use opentelemetry_sdk::{
     Resource, logs::SdkLoggerProvider, metrics::SdkMeterProvider, trace::SdkTracerProvider,
 };
 use tonic::Response;
-use tower_http::trace::TraceLayer;
+use tonic_tracing_opentelemetry::middleware::server::OtelGrpcLayer;
 use tracing::{error, info, instrument};
 use tracing_subscriber::{EnvFilter, prelude::*};
 use voting_core::prelude::*;
@@ -81,7 +81,7 @@ struct ComputeService {
 
 #[tonic::async_trait]
 impl Compute for ComputeService {
-    #[instrument(skip(self, request), fields(tally_rule = tracing::field::Empty))]
+    #[instrument(skip(self))]
     async fn run(
         &self,
         request: tonic::Request<tonic::Streaming<RunChunk>>,
@@ -336,7 +336,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     info!("Starting server on {}", addr);
 
     tonic::transport::Server::builder()
-        .layer(TraceLayer::new_for_grpc())
+        .layer(OtelGrpcLayer::default())
         .add_service(ComputeServer::new(service))
         .serve(addr)
         .await?;
