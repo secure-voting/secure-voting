@@ -1,15 +1,19 @@
 use std::{fmt::Debug, sync::OnceLock, time::Duration};
 
-use opentelemetry::{KeyValue, global};
-use opentelemetry_appender_tracing::layer;
-use opentelemetry_otlp::{MetricExporter, Protocol, SpanExporter, WithExportConfig};
+use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
 use opentelemetry_sdk::{
-    Resource, logs::SdkLoggerProvider, metrics::SdkMeterProvider, trace::SdkTracerProvider,
+    Resource,
+    metrics::{MeterProviderBuilder, PeriodicReader, SdkMeterProvider},
+    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+};
+use opentelemetry_semantic_conventions::{
+    SCHEMA_URL,
+    resource::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_VERSION},
 };
 use tonic::Response;
-use tonic_tracing_opentelemetry::middleware::server::OtelGrpcLayer;
-use tracing::{error, info, instrument};
-use tracing_subscriber::{EnvFilter, prelude::*};
+use tracing::{Level, error, info, instrument};
+use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use voting_core::prelude::*;
 
 use crate::{
@@ -86,6 +90,12 @@ impl Compute for ComputeService {
         &self,
         request: tonic::Request<tonic::Streaming<RunChunk>>,
     ) -> Result<tonic::Response<RunResult>, tonic::Status> {
+        println!("Stdout aboba");
+        eprintln!("Stderr aboba");
+        info!("Info aboba");
+        error!("Error aboba");
+        panic!("Panic aboba");
+        std::process::exit(1);
         let start = std::time::Instant::now();
         self.metrics.active_requests.add(1, &[]);
 
@@ -231,100 +241,108 @@ impl Compute for ComputeService {
     }
 }
 
-fn get_resource() -> Resource {
+fn resource() -> Resource {
     static RESOURCE: OnceLock<Resource> = OnceLock::new();
+
     RESOURCE
         .get_or_init(|| {
             Resource::builder()
-                .with_service_name("rust-compute-service")
+                .with_service_name(env!("CARGO_PKG_NAME"))
+                .with_schema_url(
+                    [
+                        KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+                        KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, "develop"),
+                    ],
+                    SCHEMA_URL,
+                )
                 .build()
         })
         .clone()
 }
 
 #[allow(clippy::expect_used)]
-#[allow(clippy::unwrap_used)]
-fn init_logs() -> SdkLoggerProvider {
-    let exporter = opentelemetry_otlp::LogExporter::builder()
+fn init_meter_provider() -> SdkMeterProvider {
+    let exporter = opentelemetry_otlp::MetricExporter::builder()
         .with_tonic()
-        .with_endpoint(
-            std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
-        )
-        .with_protocol(Protocol::Grpc)
-        .with_timeout(Duration::from_secs(10))
+        .with_temporality(opentelemetry_sdk::metrics::Temporality::default())
         .build()
-        .expect("Failed to create a log exporter");
-    let logger_provider = SdkLoggerProvider::builder()
-        .with_batch_exporter(exporter)
-        .with_resource(get_resource())
+        .expect("Failed to create a MetricExporter");
+
+    let reader = PeriodicReader::builder(exporter)
+        .with_interval(Duration::from_secs(30))
         .build();
 
-    let filter_otel = EnvFilter::new("info")
-        .add_directive("tonic=off".parse().unwrap())
-        .add_directive("hyper=off".parse().unwrap())
-        .add_directive("h2=off".parse().unwrap())
-        .add_directive("reqwest=off".parse().unwrap());
-    let otel_layer =
-        layer::OpenTelemetryTracingBridge::new(&logger_provider).with_filter(filter_otel);
+    let stdout_reader =
+        PeriodicReader::builder(opentelemetry_stdout::MetricExporter::default()).build();
 
-    let filter_fmt = EnvFilter::new("info");
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_thread_names(true)
-        .with_filter(filter_fmt);
+    let meter_provider = MeterProviderBuilder::default()
+        .with_resource(resource())
+        .with_reader(reader)
+        .with_reader(stdout_reader)
+        .build();
 
-    tracing_subscriber::registry()
-        .with(otel_layer)
-        .with(fmt_layer)
-        .init();
+    global::set_meter_provider(meter_provider.clone());
 
-    logger_provider
+    meter_provider
 }
 
 #[allow(clippy::expect_used)]
-fn init_traces() -> SdkTracerProvider {
-    let exporter = SpanExporter::builder()
+fn init_tracer_provider() -> SdkTracerProvider {
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_endpoint(
-            std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
-        )
-        .with_protocol(Protocol::Grpc)
-        .with_timeout(Duration::from_secs(10))
         .build()
-        .expect("Failed to create a trace exporter");
+        .expect("Failed to create a SpanExporter");
 
     SdkTracerProvider::builder()
+        .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
+            1.0,
+        ))))
+        .with_id_generator(RandomIdGenerator::default())
+        .with_resource(resource())
         .with_batch_exporter(exporter)
-        .with_resource(get_resource())
         .build()
 }
 
-#[allow(clippy::expect_used)]
-fn init_metrics() -> SdkMeterProvider {
-    let exporter = MetricExporter::builder()
-        .with_tonic()
-        .with_endpoint(
-            std::env::var("OTEL_COLLECTOR_URL").unwrap_or("http://otel-collector:4317".to_owned()),
-        )
-        .with_protocol(Protocol::Grpc)
-        .with_timeout(Duration::from_secs(10))
-        .build()
-        .expect("Failed to create a metric exporter");
+fn init_tracing_subscriber() -> OtelGuard {
+    let tracer_provider = init_tracer_provider();
+    let meter_provider = init_meter_provider();
 
-    SdkMeterProvider::builder()
-        .with_periodic_exporter(exporter)
-        .with_resource(get_resource())
-        .build()
+    let tracer = tracer_provider.tracer("tracing-otel-subscriber");
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::filter::LevelFilter::from_level(
+            Level::INFO,
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .with(MetricsLayer::new(meter_provider.clone()))
+        .with(OpenTelemetryLayer::new(tracer))
+        .init();
+
+    OtelGuard {
+        tracer_provider,
+        meter_provider,
+    }
+}
+
+struct OtelGuard {
+    tracer_provider: SdkTracerProvider,
+    meter_provider: SdkMeterProvider,
+}
+
+impl Drop for OtelGuard {
+    fn drop(&mut self) {
+        if let Err(err) = self.tracer_provider.shutdown() {
+            eprintln!("{err:?}");
+        }
+        if let Err(err) = self.meter_provider.shutdown() {
+            eprintln!("{err:?}");
+        }
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let logger_provider = init_logs();
-
-    let tracer_provider = init_traces();
-    global::set_tracer_provider(tracer_provider.clone());
-
-    let meter_provider = init_metrics();
-    global::set_meter_provider(meter_provider.clone());
+    let _guard = init_tracing_subscriber();
 
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
@@ -334,32 +352,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>
     };
 
     info!("Starting server on {}", addr);
+    println!("BINARY VERSION MARKER 12345");
 
     tonic::transport::Server::builder()
-        .layer(OtelGrpcLayer::default())
+        .layer(tonic_tracing_opentelemetry::middleware::server::OtelGrpcLayer::default())
         .add_service(ComputeServer::new(service))
         .serve(addr)
         .await?;
-
-    let mut shutdown_errors = Vec::new();
-    if let Err(e) = logger_provider.shutdown() {
-        shutdown_errors.push(format!("logger provider: {e}"));
-    }
-    if let Err(e) = tracer_provider.shutdown() {
-        shutdown_errors.push(format!("tracer provider: {e}"));
-    }
-
-    if let Err(e) = meter_provider.shutdown() {
-        shutdown_errors.push(format!("meter provider: {e}"));
-    }
-
-    if !shutdown_errors.is_empty() {
-        return Err(format!(
-            "Failed to shutdown providers: {}",
-            shutdown_errors.join("\n")
-        )
-        .into());
-    }
 
     Ok(())
 }
