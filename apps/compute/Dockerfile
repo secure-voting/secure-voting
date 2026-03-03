@@ -9,7 +9,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY ./ ./
-RUN cargo build --release
+RUN cargo build --release --bin compute-service
 
 # ---- runtime ----
 
