@@ -37,6 +37,15 @@ impl RuleOutcome {
     }
 }
 
+impl From<Vec<usize>> for RuleOutcome {
+    fn from(value: Vec<usize>) -> Self {
+        match value.len() {
+            1 => RuleOutcome::UniqueWinner(CandidateId::new(value[0])),
+            _ => RuleOutcome::MultipleWinners(value.into_iter().map(CandidateId::new).collect()),
+        }
+    }
+}
+
 /// Resolves ties between selected winners to determine a single absolute winner.
 pub trait TieBreaker<Ballot> {
     /// Error returned when the tie break can't be performed.
