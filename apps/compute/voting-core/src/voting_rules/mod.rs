@@ -22,6 +22,7 @@ pub mod minmax;
 pub mod nanson;
 pub mod plurality;
 pub mod practical_condorcet;
+pub mod q_paretian;
 pub mod simpson;
 
 /// Trait for all the voting rules, simple and complex ones.
