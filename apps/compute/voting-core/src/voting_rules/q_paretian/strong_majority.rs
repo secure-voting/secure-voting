@@ -81,6 +81,8 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
     }
 }
 
+#[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use crate::prelude::CandidateId;
