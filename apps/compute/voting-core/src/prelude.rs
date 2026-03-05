@@ -37,6 +37,10 @@ pub use crate::voting_rules::{
     nanson::NansonRule,
     plurality::PluralityRule,
     practical_condorcet::CondorcetPracticalRule,
+    q_paretian::{
+        QParetianStrongPluralityRule, QParetianStrongSimpleMajorityRule,
+        QParetianStrongestSimpleMajorityRule,
+    },
     simpson::SimpsonRule,
 };
 

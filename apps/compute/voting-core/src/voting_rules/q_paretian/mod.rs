@@ -4,6 +4,10 @@ pub mod strong_majority;
 pub mod strong_plurality;
 pub mod strongest_majority;
 
+pub use strong_majority::SimpleMajorityRule as QParetianStrongSimpleMajorityRule;
+pub use strong_plurality::PluarlityRule as QParetianStrongPluralityRule;
+pub use strongest_majority::SimpleMajorityRule as QParetianStrongestSimpleMajorityRule;
+
 use std::ops::Index;
 
 use thiserror::Error;
