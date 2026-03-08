@@ -5,7 +5,7 @@ pub mod strong_plurality;
 pub mod strongest_majority;
 
 pub use strong_majority::SimpleMajorityRule as QParetianStrongSimpleMajorityRule;
-pub use strong_plurality::PluarlityRule as QParetianStrongPluralityRule;
+pub use strong_plurality::SimplePluralityRule as QParetianStrongPluralityRule;
 pub use strongest_majority::SimpleMajorityRule as QParetianStrongestSimpleMajorityRule;
 
 use std::ops::Index;
@@ -14,6 +14,18 @@ use thiserror::Error;
 
 use crate::models::{profile::Profile, ranking::RankingBallot};
 
+/// q-Paretian rule family's error type.
+#[derive(Debug, Error)]
+pub enum QParetianError {
+    /// The computational limit is exceeded.
+    #[error("Combinatorial explosion, limit is {limit}, supplied is {supplied}")]
+    CombinatorialExplosion {
+        /// Limit of the combinatorial explosion filter.
+        limit: usize,
+        /// Supplied voter count.
+        supplied: usize,
+    },
+}
 /// `PositionMatrix` creation error type.
 #[derive(Debug, Error)]
 pub enum PositionMatrixError {

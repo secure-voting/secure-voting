@@ -4,29 +4,15 @@
 
 use itertools::Itertools;
 use rayon::prelude::*;
-use thiserror::Error;
 
 use crate::{
     models::{profile::Profile, ranking::RankingBallot},
     tie_breaker::RuleOutcome,
     voting_rules::{
         VotingRuleExec,
-        q_paretian::{build_pos, t_i_q_intersection},
+        q_paretian::{QParetianError, build_pos, t_i_q_intersection},
     },
 };
-
-/// `SimpleMajorityRule`'s error type.
-#[derive(Debug, Error)]
-pub enum SimpleMajorityRuleError {
-    /// The computational limit is exceeded.
-    #[error("Combinatorial explosion, limit is {limit}, supplied is {supplied}")]
-    CombinatorialExplosion {
-        /// Limit of the combinatorial explosion filter.
-        limit: usize,
-        /// Supplied voter count.
-        supplied: usize,
-    },
-}
 
 /// Strong q-Paretian Simple Majority Rule defined as per paper\[1\].
 ///
@@ -35,7 +21,7 @@ pub enum SimpleMajorityRuleError {
 pub struct SimpleMajorityRule<const LIMIT: usize>;
 
 impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LIMIT> {
-    type Error = SimpleMajorityRuleError;
+    type Error = QParetianError;
 
     fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, Self::Error> {
         let n = profile.n_voters();
@@ -43,7 +29,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
         let r = n / 2 + 1;
 
         if n > LIMIT {
-            return Err(SimpleMajorityRuleError::CombinatorialExplosion {
+            return Err(QParetianError::CombinatorialExplosion {
                 limit: LIMIT,
                 supplied: n,
             });
@@ -127,7 +113,7 @@ mod tests {
         let result = SimpleMajorityRule::<30>.execute(&profile);
         assert!(matches!(
             result,
-            Err(SimpleMajorityRuleError::CombinatorialExplosion {
+            Err(QParetianError::CombinatorialExplosion {
                 limit: _,
                 supplied: _
             })
