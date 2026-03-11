@@ -124,7 +124,7 @@ control over execution.
 
 ### Profiles and candidates
 
-A **`Profile`** represents a collection of ranked ballots.
+A **`Profile`** represents a collection of ballots. The ballot type could either be Ranked or Approval.
 It enforces several invariants at construction time:
 
 - at least one voter

@@ -138,4 +138,4 @@ Actions could be `Decider`, `EliminationCriterion` or `EliminationStopCondition`
 
 If a voting rule cannot be naturally expressed through the existing
 pipeline model, implementing `VotingRuleExec` is the intended escape
-hatch. This is considered a feature, not a failure of the abstraction.
+hatch. This is considered a feature, not a failure of the abstraction. For example, the q-Paretian family of rules is defined through the `VotingRuleExec` trait, as it is not describable in terms of simpler traits.
