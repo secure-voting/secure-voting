@@ -8,5 +8,5 @@ projects:
   compute:  'apps/compute'
   backend:  'apps/backend'
 vcs:
-  manager: 'git'
+  client: 'git'
   defaultBranch: 'master'

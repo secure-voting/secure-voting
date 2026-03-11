@@ -18,12 +18,14 @@
 // 11. Nanson
 // 12. Coombs
 // 13. Inverse Borda
+// 14. Strong q-Paretian Simple Majority
 //
 // TBD:
 //
-// 1. Strong q-Paretian simple majority
-// 2. Strong q-Paretian plurality
-// 3. Strongest q-Paretian simple majority
+// 1. Strong q-Paretian plurality
+// 2. Strongest q-Paretian simple majority
+// 3. Threshold rule
+
 pub use crate::voting_rules::{
     anti_plurality::AntiPluralityRule,
     approval::ApprovalRule,
@@ -37,6 +39,10 @@ pub use crate::voting_rules::{
     nanson::NansonRule,
     plurality::PluralityRule,
     practical_condorcet::CondorcetPracticalRule,
+    q_paretian::{
+        QParetianStrongPluralityRule, QParetianStrongSimpleMajorityRule,
+        QParetianStrongestSimpleMajorityRule,
+    },
     simpson::SimpsonRule,
 };
 
