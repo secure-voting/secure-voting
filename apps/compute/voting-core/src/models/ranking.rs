@@ -55,6 +55,15 @@ impl IntoIterator for RankingBallot {
     }
 }
 
+impl<'a> IntoIterator for &'a RankingBallot {
+    type Item = &'a CandidateId;
+    type IntoIter = std::slice::Iter<'a, CandidateId>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
 impl Index<usize> for RankingBallot {
     type Output = CandidateId;
 
