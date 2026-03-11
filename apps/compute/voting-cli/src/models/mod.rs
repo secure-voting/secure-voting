@@ -2,7 +2,7 @@ use std::{collections::HashMap, io};
 
 use voting_core::models::{candidate_id::CandidateId, profile::Profile};
 
-pub mod cvr;
+pub mod rcv;
 
 type ParseResult<Ballot, Error> = Result<(Profile<Ballot>, HashMap<CandidateId, String>), Error>;
 

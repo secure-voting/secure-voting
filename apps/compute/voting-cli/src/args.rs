@@ -86,5 +86,5 @@ pub enum RuleName {
 
 #[derive(ValueEnum, Copy, Clone, Debug)]
 pub enum InputFormat {
-    Cvr,
+    Rcv,
 }

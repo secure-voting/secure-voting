@@ -6,7 +6,7 @@ use voting_core::models::ranking::RankingBallot;
 use voting_core::prelude::*;
 
 use crate::args::{Args, InputFormat, RuleName};
-use crate::models::{ProfileParser, cvr::CVRParser};
+use crate::models::{ProfileParser, rcv::CVRParser as RCVParser};
 
 mod args;
 mod models;
@@ -39,7 +39,7 @@ fn get_profile_and_mappings<R: io::Read>(
     reader: R,
 ) -> anyhow::Result<(Profile<RankingBallot>, HashMap<CandidateId, String>)> {
     match format {
-        InputFormat::Cvr => Ok(CVRParser.parse(reader)?),
+        InputFormat::Rcv => Ok(RCVParser.parse(reader)?),
     }
 }
 
