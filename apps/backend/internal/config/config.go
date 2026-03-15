@@ -33,6 +33,11 @@ type Config struct {
 	ComputeTLS           bool
 	ComputeTLSCA         string
 	ComputeTLSServerName string
+
+	BootstrapAdminEmail          string
+	BootstrapAdminPassword       string
+	BootstrapResearcherEmail     string
+	BootstrapResearcherPassword  string
 }
 
 func FromEnv() Config {
@@ -148,6 +153,11 @@ func FromEnv() Config {
 		computeSN = "rust-compute"
 	}
 
+	bootstrapAdminEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
+	bootstrapAdminPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"))
+	bootstrapResearcherEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_EMAIL"))
+	bootstrapResearcherPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_PASSWORD"))
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
@@ -174,6 +184,11 @@ func FromEnv() Config {
 		ComputeTLS:           computeTLS,
 		ComputeTLSCA:         computeCA,
 		ComputeTLSServerName: computeSN,
+
+		BootstrapAdminEmail:         bootstrapAdminEmail,
+		BootstrapAdminPassword:      bootstrapAdminPassword,
+		BootstrapResearcherEmail:    bootstrapResearcherEmail,
+		BootstrapResearcherPassword: bootstrapResearcherPassword,
 	}
 }
 

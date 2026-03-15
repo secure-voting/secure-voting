@@ -67,7 +67,7 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 				FROM election_invites
 				WHERE election_id=$1::uuid
 				  AND lower(email)=lower($2)
-				  AND status IN ('created','sent','accepted')
+				  AND status = 'accepted'
 				LIMIT 1
 			`, electionID, email).Scan(&x)
 			if err == nil {

@@ -1,0 +1,2031 @@
+openapi: 3.1.0
+info:
+  title: Secure Voting REST API
+  version: 0.1.0
+  description: >
+    REST API for the secure-voting diploma project:
+    client-server application for conducting and evaluating multi-member electronic elections.
+
+servers:
+  - url: http://localhost:3001
+
+tags:
+  - name: System
+  - name: Auth
+  - name: Elections
+  - name: Ballots
+  - name: Results
+  - name: Experiments
+  - name: Experiment Runs
+  - name: Jobs
+  - name: Audit
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-token
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    OkResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+
+    User:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, voter, researcher]
+
+    AuthResponse:
+      type: object
+      required: [access_token, expires_at, user]
+      properties:
+        access_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+
+    RegisterRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          description: >
+            Public registration is intended for voter accounts.
+            This field is accepted by the backend handler but should not be used
+            to self-assign privileged roles.
+        invite_code:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        invite_code:
+          type: string
+
+    CandidateInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+
+    Candidate:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+
+    ElectionCreateRequest:
+      type: object
+      required:
+        - title
+        - start_at
+        - end_at
+        - tally_rule
+        - ballot_format
+        - access_mode
+        - candidates
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        tally_rule:
+          type: string
+        ballot_format:
+          type: string
+          enum: [approval, ranking, score]
+        committee_size:
+          type: integer
+        quota_type:
+          type: string
+          enum: [hare, droop]
+        access_mode:
+          type: string
+          enum: [open, invite]
+        publish_at:
+          type: string
+          format: date-time
+        show_aggregates:
+          type: boolean
+        approval_max_choices:
+          type: integer
+        ranking_top_k:
+          type: integer
+        score_min:
+          type: integer
+        score_max:
+          type: integer
+        score_step:
+          type: integer
+        score_allow_skip:
+          type: boolean
+        candidates:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CandidateInput'
+
+    ElectionCreateResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    ElectionSummary:
+      type: object
+      required: [id, title, status, access_mode, start_at, end_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        access_mode:
+          type: string
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+
+    ElectionListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElectionSummary'
+
+    ElectionDetail:
+      type: object
+      required:
+        - id
+        - title
+        - status
+        - access_mode
+        - ballot_format
+        - tally_rule
+        - start_at
+        - end_at
+        - show_aggregates
+        - score_allow_skip
+        - candidates
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        access_mode:
+          type: string
+          enum: [open, invite]
+        ballot_format:
+          type: string
+          enum: [approval, ranking, score]
+        tally_rule:
+          type: string
+        committee_size:
+          type: integer
+        quota_type:
+          type: string
+          enum: [hare, droop]
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        publish_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+        show_aggregates:
+          type: boolean
+        approval_max_choices:
+          type: integer
+        ranking_top_k:
+          type: integer
+        score_min:
+          type: integer
+        score_max:
+          type: integer
+        score_step:
+          type: integer
+        score_allow_skip:
+          type: boolean
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidate'
+
+    ElectionRulesUpdateRequest:
+      type: object
+      properties:
+        tally_rule:
+          type: string
+        ballot_format:
+          type: string
+          enum: [approval, ranking, score]
+        committee_size:
+          type: integer
+        quota_type:
+          type: string
+          enum: [hare, droop]
+        access_mode:
+          type: string
+          enum: [open, invite]
+        publish_at:
+          type: string
+          format: date-time
+        show_aggregates:
+          type: boolean
+        approval_max_choices:
+          type: integer
+        ranking_top_k:
+          type: integer
+        score_min:
+          type: integer
+        score_max:
+          type: integer
+        score_step:
+          type: integer
+        score_allow_skip:
+          type: boolean
+
+    InviteCreateRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    InviteCreated:
+      type: object
+      required: [invite_id, email, invite_code, status, created_at]
+      properties:
+        invite_id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        invite_code:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Invite:
+      type: object
+      required: [id, email, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        status:
+          type: string
+        sent_at:
+          type: string
+          format: date-time
+        accepted_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+
+    InviteListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invite'
+
+    BallotMetaResponse:
+      type: object
+      required: [election_id, ballot_format, tally_rule, score_allow_skip, candidates]
+      properties:
+        election_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        ballot_format:
+          type: string
+          enum: [approval, ranking, score]
+        tally_rule:
+          type: string
+        committee_size:
+          type: integer
+        approval_max_choices:
+          type: integer
+        ranking_top_k:
+          type: integer
+        score_min:
+          type: integer
+        score_max:
+          type: integer
+        score_step:
+          type: integer
+        score_allow_skip:
+          type: boolean
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidate'
+
+    BallotSubmitRequest:
+      type: object
+      properties:
+        approval_set:
+          type: array
+          items:
+            type: string
+        ranking:
+          type: array
+          items:
+            type: string
+        scores:
+          type: object
+          additionalProperties:
+            type: integer
+
+    BallotSubmitResponse:
+      type: object
+      required: [ballot_id, status]
+      properties:
+        ballot_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+
+    MyBallotResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ResultResponse:
+      type: object
+      required: [election_id, version, method, winners]
+      properties:
+        election_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+        method:
+          type: string
+        winners: {}
+        params: {}
+        metrics: {}
+        protocol: {}
+        published_at:
+          type: string
+          format: date-time
+
+    DatasetCandidate:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    Dataset:
+      type: object
+      required: [id, name, source, format, candidates, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        source:
+          type: string
+          enum: [import, generate, external]
+        format:
+          type: string
+          enum: [approval, ranking, score]
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetCandidate'
+        created_at:
+          type: string
+          format: date-time
+        seed:
+          type: integer
+        parameters:
+          type: object
+          additionalProperties: true
+
+    DatasetListItem:
+      type: object
+      required: [id, name, source, format, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        source:
+          type: string
+        format:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    DatasetListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DatasetListItem'
+
+    DatasetGenerateRequest:
+      type: object
+      required: [name, format, candidates, voters]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        format:
+          type: string
+          enum: [approval, ranking, score]
+        candidates:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/DatasetCandidate'
+        voters:
+          type: integer
+          minimum: 1
+        seed:
+          type: integer
+        approval_max_choices:
+          type: integer
+        ranking_top_k:
+          type: integer
+        score_min:
+          type: integer
+        score_max:
+          type: integer
+        score_step:
+          type: integer
+
+    DatasetCreateResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+
+    ExperimentCreateRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [algo, behavior]
+        params:
+          type: object
+          additionalProperties: true
+        seed:
+          type: integer
+
+    ExperimentCreateResponse:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    Experiment:
+      type: object
+      required: [id, type, status, created_by, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+        params: {}
+        status:
+          type: string
+        seed:
+          type: integer
+        created_by:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    ExperimentListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+
+    ExperimentRunBatchRequest:
+      type: object
+      required: [experiment_id, dataset_ids]
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+        dataset_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+
+    ExperimentRunItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        dataset_id:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+      additionalProperties: true
+
+    ExperimentRunListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentRunItem'
+
+    ExperimentRunResultResponse:
+      description: Dynamic JSON payload produced by experiment result processing.
+      additionalProperties: true
+
+    JobItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        status:
+          type: string
+        progress:
+          type: integer
+        created_by:
+          type: string
+          format: uuid
+        election_id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        experiment_run_id:
+          type: string
+          format: uuid
+        payload:
+          type: object
+          additionalProperties: true
+        result_ref:
+          type: object
+          additionalProperties: true
+        error_text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+      additionalProperties: true
+
+    JobListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobItem'
+
+    AuditItem:
+      type: object
+      required: [id, occurred_at, event_type, details]
+      properties:
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+        occurred_at:
+          type: string
+          format: date-time
+        actor_user_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+
+    AuditListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditItem'
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new voter account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Registration succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation or invite-code error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout succeeded
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections:
+    get:
+      tags: [Elections]
+      summary: List elections visible to current user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Elections list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElectionListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [Elections]
+      summary: Create election
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ElectionCreateRequest'
+      responses:
+        '200':
+          description: Election created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElectionCreateResponse'
+        '400':
+          description: Validation or contract error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}:
+    get:
+      tags: [Elections]
+      summary: Get election details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Election details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElectionDetail'
+        '400':
+          description: Invalid election id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/rules:
+    put:
+      tags: [Elections]
+      summary: Update election rules
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ElectionRulesUpdateRequest'
+      responses:
+        '200':
+          description: Rules updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation or contract error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Rules can be updated only in allowed statuses
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/actions/{action}:
+    post:
+      tags: [Elections]
+      summary: Perform election lifecycle action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: action
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [schedule, open, pause, resume, close, publish]
+      responses:
+        '200':
+          description: Action applied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/invites:
+    post:
+      tags: [Elections]
+      summary: Create invite
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteCreateRequest'
+      responses:
+        '200':
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteCreated'
+        '400':
+          description: Validation or contract error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Email already invited or election is not in invite mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    get:
+      tags: [Elections]
+      summary: List invites
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invites list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteListResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/ballot:
+    get:
+      tags: [Ballots]
+      summary: Get ballot metadata/configuration
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ballot metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BallotMetaResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found or not accessible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/ballots/submit:
+    post:
+      tags: [Ballots]
+      summary: Submit ballot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BallotSubmitRequest'
+      responses:
+        '200':
+          description: Ballot accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BallotSubmitResponse'
+        '400':
+          description: >
+            Invalid election id, missing/invalid idempotency key,
+            invalid json, or invalid ballot payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Election not active, request already in progress, or ballot already submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/ballots/me:
+    get:
+      tags: [Ballots]
+      summary: Get current user ballot state
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Current ballot state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyBallotResponse'
+        '400':
+          description: Invalid election id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/elections/{id}/results:
+    get:
+      tags: [Results]
+      summary: Get election results
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Election results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultResponse'
+        '400':
+          description: Invalid election id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Results not published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/datasets:
+    get:
+      tags: [Experiments]
+      summary: List datasets
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dataset list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/datasets/{id}:
+    get:
+      tags: [Experiments]
+      summary: Get dataset
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dataset details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dataset'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/datasets/{id}/download:
+    get:
+      tags: [Experiments]
+      summary: Download dataset raw artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dataset file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Dataset not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/datasets/generate:
+    post:
+      tags: [Experiments]
+      summary: Generate synthetic dataset
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetGenerateRequest'
+      responses:
+        '200':
+          description: Dataset generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/datasets/import:
+    post:
+      tags: [Experiments]
+      summary: Import dataset from uploaded file
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                format:
+                  type: string
+                  enum: [approval, ranking, score]
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Dataset imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetCreateResponse'
+        '400':
+          description: Validation or multipart error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: Uploaded file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiments:
+    get:
+      tags: [Experiments]
+      summary: List experiments visible to current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Experiments list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [Experiments]
+      summary: Create experiment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentCreateRequest'
+      responses:
+        '200':
+          description: Experiment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentCreateResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiments/{id}:
+    get:
+      tags: [Experiments]
+      summary: Get experiment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Experiment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '400':
+          description: Invalid experiment id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiment-runs/batch:
+    post:
+      tags: [Experiment Runs]
+      summary: Create batch of experiment runs
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentRunBatchRequest'
+      responses:
+        '200':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentRunListResponse'
+        '400':
+          description: Validation error or invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiment-runs:
+    get:
+      tags: [Experiment Runs]
+      summary: List experiment runs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: experiment_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Runs list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentRunListResponse'
+        '400':
+          description: Invalid experiment id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Experiment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiment-runs/{id}:
+    get:
+      tags: [Experiment Runs]
+      summary: Get experiment run
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentRunItem'
+        '400':
+          description: Invalid run id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiment-runs/{id}/result:
+    get:
+      tags: [Experiment Runs]
+      summary: Get experiment run result
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentRunResultResponse'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/experiment-runs/{id}/download:
+    get:
+      tags: [Experiment Runs]
+      summary: Download experiment run result artifact
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Downloaded artifact
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Result not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/jobs:
+    get:
+      tags: [Jobs]
+      summary: List jobs visible to current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: kind
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Jobs list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Get job
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobItem'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/audit-log:
+    get:
+      tags: [Audit]
+      summary: List audit log entries visible to current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: event_type
+          in: query
+          schema:
+            type: string
+        - name: actor_user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: until
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Audit log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditListResponse'
+        '400':
+          description: Invalid filter value
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'

@@ -96,7 +96,7 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	}
 	defer rows.Close()
 
-	var out []Record
+	out := make([]Record, 0)
 	for rows.Next() {
 		var r Record
 		var t time.Time

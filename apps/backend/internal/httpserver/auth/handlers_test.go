@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"secure-voting/apps/backend/internal/httpserver/httputil"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -62,7 +64,7 @@ func TestRegister_OK(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	h.Register(rr, req)
+	httputil.Wrap(h.Register).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
@@ -88,7 +90,7 @@ func TestRegister_BadJSON(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	h.Register(rr, req)
+	httputil.Wrap(h.Register).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d, body=%s", rr.Code, rr.Body.String())
@@ -107,7 +109,7 @@ func TestRegister_EmailTaken(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	h.Register(rr, req)
+	httputil.Wrap(h.Register).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("expected 409, got %d, body=%s", rr.Code, rr.Body.String())
@@ -123,7 +125,7 @@ func TestLogin_Unauthorized(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	h.Login(rr, req)
+	httputil.Wrap(h.Login).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d, body=%s", rr.Code, rr.Body.String())
@@ -152,7 +154,7 @@ func TestLogin_InvitePassed(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	h.Login(rr, req)
+	httputil.Wrap(h.Login).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())

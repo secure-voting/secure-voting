@@ -29,6 +29,7 @@ func RequireAuth(v TokenVerifier, next http.Handler) http.Handler {
 			return
 		}
 		token := strings.TrimSpace(strings.TrimPrefix(raw, "Bearer "))
+		token = strings.Trim(token, `"'`)
 		if token == "" {
 			httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
 			return

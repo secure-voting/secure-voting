@@ -1,6 +1,7 @@
 package datasets
 
 import (
+	"errors"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -74,6 +75,11 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 
 	if err := r.ParseMultipartForm(h.cfg.MaxUploadBytes); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			httputil.WriteError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "uploaded file is too large")
+			return
+		}
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid multipart form")
 		return
 	}

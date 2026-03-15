@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"secure-voting/apps/backend/internal/auth"
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/db"
 	"secure-voting/apps/backend/internal/httpserver"
@@ -44,6 +45,16 @@ func run() error {
 	defer func() { _ = mc.Disconnect(context.Background()) }()
 
 	mdb := mc.Database(cfg.MongoDBName)
+
+	if err := auth.EnsureBootstrapUser(bootCtx, pg, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword, "admin"); err != nil {
+		log.Printf("failed to ensure bootstrap admin: %v", err)
+		return err
+	}
+
+	if err := auth.EnsureBootstrapUser(bootCtx, pg, cfg.BootstrapResearcherEmail, cfg.BootstrapResearcherPassword, "researcher"); err != nil {
+		log.Printf("failed to ensure bootstrap researcher: %v", err)
+		return err
+	}
 
 	handler := httpserver.Routes(cfg, pg, rdb, mdb)
 	srv := httpserver.New(cfg.HTTPAddr, handler)

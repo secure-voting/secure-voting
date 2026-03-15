@@ -18,6 +18,17 @@ func NewHandlers(svc *experimentruns.Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
+func writeCodeError(w http.ResponseWriter, code, notFoundMessage string) {
+	switch code {
+	case "not_found":
+		httputil.WriteError(w, http.StatusNotFound, "not_found", notFoundMessage)
+	case "invalid_id", "invalid_experiment_id":
+		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+	default:
+		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+	}
+}
+
 func (h *Handlers) Batch(w http.ResponseWriter, r *http.Request) {
 	role, _ := middleware.RoleFromContext(r.Context())
 	uid, _ := middleware.UserIDFromContext(r.Context())
@@ -35,12 +46,7 @@ func (h *Handlers) Batch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		switch code {
-		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "experiment not found")
-		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
-		}
+		writeCodeError(w, code, "experiment not found")
 		return
 	}
 
@@ -59,7 +65,7 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+		writeCodeError(w, code, "experiment not found")
 		return
 	}
 
@@ -78,12 +84,7 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		switch code {
-		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "run not found")
-		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
-		}
+		writeCodeError(w, code, "run not found")
 		return
 	}
 
@@ -102,7 +103,7 @@ func (h *Handlers) Result(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		httputil.WriteError(w, http.StatusNotFound, "not_found", "result not found")
+		writeCodeError(w, code, "result not found")
 		return
 	}
 
@@ -121,8 +122,9 @@ func (h *Handlers) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		httputil.WriteError(w, http.StatusNotFound, "not_found", "result not found")
+		writeCodeError(w, code, "result not found")
 		return
 	}
+
 	httputil.WriteFile(w, filename, mime, data)
 }

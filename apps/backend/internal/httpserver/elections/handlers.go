@@ -2,10 +2,10 @@ package elections
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"strings"
 
+	"secure-voting/apps/backend/internal/apperr"
 	"secure-voting/apps/backend/internal/elections"
 	"secure-voting/apps/backend/internal/httpserver/httputil"
 	"secure-voting/apps/backend/internal/httpserver/middleware"
@@ -30,44 +30,42 @@ func NewHandlers(svc Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
-func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) error {
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	var req elections.CreateElectionInput
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
-		return
+		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
 	id, code, err := h.svc.Create(r.Context(), uid, req)
 	if err != nil {
-		log.Printf("elections.create error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "create election failed")
-		return
+		return apperr.Internal(err, "create election failed")
 	}
 	if code != "" {
-		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
-		return
+		// пока сохраняем текущее поведение: message = code (контракт)
+		return apperr.Invalid(code, code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"id": id})
+	return nil
 }
 
-func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) List(w http.ResponseWriter, r *http.Request) error {
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	email, _ := middleware.EmailFromContext(r.Context())
 	role, _ := middleware.RoleFromContext(r.Context())
 
 	items, err := h.svc.ListForUser(r.Context(), uid, email, role)
 	if err != nil {
-		log.Printf("elections.list error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "list elections failed")
-		return
+		return apperr.Internal(err, "list elections failed")
 	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	return nil
 }
 
-func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	email, _ := middleware.EmailFromContext(r.Context())
@@ -75,26 +73,24 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 
 	item, code, err := h.svc.Get(r.Context(), eid, uid, email, role)
 	if err != nil {
-		log.Printf("elections.get error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get election failed")
-		return
+		return apperr.Internal(err, "get election failed")
 	}
 	if code != "" {
 		switch code {
 		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+			return apperr.NotFound("election not found")
 		case "invalid_id":
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid id")
+			return apperr.Invalid(code, "invalid id")
 		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.Invalid(code, code)
 		}
-		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, item)
+	return nil
 }
 
-func (h *Handlers) BallotMeta(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) BallotMeta(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	email, _ := middleware.EmailFromContext(r.Context())
@@ -102,135 +98,122 @@ func (h *Handlers) BallotMeta(w http.ResponseWriter, r *http.Request) {
 
 	meta, code, err := h.svc.GetBallotMeta(r.Context(), eid, uid, email, role)
 	if err != nil {
-		log.Printf("elections.ballot_meta error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get ballot meta failed")
-		return
+		return apperr.Internal(err, "get ballot meta failed")
 	}
 	if code != "" {
 		if code == "not_found" {
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
-		} else {
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.NotFound("election not found")
 		}
-		return
+		return apperr.Invalid(code, code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, meta)
+	return nil
 }
 
-func (h *Handlers) UpdateRules(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) UpdateRules(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	var req elections.UpdateRulesInput
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
-		return
+		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
 	code, err := h.svc.UpdateRules(r.Context(), eid, uid, req)
 	if err != nil {
-		log.Printf("elections.update_rules error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "update rules failed")
-		return
+		return apperr.Internal(err, "update rules failed")
 	}
 	if code != "" {
 		switch code {
 		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+			return apperr.NotFound("election not found")
 		case "invalid_status":
-			httputil.WriteError(w, http.StatusConflict, "conflict", "rules can be updated only in draft/scheduled")
+			return apperr.Conflict(code, "rules can be updated only in draft/scheduled")
 		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.Invalid(code, code)
 		}
-		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
 }
 
-func (h *Handlers) Action(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) Action(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	action := strings.TrimSpace(r.PathValue("action"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	code, err := h.svc.Action(r.Context(), eid, uid, action)
 	if err != nil {
-		log.Printf("elections.action error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "action failed")
-		return
+		return apperr.Internal(err, "action failed")
 	}
 	if code != "" {
 		switch code {
 		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+			return apperr.NotFound("election not found")
 		case "invalid_transition":
-			httputil.WriteError(w, http.StatusConflict, "conflict", "invalid state transition")
+			return apperr.Conflict(code, "invalid state transition")
 		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.Invalid(code, code)
 		}
-		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
 }
 
 type createInviteReq struct {
 	Email string `json:"email"`
 }
 
-func (h *Handlers) CreateInvite(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) CreateInvite(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	var req createInviteReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
-		return
+		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
 	res, code, err := h.svc.CreateInvite(r.Context(), eid, uid, req.Email)
 	if err != nil {
-		log.Printf("elections.create_invite error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "create invite failed")
-		return
+		return apperr.Internal(err, "create invite failed")
 	}
 	if code != "" {
 		switch code {
 		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+			return apperr.NotFound("election not found")
 		case "email_already_invited":
-			httputil.WriteError(w, http.StatusConflict, "conflict", "email already invited")
+			return apperr.Conflict(code, "email already invited")
 		case "not_invite_mode":
-			httputil.WriteError(w, http.StatusConflict, "conflict", "election is not in invite mode")
+			return apperr.Conflict(code, "election is not in invite mode")
 		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.Invalid(code, code)
 		}
-		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
 }
 
-func (h *Handlers) ListInvites(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ListInvites(w http.ResponseWriter, r *http.Request) error {
 	eid := strings.TrimSpace(r.PathValue("id"))
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	items, code, err := h.svc.ListInvites(r.Context(), eid, uid)
 	if err != nil {
-		log.Printf("elections.list_invites error: %v", err)
-		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "list invites failed")
-		return
+		return apperr.Internal(err, "list invites failed")
 	}
 	if code != "" {
 		switch code {
 		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+			return apperr.NotFound("election not found")
 		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+			return apperr.Invalid(code, code)
 		}
-		return
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	return nil
 }

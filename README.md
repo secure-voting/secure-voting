@@ -37,7 +37,6 @@ Only frontend and webui api's are exposed:
 |      pgAdmin |     localhost:15433 |
 |   RedInsight |     localhost:5540  |
 | MongoExpress |     localhost:8082  |
-|  Iggy-Web-UI |     localhost:3050  |
 
 
 ## Service communication
@@ -49,7 +48,6 @@ Services communicate through internal docker networks
 | Postgres |      db |  5432 |
 |    Redis |   cache |  6379 |
 |    Mongo |   mongo | 27017 |
-|     Iggy |    iggy |    80 |
 
 
 ## Dev access

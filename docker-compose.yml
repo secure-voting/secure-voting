@@ -47,6 +47,11 @@ services:
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
       - WORKER_POLL_INTERVAL=1s
+      
+      - BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
+      - BOOTSTRAP_RESEARCHER_EMAIL=${BOOTSTRAP_RESEARCHER_EMAIL}
+      - BOOTSTRAP_RESEARCHER_PASSWORD=${BOOTSTRAP_RESEARCHER_PASSWORD}
 
     restart: unless-stopped
     depends_on:
@@ -335,20 +340,13 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-lc"]
-    command: |
-      set -e
-      kafka-topics --bootstrap-server kafka:9092 \
-        --create --if-not-exists \
-        --topic secure-voting.compute.tasks \
-        --partitions 1 --replication-factor 1
-
-      kafka-topics --bootstrap-server kafka:9092 \
-        --create --if-not-exists \
-        --topic secure-voting.compute.results \
-        --partitions 1 --replication-factor 1
-
-      kafka-topics --bootstrap-server kafka:9092 --list | sort
+    entrypoint:
+      - /bin/sh
+      - -ec
+    command: >
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:9092 --list | sort &&
       echo "kafka-init done"
     restart: "no"
     profiles:
