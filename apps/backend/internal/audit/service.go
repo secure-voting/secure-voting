@@ -21,11 +21,11 @@ func NewService(db *pgxpool.Pool) *Service {
 }
 
 type Record struct {
-	ID         int64   `json:"id"`
-	OccurredAt string  `json:"occurred_at"`
+	ID          int64   `json:"id"`
+	OccurredAt  string  `json:"occurred_at"`
 	ActorUserID *string `json:"actor_user_id,omitempty"`
-	EventType  string  `json:"event_type"`
-	Details    any     `json:"details"`
+	EventType   string  `json:"event_type"`
+	Details     any     `json:"details"`
 }
 
 type ListFilter struct {
@@ -51,7 +51,7 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	
+
 	q := `
 		SELECT id, occurred_at, actor_user_id::text, event_type, details
 		FROM audit_log
@@ -96,7 +96,7 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	}
 	defer rows.Close()
 
-	var out []Record
+	out := make([]Record, 0)
 	for rows.Next() {
 		var r Record
 		var t time.Time

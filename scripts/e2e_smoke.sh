@@ -1,6 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+API_BASE_URL="${API_BASE_URL:-http://localhost:3001/api/v1}"
+HEALTH_URL="${HEALTH_URL:-http://localhost:3001/health}"
+
+assert_http_code() {
+  local expected="$1"
+  local url="$2"
+  local actual
+  actual="$(curl -s -o /tmp/secure_voting_resp.txt -w '%{http_code}' "$url" || true)"
+  if [[ "$actual" != "$expected" ]]; then
+    echo "ASSERT FAIL: expected HTTP $expected, got $actual"
+    cat /tmp/secure_voting_resp.txt || true
+    exit 1
+  fi
+}
+
+echo "== smoke: backend health =="
+assert_http_code 200 "$HEALTH_URL"
+
 BACKEND_BASE="${BACKEND_BASE:-http://localhost:3001}"
 FRONTEND_BASE="${FRONTEND_BASE:-http://localhost:8080}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-20}"
@@ -97,13 +115,34 @@ wait_until() {
   return 1
 }
 
+wait_publish_until_ready() {
+  local election_id="$1"
+  local end=$((SECONDS + TIMEOUT_SEC))
+  local last_code=""
+  local last_body=""
+
+  while (( SECONDS < end )); do
+    do_curl POST "$API_BASE/api/v1/elections/$election_id/actions/publish" -H "$AUTH"
+
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      echo "OK: publish became available"
+      return 0
+    fi
+
+    last_code="$HTTP_CODE"
+    last_body="$HTTP_BODY"
+    sleep 1
+  done
+
+  echo "TIMEOUT: publish did not become available" >&2
+  echo "last HTTP code: $last_code" >&2
+  echo "$last_body" >&2
+  return 1
+}
+
 rand_suffix() {
   python3 -c 'import uuid; print(uuid.uuid4().hex[:10])'
 }
-
-echo "== smoke: backend health =="
-do_curl GET "$BACKEND_BASE/health"
-assert_code 200
 
 echo "== smoke: frontend serves HTML =="
 do_curl GET "$FRONTEND_BASE/"
@@ -119,31 +158,26 @@ else
   echo "API via frontend: NO (using backend directly: $BACKEND_BASE)"
 fi
 
-echo "== auth: create unique admin + voter =="
+echo "== auth: login bootstrap admin + create unique voter =="
 SFX="$(rand_suffix)"
-ADMIN_EMAIL="admin_${SFX}@local.dev"
+BOOT_ADMIN_EMAIL="${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}"
+BOOT_ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-AdminPass123!}"
 VOTER_EMAIL="voter_${SFX}@local.dev"
-ADMIN_PASS="adminadmin"
 VOTER_PASS="voterpass1"
 
-echo "admin=$ADMIN_EMAIL pass=$ADMIN_PASS"
+echo "bootstrap_admin=$BOOT_ADMIN_EMAIL"
 echo "voter=$VOTER_EMAIL pass=$VOTER_PASS"
 
-do_curl POST "$API_BASE/api/v1/auth/register" -H 'content-type: application/json' \
-  -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\",\"role\":\"admin\"}"
+do_curl POST "$API_BASE/api/v1/auth/login" -H 'content-type: application/json' \
+  -d "{\"email\":\"$BOOT_ADMIN_EMAIL\",\"password\":\"$BOOT_ADMIN_PASSWORD\"}"
 
-if [[ "$HTTP_CODE" == "200" ]]; then
-  ADMIN_TOKEN="$(extract_token "$HTTP_BODY")"
-else
-  do_curl POST "$API_BASE/api/v1/auth/login" -H 'content-type: application/json' \
-    -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASS\"}"
-  if [[ "$HTTP_CODE" != "200" ]]; then
-    echo "admin login failed: HTTP $HTTP_CODE" >&2
-    echo "$HTTP_BODY" >&2
-    exit 1
-  fi
-  ADMIN_TOKEN="$(extract_token "$HTTP_BODY")"
+if [[ "$HTTP_CODE" != "200" ]]; then
+  echo "bootstrap admin login failed: HTTP $HTTP_CODE" >&2
+  echo "$HTTP_BODY" >&2
+  exit 1
 fi
+
+ADMIN_TOKEN="$(extract_token "$HTTP_BODY")"
 
 if [[ -z "${ADMIN_TOKEN:-}" ]]; then
   echo "no admin token; last HTTP=$HTTP_CODE body:" >&2
@@ -215,7 +249,21 @@ C3="$(python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["candidates"]
 IDK1="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 do_curl POST "$API_BASE/api/v1/elections/$EID/ballots/submit" -H 'content-type: application/json' -H "$VAUTH" -H "Idempotency-Key: $IDK1" \
   -d "{\"ranking\":[\"$C1\",\"$C2\",\"$C3\"]}"
-[[ "$HTTP_CODE" == "409" ]] || { echo "expected 409 while paused, got $HTTP_CODE" >&2; echo "$HTTP_BODY" >&2; exit 1; }
+
+ERR_CODE="$(python3 -c '
+import json,sys
+try:
+    obj=json.load(sys.stdin)
+    print(obj.get("error", {}).get("code", ""))
+except Exception:
+    print("")
+' <<<"$HTTP_BODY")"
+
+if [[ "$HTTP_CODE" != "400" || "$ERR_CODE" != "election_not_active" ]]; then
+  echo "expected HTTP 400 with error.code=election_not_active while paused, got HTTP $HTTP_CODE" >&2
+  echo "$HTTP_BODY" >&2
+  exit 1
+fi
 
 do_curl POST "$API_BASE/api/v1/elections/$EID/actions/resume" -H "$AUTH"; assert_code 200
 
@@ -226,16 +274,25 @@ assert_code 200
 
 do_curl POST "$API_BASE/api/v1/elections/$EID/actions/close" -H "$AUTH"; assert_code 200
 
-wait_until "results available for admin" "curl -4fsS \"$API_BASE/api/v1/elections/$EID/results\" -H \"$AUTH\" >/dev/null"
-
+echo "== verify results are hidden before publish =="
 do_curl GET "$API_BASE/api/v1/elections/$EID/results" -H "$VAUTH"
-[[ "$HTTP_CODE" == "403" ]] || { echo "expected 403 before publish, got $HTTP_CODE" >&2; echo "$HTTP_BODY" >&2; exit 1; }
+[[ "$HTTP_CODE" == "403" ]] || { echo "expected 403 before publish for voter, got $HTTP_CODE" >&2; echo "$HTTP_BODY" >&2; exit 1; }
 
-do_curl POST "$API_BASE/api/v1/elections/$EID/actions/publish" -H "$AUTH"; assert_code 200
+do_curl GET "$API_BASE/api/v1/elections/$EID/results" -H "$AUTH"
+[[ "$HTTP_CODE" == "403" || "$HTTP_CODE" == "404" ]] || {
+  echo "expected hidden/not-ready results before publish for admin, got $HTTP_CODE" >&2
+  echo "$HTTP_BODY" >&2
+  exit 1
+}
+
+echo "== wait until publish becomes available =="
+wait_publish_until_ready "$EID"
 
 do_curl GET "$API_BASE/api/v1/elections/$EID/results" -H "$VAUTH"; assert_code 200
 PA="$(json_get published_at)"
 [[ -n "$PA" ]] || { echo "expected published_at for voter" >&2; echo "$HTTP_BODY" >&2; exit 1; }
+
+do_curl GET "$API_BASE/api/v1/elections/$EID/results" -H "$AUTH"; assert_code 200
 
 echo "== frontend<->backend integration checks =="
 if [[ "$API_BASE" == "$FRONTEND_BASE" ]]; then

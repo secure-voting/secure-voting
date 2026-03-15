@@ -1,0 +1,4 @@
+
+.local_backups/
+internal/**/service.go.bak.*
+internal/**/*.bak.*

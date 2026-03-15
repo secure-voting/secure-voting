@@ -1,10 +1,11 @@
 package datasets
 
 import (
+	"errors"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
-	"mime/multipart"
 
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
@@ -74,6 +75,11 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 
 	if err := r.ParseMultipartForm(h.cfg.MaxUploadBytes); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			httputil.WriteError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "uploaded file is too large")
+			return
+		}
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid multipart form")
 		return
 	}
@@ -93,7 +99,7 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "cannot open file")
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	id, code, err := h.svc.Import(r.Context(), datasets.ImportMeta{
 		Name:        name,
