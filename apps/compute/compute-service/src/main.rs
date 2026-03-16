@@ -1,4 +1,7 @@
-use tonic::Response;
+use tonic::{
+    Response,
+    transport::{Identity, server::ServerTlsConfig},
+};
 use voting_core::prelude::*;
 
 use crate::securevoting::compute::v1::{
@@ -177,10 +180,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
         .parse()?;
-    let greeter = ComputeService;
+    let server = ComputeService;
+
+    let cert = std::fs::read_to_string(format!(
+        "{}/../../../scripts/certs/out/compute.pem",
+        env!("CARGO_MANIFEST_DIR")
+    ))?;
+    let key = std::fs::read_to_string(format!(
+        "{}/../../../scripts/certs/out/compute.key",
+        env!("CARGO_MANIFEST_DIR")
+    ))?;
+
+    let tls_config = ServerTlsConfig::new().identity(Identity::from_pem(&cert, &key));
 
     tonic::transport::Server::builder()
-        .add_service(ComputeServer::new(greeter))
+        .tls_config(tls_config)?
+        .concurrency_limit_per_connection(256)
+        .add_service(ComputeServer::new(server))
         .serve(addr)
         .await?;
 
