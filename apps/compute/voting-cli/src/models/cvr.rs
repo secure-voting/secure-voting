@@ -1,7 +1,11 @@
 use std::{collections::HashMap, io};
 
 use thiserror::Error;
-use voting_core::profile::{CandidateId, Profile, ProfileError};
+use voting_core::models::{
+    candidate_id::CandidateId,
+    profile::Profile,
+    ranking::{ProfileError, RankingBallot},
+};
 
 use crate::models::ProfileParser;
 
@@ -31,13 +35,13 @@ const BALLOT_ID: usize = 0;
 const RANK: usize = 1;
 const CHOICE: usize = 2;
 
-impl ProfileParser for CVRParser {
+impl ProfileParser<RankingBallot> for CVRParser {
     type Error = CVRError;
 
     fn parse<R: io::Read>(
         &mut self,
         reader: R,
-    ) -> Result<(Profile, HashMap<CandidateId, String>), Self::Error> {
+    ) -> Result<(Profile<RankingBallot>, HashMap<CandidateId, String>), Self::Error> {
         let mut rdr = csv::Reader::from_reader(reader);
         let headers = rdr.headers()?;
 

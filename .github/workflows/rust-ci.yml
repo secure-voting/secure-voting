@@ -15,23 +15,21 @@ jobs:
         uses: "actions/checkout@v6"
         with:
           fetch-depth: 0
+      - name: "Get protoc"
+        run: "sudo apt-get install protobuf-compiler"
 
       - name: "Setup Toolchain"
         uses: "moonrepo/setup-toolchain@v0"
 
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-tools-${{ runner.os }}-${{ hashFiles('.moon/toolchain.yml') }}
-          restore-keys: |
-            cargo-tools-${{ runner.os }}-
+          shared-key: compute-core
+          workspaces: |
+            apps/compute -> target
 
       - name: "Execute pipeline"
-        run: "moon ci"
+        run: "moon ci --color"
 
       - name: "Collect results"
         uses: "appthrust/moon-ci-retrospect@v2"

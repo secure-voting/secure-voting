@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use thiserror::Error;
 
 use crate::{
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -24,11 +24,14 @@ pub struct ApprovalScorer<const Q: usize>;
 #[error("Not enough candidates for this Q")]
 pub struct ApprovalScorerError;
 
-impl<const Q: usize> Scorer for ApprovalScorer<Q> {
+impl<const Q: usize> Scorer<RankingBallot> for ApprovalScorer<Q> {
     type Output = Vec<usize>;
     type Error = ApprovalScorerError;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 

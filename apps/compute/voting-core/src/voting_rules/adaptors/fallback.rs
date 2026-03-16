@@ -1,6 +1,6 @@
 //! Fallback adaptor module.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -10,17 +10,24 @@ use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRule
 ///
 /// If the primary rule can't decide a single winner, a fallback rule will be used to determine the winner instead.
 #[derive(Debug, Clone, Copy)]
-pub struct Fallback<R1, R2> {
+#[allow(clippy::struct_field_names)]
+pub struct Fallback<R1, R2, Ballot> {
     /// Primary voting Rule
     primary: R1,
     /// Fallback voting Rule
     fallback: R2,
+    /// Ballot type marker.
+    _ballot_type: PhantomData<Ballot>,
 }
 
-impl<R1, R2> Fallback<R1, R2> {
+impl<R1, R2, Ballot> Fallback<R1, R2, Ballot> {
     /// Construct a Fallback adaptor from the primary and fallback rules.
     pub fn new(primary: R1, fallback: R2) -> Self {
-        Self { primary, fallback }
+        Self {
+            primary,
+            fallback,
+            _ballot_type: PhantomData,
+        }
     }
 }
 
@@ -42,15 +49,15 @@ pub enum FallbackError<P: Debug, F: Debug> {
     FallbackError(F),
 }
 
-impl<R1, R2> VotingRuleExec for Fallback<R1, R2>
+impl<R1, R2, Ballot> VotingRuleExec<Ballot> for Fallback<R1, R2, Ballot>
 where
-    R1: VotingRuleExec,
-    R2: VotingRuleExec,
+    R1: VotingRuleExec<Ballot>,
+    R2: VotingRuleExec<Ballot>,
 {
     type Error = FallbackError<R1::Error, R2::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
+    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
         match self.primary.execute(profile) {
             Ok(RuleOutcome::UniqueWinner(winner)) => {
                 tracing::debug!("Primary rule returned a unique winner");
@@ -74,15 +81,16 @@ where
     }
 }
 
-impl<R1, R2> Default for Fallback<R1, R2>
+impl<R1, R2, Ballot> Default for Fallback<R1, R2, Ballot>
 where
-    R1: VotingRuleExec,
-    R2: VotingRuleExec,
+    R1: VotingRuleExec<Ballot>,
+    R2: VotingRuleExec<Ballot>,
 {
     fn default() -> Self {
         Self {
             primary: R1::create_default(),
             fallback: R2::create_default(),
+            _ballot_type: PhantomData,
         }
     }
 }
@@ -91,7 +99,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        profile::CandidateId, profile::Profile, tie_breaker::RuleOutcome,
+        models::{candidate_id::CandidateId, profile::Profile, ranking::RankingBallot},
+        tie_breaker::RuleOutcome,
         voting_rules::VotingRuleExec,
     };
     use mockall::mock;
@@ -99,15 +108,15 @@ mod tests {
     mock! {
         pub VotingRule {}
 
-        impl VotingRuleExec for VotingRule {
+        impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = &'static str;
 
-            fn execute(&self, profile: &Profile) -> Result<RuleOutcome, <Self as VotingRuleExec>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
 
-    fn fake_profile() -> Profile {
+    fn fake_profile() -> Profile<RankingBallot> {
         Profile::try_from(vec![vec![0, 1]])
             .expect("Profile is constructed incorrectly, revise test example")
     }

@@ -1,8 +1,8 @@
 mod common;
 
 use voting_core::{
+    models::candidate_id::CandidateId,
     prelude::{CoombsRule, RuleOutcome, VotingRuleExec},
-    profile::CandidateId,
 };
 
 use crate::common::{NASHVILLE, construct_tennessee_wiki_example};

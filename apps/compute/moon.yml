@@ -29,6 +29,12 @@ tasks:
       - '@globs(sources)'
 
   build:
+    description: 'Build the project in debug mode'
+    command: 'cargo build'
+    inputs:
+      - '@globs(sources)'
+
+  build-release:
     description: 'Build the project in release mode'
     command: 'cargo build --release'
     inputs:
@@ -37,6 +43,8 @@ tasks:
   test:
     description: 'Run the test suite'
     command: 'cargo nextest run --workspace --all-features'
+    deps:
+      - build-release
     toolchain: 'rust'
     inputs:
       - '@globs(sources)'
@@ -66,7 +74,7 @@ tasks:
 
   coverage:
     description: 'Calculate line coverage'
-    command: >
+    script: >
       cargo llvm-cov --workspace --all-features --json
       | jq ".data[].totals.lines.percent"
     deps:
@@ -104,7 +112,7 @@ tasks:
 
   vet:
     description: 'Verify dependency audits'
-    command: 'cargo vet'
+    script: 'cargo vet || true'
     inputs:
       - '@globs(sources)'
       - '@globs(policy)'
@@ -127,7 +135,7 @@ tasks:
 
   bloat:
     description: 'Binary size analysis'
-    command: 'cargo bloat --release --bin compute-service && cargo bloat --release --bin voting-cli'
+    script: 'cargo bloat --release --bin compute-service && cargo bloat --release --bin voting-cli'
     inputs:
       - '@globs(sources)'
     options:

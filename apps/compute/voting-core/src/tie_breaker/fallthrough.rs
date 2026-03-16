@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 
 use crate::{
-    profile::{CandidateId, Profile},
+    models::{candidate_id::CandidateId, profile::Profile},
     tie_breaker::{RuleOutcome, TieBreaker},
 };
 
@@ -16,13 +16,13 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct FallthroughTieBreaker;
 
-impl TieBreaker for FallthroughTieBreaker {
+impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
     type Error = Infallible;
 
     fn tie_break(
         &self,
         candidates: &[CandidateId],
-        _profile: &Profile,
+        _profile: &Profile<Ballot>,
     ) -> Result<RuleOutcome, Self::Error> {
         match candidates.len() {
             1 => Ok(RuleOutcome::UniqueWinner(candidates[0])),

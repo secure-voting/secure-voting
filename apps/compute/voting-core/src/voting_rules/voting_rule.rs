@@ -4,13 +4,13 @@
 //!
 //! This module defines the [`VotingRule`] struct as well as its [`VotingRuleError`] error type.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
     decider::Decider,
-    profile::Profile,
+    models::profile::Profile,
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::VotingRuleExec,
@@ -48,28 +48,34 @@ where
 /// 2. Decider - chooses a set of winners depending on the score information
 /// 3. `TieBreaker` - chooses an absolute winner from the selected set
 #[derive(Debug, Clone, Copy)]
-pub struct VotingRule<S, D, T> {
+pub struct VotingRule<S, D, T, Ballot> {
     /// A scorer instance.
     scorer: S,
     /// A decider instance.
     decider: D,
     /// A tie-breaker instance.
     tiebreaker: T,
+    /// Phantom marker on the Ballot type.
+    _ballot_type: PhantomData<Ballot>,
 }
 
 /// Helper result type returned from the [`super::VotingRuleExec::execute`] method of [`VotingRule`] struct.
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
-pub type VotingRuleResult<S, D, T> = Result<
+pub type VotingRuleResult<S, D, T, Ballot> = Result<
     RuleOutcome,
-    VotingRuleError<<S as Scorer>::Error, <D as Decider>::Error, <T as TieBreaker>::Error>,
+    VotingRuleError<
+        <S as Scorer<Ballot>>::Error,
+        <D as Decider>::Error,
+        <T as TieBreaker<Ballot>>::Error,
+    >,
 >;
 
-impl<S, D, T> VotingRule<S, D, T>
+impl<S, D, T, Ballot> VotingRule<S, D, T, Ballot>
 where
-    S: Scorer<Output = D::Input>,
+    S: Scorer<Ballot, Output = D::Input>,
     D: Decider,
-    T: TieBreaker,
+    T: TieBreaker<Ballot>,
 {
     /// Construct a new `VotingRule` from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
@@ -77,6 +83,7 @@ where
             scorer,
             decider,
             tiebreaker,
+            _ballot_type: PhantomData,
         }
     }
 
@@ -84,7 +91,7 @@ where
     ///
     /// Returns an error if any of the steps didn't succeed.
     #[instrument(skip(self, profile), ret)]
-    fn run(&self, profile: &Profile) -> VotingRuleResult<S, D, T> {
+    fn run(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot> {
         let scores = self
             .scorer
             .compute_score(profile)
@@ -102,12 +109,12 @@ where
     }
 }
 
-impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec
-    for VotingRule<S, D, T>
+impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
+    VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot>
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
-    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error> {
+    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
         self.run(profile)
     }
 
@@ -119,12 +126,15 @@ impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> VotingRuleExec
     }
 }
 
-impl<S: Scorer<Output = D::Input>, D: Decider, T: TieBreaker> Default for VotingRule<S, D, T> {
+impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
+    for VotingRule<S, D, T, Ballot>
+{
     fn default() -> Self {
         Self {
             scorer: S::new(),
             decider: D::new(),
             tiebreaker: T::new(),
+            _ballot_type: PhantomData,
         }
     }
 }

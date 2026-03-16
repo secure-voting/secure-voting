@@ -35,3 +35,6 @@ tonic-prost-build = "0.14.2"
 
 [package.metadata.clippy]
 config-file = "../../clippy.toml"
+
+[package.metadata.cargo-machete]
+ignored = ["prost", "prost-types", "tonic-prost"]

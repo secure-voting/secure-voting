@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::{profile::Profile, tie_breaker::RuleOutcome};
+use crate::{models::profile::Profile, tie_breaker::RuleOutcome};
 
 pub mod adaptors;
 pub mod elimination;
@@ -22,10 +22,11 @@ pub mod minmax;
 pub mod nanson;
 pub mod plurality;
 pub mod practical_condorcet;
+pub mod q_paretian;
 pub mod simpson;
 
 /// Trait for all the voting rules, simple and complex ones.
-pub trait VotingRuleExec {
+pub trait VotingRuleExec<Ballot> {
     /// Returned if the voting pipeline can't be completed.
     type Error: Debug;
 
@@ -35,7 +36,7 @@ pub trait VotingRuleExec {
     ///
     /// Returns an error if any of voting steps failed.
     /// Usually a sum type of the steps' error types.
-    fn execute(&self, profile: &Profile) -> Result<RuleOutcome, Self::Error>;
+    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error>;
 
     /// Constructor-like method to get new instances.
     fn create_default() -> Self

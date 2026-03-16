@@ -4,7 +4,7 @@
 
 use std::fmt::Debug;
 
-use crate::profile::{CandidateId, Profile};
+use crate::models::{candidate_id::CandidateId, profile::Profile};
 
 pub mod fallthrough;
 
@@ -37,8 +37,17 @@ impl RuleOutcome {
     }
 }
 
+impl From<Vec<usize>> for RuleOutcome {
+    fn from(value: Vec<usize>) -> Self {
+        match value.len() {
+            1 => RuleOutcome::UniqueWinner(CandidateId::new(value[0])),
+            _ => RuleOutcome::MultipleWinners(value.into_iter().map(CandidateId::new).collect()),
+        }
+    }
+}
+
 /// Resolves ties between selected winners to determine a single absolute winner.
-pub trait TieBreaker {
+pub trait TieBreaker<Ballot> {
     /// Error returned when the tie break can't be performed.
     ///
     /// Use [`std::convert::Infallible`] if this step cannot fail.
@@ -53,7 +62,7 @@ pub trait TieBreaker {
     fn tie_break(
         &self,
         candidates: &[CandidateId],
-        profile: &Profile,
+        profile: &Profile<Ballot>,
     ) -> Result<RuleOutcome, Self::Error>;
 
     /// Construct a new `TieBreaker` instance.

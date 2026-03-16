@@ -6,6 +6,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::PairwiseMatrix,
+    models::ranking::RankingBallot,
     prelude::Profile,
     scorer::{Score, Scorer},
 };
@@ -17,12 +18,15 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct CopelandIScorer;
 
-impl Scorer for CopelandIScorer {
+impl Scorer<RankingBallot> for CopelandIScorer {
     type Output = Vec<usize>;
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise = PairwiseMatrix::from(profile);
         let n_candidates = profile.n_candidates();
 

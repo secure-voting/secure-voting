@@ -2,7 +2,7 @@
 
 use std::{convert::Infallible, marker::PhantomData};
 
-use crate::{decider::Decider, profile::CandidateId, scorer::Score};
+use crate::{decider::Decider, models::candidate_id::CandidateId, scorer::Score};
 
 /// Majority decider.
 ///

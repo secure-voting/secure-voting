@@ -1,6 +1,7 @@
 //! Majority elimination stop condition module.
 
 use crate::{
+    models::ranking::RankingBallot,
     prelude::{Profile, RuleOutcome},
     scorer::Score,
     voting_rules::elimination::stop::EliminationStopCondition,
@@ -12,8 +13,13 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct MajorityStop;
 
-impl EliminationStopCondition<Vec<usize>> for MajorityStop {
-    fn should_stop(&self, scores: &Score<Vec<usize>>, _: &RuleOutcome, profile: &Profile) -> bool {
+impl EliminationStopCondition<Vec<usize>, RankingBallot> for MajorityStop {
+    fn should_stop(
+        &self,
+        scores: &Score<Vec<usize>>,
+        _: &RuleOutcome,
+        profile: &Profile<RankingBallot>,
+    ) -> bool {
         let total = profile.n_voters();
 
         scores.iter().any(|(s, _)| s * 2 > total)

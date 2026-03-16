@@ -4,6 +4,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::PairwiseMatrix,
+    models::ranking::RankingBallot,
     prelude::Profile,
     scorer::{Score, Scorer},
 };
@@ -15,12 +16,15 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 pub struct SimpsonScorer;
 
-impl Scorer for SimpsonScorer {
+impl Scorer<RankingBallot> for SimpsonScorer {
     type Output = Vec<isize>;
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise_matrix = PairwiseMatrix::from(profile);
         let n = pairwise_matrix.n();
 
@@ -49,7 +53,7 @@ impl Scorer for SimpsonScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::Profile;
+    use crate::models::profile::Profile;
 
     #[test]
     fn simpson_single_vote_linear_order() {

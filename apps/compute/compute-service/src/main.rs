@@ -8,7 +8,9 @@ use crate::securevoting::compute::v1::{
     run_chunk::Part,
 };
 
-#[allow(clippy::all)]
+#[allow(clippy::default_trait_access)]
+#[allow(clippy::doc_markdown)]
+#[allow(clippy::large_enum_variant)]
 pub mod securevoting {
     pub mod compute {
         pub mod v1 {
@@ -45,7 +47,7 @@ fn create_winner_response(winners: Vec<String>) -> RunResult {
     RunResult {
         method: String::new(),
         params_json: vec![],
-        
+
         status: "done".to_owned(),
         error_text: String::new(),
         winners_json: winner_json.as_bytes().to_vec(),
@@ -173,8 +175,8 @@ impl Compute for ComputeService {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
-    .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
-    .parse()?;
+        .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
+        .parse()?;
     let greeter = ComputeService;
 
     tonic::transport::Server::builder()

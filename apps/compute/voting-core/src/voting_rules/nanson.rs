@@ -2,6 +2,7 @@
 
 use crate::{
     decider::maxscore::MaxScoreDecider,
+    models::ranking::RankingBallot,
     scorer::borda::BordaScorer,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::elimination::{
@@ -18,5 +19,11 @@ use crate::{
 pub type NansonRule = NansonRuleWith<FallthroughTieBreaker>;
 
 /// The Nanson's voting rule type with a custom tie-breaker.
-pub type NansonRuleWith<TB> =
-    Elimination<BordaScorer, BelowAverageElimination, MaxScoreDecider<usize>, TB, NoEarlyStop>;
+pub type NansonRuleWith<TB> = Elimination<
+    BordaScorer<RankingBallot>,
+    BelowAverageElimination,
+    MaxScoreDecider<usize>,
+    TB,
+    RankingBallot,
+    NoEarlyStop<RankingBallot>,
+>;

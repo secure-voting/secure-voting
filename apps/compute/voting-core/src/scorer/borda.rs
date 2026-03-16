@@ -2,12 +2,12 @@
 //!
 //! Scores each candidate depending on its rank. The last one gets 0 points, the next one gets one more and so on.
 
-use std::convert::Infallible;
+use std::{convert::Infallible, marker::PhantomData};
 
 use rayon::prelude::*;
 
 use crate::{
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -15,14 +15,20 @@ use crate::{
 ///
 /// Gives n-1 points to the first candiate, n-2 to the second, ..., 1 to (n-1)th and 0 to the last.
 #[derive(Debug, Clone, Copy)]
-pub struct BordaScorer;
+pub struct BordaScorer<Ballot> {
+    /// Ballot type marker.
+    _ballot_type: PhantomData<Ballot>,
+}
 
-impl Scorer for BordaScorer {
+impl Scorer<RankingBallot> for BordaScorer<RankingBallot> {
     type Output = Vec<usize>;
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
@@ -50,7 +56,9 @@ impl Scorer for BordaScorer {
     }
 
     fn new() -> Self {
-        Self
+        Self {
+            _ballot_type: PhantomData,
+        }
     }
 }
 
@@ -63,7 +71,7 @@ mod tests {
     fn test_correct_borda_ranking(votes: Vec<Vec<usize>>, answer: &[usize]) {
         assert_eq!(
             answer,
-            BordaScorer
+            BordaScorer::<RankingBallot>::new()
                 .compute_score(
                     &votes
                         .try_into()
