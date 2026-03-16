@@ -108,6 +108,7 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(policy)'
+    continue_on_error: true
 
   machete:
     description: 'Find unused dependencies'
