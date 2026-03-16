@@ -16,9 +16,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: "Get protoc"
-        run: "sudo apt-get install protobuf-compiler"
-
       - name: "Setup Toolchain"
         uses: "moonrepo/setup-toolchain@v0"
 
@@ -26,8 +23,6 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin
-            ~/.cargo/.binstall
             ~/.cargo/registry
             ~/.cargo/git
             target
@@ -41,4 +36,4 @@ jobs:
       - name: "Collect results"
         uses: "appthrust/moon-ci-retrospect@v2"
         if: success() || failure()
-      
+
