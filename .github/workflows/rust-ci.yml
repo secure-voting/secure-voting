@@ -25,6 +25,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: compute-core
+          workspaces: |
+            apps/compute -> target
 
       - name: "Execute pipeline"
         run: "moon ci -c 1 --color"
