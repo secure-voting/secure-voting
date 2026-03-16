@@ -19,7 +19,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.0
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
       - name: "Setup Toolchain"
         uses: "moonrepo/setup-toolchain@v0"
 
