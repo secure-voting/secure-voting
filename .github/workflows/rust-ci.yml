@@ -15,24 +15,13 @@ jobs:
         uses: "actions/checkout@v6"
         with:
           fetch-depth: 0
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
         with:
-          toolchain: 1.93.0
-          components: rustfmt, clippy, llvm-tools-preview, rust-analyzer
+          shared-key: compute-core
+
       - name: "Setup Toolchain"
         uses: "moonrepo/setup-toolchain@v0"
-
-      - name: Cache Cargo tools
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: cargo-tools-${{ runner.os }}-${{ hashFiles('.moon/toolchain.yml') }}
-          restore-keys: |
-            cargo-tools-${{ runner.os }}-
 
       - name: "Execute pipeline"
         run: "moon ci"
