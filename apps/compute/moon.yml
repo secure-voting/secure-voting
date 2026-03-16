@@ -29,6 +29,12 @@ tasks:
       - '@globs(sources)'
 
   build:
+    description: 'Build the project in debug mode'
+    command: 'cargo build'
+    inputs:
+      - '@globs(sources)'
+
+  build-release:
     description: 'Build the project in release mode'
     command: 'cargo build --release'
     inputs:
@@ -37,6 +43,8 @@ tasks:
   test:
     description: 'Run the test suite'
     command: 'cargo nextest run --workspace --all-features'
+    deps:
+      - build-release
     toolchain: 'rust'
     inputs:
       - '@globs(sources)'
