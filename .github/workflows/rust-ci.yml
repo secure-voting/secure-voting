@@ -29,7 +29,7 @@ jobs:
             apps/compute -> target
 
       - name: "Execute pipeline"
-        run: "moon ci --color --affected"
+        run: "moon ci --color"
 
       - name: "Collect results"
         uses: "appthrust/moon-ci-retrospect@v2"
