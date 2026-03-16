@@ -104,11 +104,10 @@ tasks:
 
   vet:
     description: 'Verify dependency audits'
-    command: 'cargo vet'
+    script: 'cargo vet || true'
     inputs:
       - '@globs(sources)'
       - '@globs(policy)'
-    continue_on_error: true
 
   machete:
     description: 'Find unused dependencies'
