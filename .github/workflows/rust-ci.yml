@@ -24,7 +24,7 @@ jobs:
         uses: "moonrepo/setup-toolchain@v0"
 
       - name: "Execute pipeline"
-        run: "moon ci"
+        run: "moon ci -c 1 --color"
 
       - name: "Collect results"
         uses: "appthrust/moon-ci-retrospect@v2"
