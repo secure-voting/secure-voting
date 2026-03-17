@@ -115,6 +115,31 @@ jobs:
       - name: Ensure scripts are executable
         run: chmod +x scripts/ci/*.sh scripts/*.sh
 
+      - name: Create .env.integration
+        run: |
+          cat > .env.integration <<'EOF'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=secure_voting
+
+          REDIS_PASSWORD=redispass
+
+          MONGO_INITDB_ROOT_USERNAME=root
+          MONGO_INITDB_ROOT_PASSWORD=mongopass
+
+          BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+          BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+          BOOTSTRAP_RESEARCHER_EMAIL=researcher@example.com
+          BOOTSTRAP_RESEARCHER_PASSWORD=ResearcherPass123!
+
+          POSTGRES_DSN=postgres://postgres:postgres@127.0.0.1:15432/secure_voting?sslmode=disable
+          REDIS_ADDR=127.0.0.1:16379
+          REDIS_PASSWORD=redispass
+          MONGO_URI=mongodb://root:mongopass@127.0.0.1:17017/?authSource=admin
+
+          SECURE_VOTING_INTEGRATION=1
+          EOF
+
       - name: Run integration suite
         run: bash scripts/ci/run_integration_suite.sh
 
@@ -124,6 +149,7 @@ jobs:
         with:
           name: integration-artifacts
           path: .ci-artifacts/
+          if-no-files-found: ignore
 
   e2e-tests:
     name: e2e tests
@@ -152,3 +178,4 @@ jobs:
         with:
           name: e2e-artifacts
           path: .ci-artifacts/
+          if-no-files-found: ignore
