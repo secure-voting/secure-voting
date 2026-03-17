@@ -13,20 +13,30 @@ import (
 func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 	params := parseParams(task.ExperimentParams)
 
-	ballotFormat := getString(params, "ballot_format")
-	if ballotFormat == "" {
-		ballotFormat = strings.TrimSpace(task.Dataset.Format)
+	rawBallotFormat := getString(params, "ballot_format")
+	if rawBallotFormat == "" {
+		rawBallotFormat = strings.TrimSpace(task.Dataset.Format)
 	}
-	if ballotFormat == "" {
-		ballotFormat = "ranking"
+	if rawBallotFormat == "" {
+		rawBallotFormat = "ranking"
 	}
 
-	tallyRule := getString(params, "tally_rule")
-	if tallyRule == "" {
-		tallyRule = getString(params, "rule")
+	ballotFormat := normalizeBallotFormat(rawBallotFormat)
+	if ballotFormat == "" {
+		return nil, "unsupported_ballot_format_for_compute"
 	}
+
+	rawTallyRule := getString(params, "tally_rule")
+	if rawTallyRule == "" {
+		rawTallyRule = getString(params, "rule")
+	}
+	if rawTallyRule == "" {
+		rawTallyRule = "plurality"
+	}
+
+	tallyRule := normalizeComputeTallyRule(rawTallyRule)
 	if tallyRule == "" {
-		tallyRule = "plurality"
+		return nil, "unsupported_tally_rule_for_compute"
 	}
 
 	h := &pb.RunHeader{
@@ -54,7 +64,7 @@ func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 	}
 
 	if h.BallotFormat != "ranking" {
-		return nil, "unsupported ballot_format (only ranking supported now)"
+		return nil, "unsupported_ballot_format_for_compute"
 	}
 
 	_ = json.Valid(h.ParamsJson)

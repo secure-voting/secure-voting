@@ -41,6 +41,15 @@ function inviteCsvRows(invites: Invite[]) {
   }));
 }
 
+type BulkSummary = {
+  total: number;
+  valid: number;
+  inviteCreated: string[];
+  registrationRequired: string[];
+  skipped: string[];
+  failed: Array<{ email: string; reason: string }>;
+};
+
 export function ElectionPage() {
   const { id } = useParams();
   const electionId = String(id || "");
@@ -54,13 +63,7 @@ export function ElectionPage() {
   const [bulkInviteText, setBulkInviteText] = useState("");
   const [lastInviteCode, setLastInviteCode] = useState<string | null>(null);
 
-  const [bulkSummary, setBulkSummary] = useState<{
-    total: number;
-    valid: number;
-    created: string[];
-    skipped: string[];
-    failed: Array<{ email: string; reason: string }>;
-  } | null>(null);
+  const [bulkSummary, setBulkSummary] = useState<BulkSummary | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -162,16 +165,15 @@ export function ElectionPage() {
     setBulkSummary(null);
 
     try {
-      const created = await api.elections.createInvite(token, electionId, email);
-      const result = created as InviteCreated;
+      const result: InviteCreated = await api.elections.createInvite(token, electionId, email);
 
-      setLastInviteCode(result.invite_code);
+      setLastInviteCode(result.invite_code || null);
       setSingleInviteEmail("");
 
       addNotification({
         kind: "success",
         title: "Приглашение создано",
-        message: email,
+        message: `${email}: код приглашения создан`,
       });
 
       await load();
@@ -179,7 +181,12 @@ export function ElectionPage() {
       if (e?.status === 401) {
         setToken(null);
       } else {
-        setErr(e?.message || "Не удалось создать приглашение");
+        const code = e?.code || e?.error?.code || "";
+        if (code === "registration_required") {
+          setErr(`${email}: пользователь ещё не зарегистрирован`);
+        } else {
+          setErr(e?.message || "Не удалось создать приглашение");
+        }
       }
     } finally {
       setInviteLoading(false);
@@ -203,7 +210,8 @@ export function ElectionPage() {
     setErr(null);
     setLastInviteCode(null);
 
-    const created: string[] = [];
+    const inviteCreated: string[] = [];
+    const registrationRequired: string[] = [];
     const skipped: string[] = [...invalid];
     const failed: Array<{ email: string; reason: string }> = [];
 
@@ -211,15 +219,19 @@ export function ElectionPage() {
       for (const email of valid) {
         try {
           await api.elections.createInvite(token, electionId, email);
-          created.push(email);
+          inviteCreated.push(email);
         } catch (e: any) {
           if (e?.status === 401) {
             setToken(null);
             throw e;
           }
 
+          const code = e?.code || e?.error?.code || "";
           const message = e?.message || "create invite failed";
-          if (message.toLowerCase().includes("already invited")) {
+
+          if (code === "registration_required") {
+            registrationRequired.push(email);
+          } else if (code === "email_already_invited" || message.toLowerCase().includes("already invited")) {
             skipped.push(email);
           } else {
             failed.push({ email, reason: message });
@@ -230,15 +242,16 @@ export function ElectionPage() {
       setBulkSummary({
         total: unique.length,
         valid: valid.length,
-        created,
+        inviteCreated,
+        registrationRequired,
         skipped,
         failed,
       });
 
       addNotification({
         kind: failed.length === 0 ? "success" : "info",
-        title: "Bulk invites завершён",
-        message: `Создано: ${created.length}, пропущено: ${skipped.length}, ошибок: ${failed.length}`,
+        title: "Массовое создание приглашений завершено",
+        message: `создано: ${inviteCreated.length}, нужна регистрация: ${registrationRequired.length}, пропущено: ${skipped.length}, ошибок: ${failed.length}`,
       });
 
       await load();
@@ -325,7 +338,7 @@ export function ElectionPage() {
                   { label: "End at", value: item.end_at },
                   { label: "Publish at", value: item.publish_at ?? "—" },
                   { label: "Published at", value: item.published_at ?? "—" },
-                  { label: "Committee size", value: String(item.committee_size ?? 1) },
+                  { label: "Committee size", value: String(item.committee_size ?? "—") },
                   { label: "Quota type", value: item.quota_type ?? "—" },
                   { label: "Show aggregates", value: item.show_aggregates ? "yes" : "no" },
                   { label: "Candidates", value: String(item.candidates.length) },
@@ -337,25 +350,35 @@ export function ElectionPage() {
 
             <h3 style={{ marginTop: 0 }}>Кандидаты</h3>
             <div style={{ display: "grid", gap: 8 }}>
-              {item.candidates.map((candidate) => (
-                <div
-                  key={candidate.id}
-                  style={{
-                    ...styles.card,
-                    padding: 10,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "baseline",
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{candidate.name}</div>
-                    <div style={styles.muted}>{candidate.id}</div>
+              {item.candidates.map((candidate) => {
+                const description =
+                  candidate.meta &&
+                  typeof candidate.meta === "object" &&
+                  typeof (candidate.meta as any).description === "string"
+                    ? String((candidate.meta as any).description)
+                    : "";
+
+                return (
+                  <div
+                    key={candidate.id}
+                    style={{
+                      ...styles.card,
+                      padding: 10,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "baseline",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{candidate.name}</div>
+                      {description ? <div style={{ ...styles.muted, marginTop: 4 }}>{description}</div> : null}
+                      <div style={{ ...styles.muted, marginTop: 4 }}>{candidate.id}</div>
+                    </div>
+                    {candidate.meta ? <Badge text="meta" /> : null}
                   </div>
-                  {candidate.meta ? <Badge text="meta" /> : null}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             {isAdmin ? (
@@ -488,17 +511,29 @@ export function ElectionPage() {
                   items={[
                     { label: "Total parsed", value: String(bulkSummary.total) },
                     { label: "Valid emails", value: String(bulkSummary.valid) },
-                    { label: "Created", value: String(bulkSummary.created.length) },
+                    { label: "Invite created", value: String(bulkSummary.inviteCreated.length) },
+                    { label: "Registration required", value: String(bulkSummary.registrationRequired.length) },
                     { label: "Skipped", value: String(bulkSummary.skipped.length) },
                     { label: "Failed", value: String(bulkSummary.failed.length) },
                   ]}
                 />
 
-                {bulkSummary.created.length > 0 ? (
+                {bulkSummary.inviteCreated.length > 0 ? (
                   <div style={{ ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                    <div style={{ fontWeight: 700 }}>Created</div>
+                    <div style={{ fontWeight: 700 }}>Invite sent</div>
                     <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
-                      {bulkSummary.created.map((email) => (
+                      {bulkSummary.inviteCreated.map((email) => (
+                        <div key={email}>{email}</div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {bulkSummary.registrationRequired.length > 0 ? (
+                  <div style={{ ...styles.card, background: "#eff8ff", borderColor: "#b2ddff" }}>
+                    <div style={{ fontWeight: 700 }}>Registration required</div>
+                    <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                      {bulkSummary.registrationRequired.map((email) => (
                         <div key={email}>{email}</div>
                       ))}
                     </div>

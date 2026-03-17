@@ -43,7 +43,6 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) error {
 		return apperr.Internal(err, "create election failed")
 	}
 	if code != "" {
-		// пока сохраняем текущее поведение: message = code (контракт)
 		return apperr.Invalid(code, code)
 	}
 

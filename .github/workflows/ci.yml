@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: secure-voting-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,6 +15,7 @@ jobs:
   backend-fast:
     name: backend fast checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/backend
@@ -31,16 +35,23 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Build backend binaries
+        run: |
+          go build ./cmd/api
+          go build ./cmd/worker
+          go build ./cmd/compute-runner
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61.0
+          version: v1.64.2
           working-directory: apps/backend
           args: --timeout=5m
 
   frontend-fast:
     name: frontend typecheck and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/frontend
@@ -67,6 +78,7 @@ jobs:
   openapi-validate:
     name: openapi validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,6 +97,7 @@ jobs:
   integration-tests:
     name: integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - backend-fast
       - frontend-fast
@@ -112,6 +125,7 @@ jobs:
   e2e-tests:
     name: e2e tests
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs:
       - backend-fast
       - frontend-fast

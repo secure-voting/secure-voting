@@ -45,7 +45,7 @@ func loadConfig() Config {
 		GRPCAddr:   envOr("COMPUTE_GRPC_ADDR", "rust-compute:50051"),
 		UseTLS:     parseBool(envOr("COMPUTE_TLS", "false")),
 		CACertPath: env("COMPUTE_TLS_CA"),
-		ServerName: env("COMPUTE_TLS_SERVER_NAME"),
+		ServerName: envOr("COMPUTE_TLS_SERVER_NAME", "rust-compute"),
 
 		RunTimeout: 120 * time.Second,
 
@@ -54,6 +54,10 @@ func loadConfig() Config {
 		KafkaMaxWait:         250 * time.Millisecond,
 		KafkaBatchTimeout:    50 * time.Millisecond,
 		KafkaBallotBatchSize: 500,
+	}
+
+	if cfg.UseTLS && strings.TrimSpace(cfg.CACertPath) == "" {
+		log.Fatalf("missing env COMPUTE_TLS_CA when COMPUTE_TLS=true")
 	}
 
 	return cfg
