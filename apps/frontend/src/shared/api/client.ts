@@ -151,7 +151,7 @@ async function authorizedDownload(path: string, token: string, fallbackFilename:
 
 export const api = {
   auth: {
-    async register(email: string, password: string, _role: string, inviteCode: string | null) {
+    async register(email: string, password: string, inviteCode: string | null) {
       const body: Record<string, unknown> = { email, password };
       if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
 

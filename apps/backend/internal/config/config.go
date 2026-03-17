@@ -34,10 +34,10 @@ type Config struct {
 	ComputeTLSCA         string
 	ComputeTLSServerName string
 
-	BootstrapAdminEmail          string
-	BootstrapAdminPassword       string
-	BootstrapResearcherEmail     string
-	BootstrapResearcherPassword  string
+	BootstrapAdminEmail         string
+	BootstrapAdminPassword      string
+	BootstrapResearcherEmail    string
+	BootstrapResearcherPassword string
 }
 
 func FromEnv() Config {

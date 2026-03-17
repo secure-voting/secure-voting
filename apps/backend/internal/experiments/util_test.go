@@ -4,14 +4,14 @@ import "testing"
 
 func TestValidateParams_OK(t *testing.T) {
 	params := map[string]any{
-		"ballot_format":        "ranking",
-		"tally_rule":           "borda",
-		"committee_size":       float64(3),
-		"ranking_top_k":        float64(3),
-		"show_aggregates":      true,
-		"score_min":            float64(0),
-		"score_max":            float64(5),
-		"score_step":           float64(1),
+		"ballot_format":   "ranking",
+		"tally_rule":      "borda",
+		"committee_size":  float64(3),
+		"ranking_top_k":   float64(3),
+		"show_aggregates": true,
+		"score_min":       float64(0),
+		"score_max":       float64(5),
+		"score_step":      float64(1),
 	}
 
 	if code := validateParams(params); code != "" {

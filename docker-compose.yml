@@ -230,15 +230,15 @@ services:
       - kafka_network
     environment:
       - GRPC_ADDR=0.0.0.0:50051
-      - TLS_CERT=/certs/compute.pem
-      - TLS_KEY=/certs/compute.key
+      - TLS_CERT=/scripts/certs/out/compute.pem
+      - TLS_KEY=/scripts/certs/out/compute.key
 
       - KAFKA_BROKERS=kafka:9092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute
     volumes:
-      - ./scripts/certs/out:/certs:ro
+      - ./scripts/certs/out:/scripts/certs/out:ro
     restart: unless-stopped
     read_only: true
     profiles:

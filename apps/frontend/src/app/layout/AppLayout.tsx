@@ -6,18 +6,26 @@ import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { styles } from "../../shared/ui/styles";
 
+function roleLabel(role?: string) {
+  if (role === "admin") return "Администратор";
+  if (role === "researcher") return "Исследователь";
+  if (role === "voter") return "Голосующий";
+  return role || "Неизвестно";
+}
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { authed, me, bootLoading, bootError, logout } = useAuth();
   const { unreadCount } = useNotifications();
   const nav = useNavigate();
 
-  const isResearchOrAdmin = me?.role === "researcher" || me?.role === "admin";
+  const isAdmin = me?.role === "admin";
+  const isResearcher = me?.role === "researcher";
 
   return (
     <div style={styles.page}>
       <div style={styles.topbar}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1 style={styles.title}>secure voting</h1>
+          <h1 style={styles.title}>Secure Voting</h1>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -26,55 +34,57 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {authed ? (
             <>
               <span style={styles.muted}>
-                {me?.email} <Badge text={String(me?.role || "unknown")} />
+                {me?.email} <Badge text={roleLabel(me?.role)} />
               </span>
 
               <Link to="/dashboard" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Dashboard</button>
+                <button style={styles.btn}>Дашборд</button>
               </Link>
 
               <Link to="/elections" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Elections</button>
+                <button style={styles.btn}>Голосования</button>
               </Link>
 
-              {me?.role === "admin" ? (
+              {isAdmin ? (
                 <Link to="/admin/elections/create" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Create</button>
+                  <button style={styles.btn}>Создать голосование</button>
                 </Link>
               ) : null}
 
-              {me?.role === "researcher" ? (
-                <Link to="/research/datasets" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Datasets</button>
-                </Link>
-              ) : null}
-
-              {isResearchOrAdmin ? (
+              {isResearcher ? (
                 <>
+                  <Link to="/research/datasets" style={{ textDecoration: "none" }}>
+                    <button style={styles.btn}>Наборы данных</button>
+                  </Link>
                   <Link to="/research/experiments" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Experiments</button>
+                    <button style={styles.btn}>Эксперименты</button>
                   </Link>
                   <Link to="/research/runs" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Runs</button>
-                  </Link>
-                  <Link to="/monitor/jobs" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Jobs</button>
+                    <button style={styles.btn}>Запуски</button>
                   </Link>
                 </>
               ) : null}
 
-              <Link to="/monitor/audit" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Audit</button>
-              </Link>
+              {(isAdmin || isResearcher) ? (
+                <Link to="/monitor/jobs" style={{ textDecoration: "none" }}>
+                  <button style={styles.btn}>Задачи</button>
+                </Link>
+              ) : null}
+
+              {isAdmin ? (
+                <Link to="/monitor/audit" style={{ textDecoration: "none" }}>
+                  <button style={styles.btn}>Аудит</button>
+                </Link>
+              ) : null}
 
               <Link to="/notifications" style={{ textDecoration: "none" }}>
                 <button style={styles.btn}>
-                  Notifications{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                  Уведомления{unreadCount > 0 ? ` (${unreadCount})` : ""}
                 </button>
               </Link>
 
               <Link to="/profile" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Profile</button>
+                <button style={styles.btn}>Профиль</button>
               </Link>
 
               <button
@@ -83,13 +93,14 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   await logout();
                   nav("/login", { replace: true });
                 }}
+                type="button"
               >
-                Logout
+                Выйти
               </button>
             </>
           ) : (
             <Link to="/login" style={{ textDecoration: "none" }}>
-              <button style={styles.btn}>Login</button>
+              <button style={styles.btn}>Войти</button>
             </Link>
           )}
         </div>

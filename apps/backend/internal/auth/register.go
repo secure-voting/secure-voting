@@ -9,7 +9,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Service) Register(ctx context.Context, email, password, role, inviteCode string) (AuthResult, string, error) {
+func (s *Service) Register(ctx context.Context, email, password, _ string, inviteCode string) (AuthResult, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	inviteCode = strings.TrimSpace(inviteCode)
 
@@ -20,7 +20,7 @@ func (s *Service) Register(ctx context.Context, email, password, role, inviteCod
 		return AuthResult{}, "invalid_password", nil
 	}
 
-	role = "voter"
+	assignedRole := "voter"
 
 	passHashBytes, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
@@ -47,13 +47,13 @@ func (s *Service) Register(ctx context.Context, email, password, role, inviteCod
 	}
 
 	var userID string
-	err = tx.QueryRow(ctx,
+	err = tx.QueryRow(
+		ctx,
 		`INSERT INTO users (email, password_hash, role)
 		 VALUES ($1, $2, $3)
 		 RETURNING id::text`,
-		email, passHash, role,
+		email, passHash, assignedRole,
 	).Scan(&userID)
-
 	if err != nil {
 		le := strings.ToLower(err.Error())
 		if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") {
@@ -72,7 +72,7 @@ func (s *Service) Register(ctx context.Context, email, password, role, inviteCod
 		"target_id":   userID,
 		"after": map[string]any{
 			"email": email,
-			"role":  role,
+			"role":  assignedRole,
 		},
 	}
 	if inviteCode != "" {
@@ -94,7 +94,7 @@ func (s *Service) Register(ctx context.Context, email, password, role, inviteCod
 		User: User{
 			ID:    userID,
 			Email: email,
-			Role:  role,
+			Role:  assignedRole,
 		},
 	}, "", nil
 }

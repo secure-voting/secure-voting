@@ -103,6 +103,26 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+function ballotFormatLabel(value: "approval" | "ranking" | "score") {
+  if (value === "approval") return "Одобрение";
+  if (value === "ranking") return "Ранжирование";
+  return "Оценивание";
+}
+
+function accessModeLabel(value: "open" | "invite") {
+  return value === "open" ? "Открытый доступ" : "Только по приглашениям";
+}
+
+function quotaTypeLabel(value: "hare" | "droop") {
+  return value === "hare" ? "Хэра" : "Друпа";
+}
+
+function submitModeLabel(value: "draft" | "open" | "schedule") {
+  if (value === "draft") return "Сохранить как черновик";
+  if (value === "open") return "Открыть сразу";
+  return "Запланировать открытие";
+}
+
 function StepHeader({
   current,
   onGo,
@@ -468,7 +488,7 @@ export function AdminCreateElectionPage() {
           <h2 style={{ margin: 0 }}>Создание голосования</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link to="/dashboard/admin" style={{ textDecoration: "none" }}>
-              <button style={styles.btn}>К dashboard</button>
+              <button style={styles.btn}>К дашборду</button>
             </Link>
             <Link to="/elections" style={{ textDecoration: "none" }}>
               <button style={styles.btn}>К списку</button>
@@ -662,6 +682,7 @@ export function AdminCreateElectionPage() {
                 <select
                   style={styles.input}
                   value={quotaType}
+                  disabled={committeeSize <= 1}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
@@ -669,7 +690,9 @@ export function AdminCreateElectionPage() {
                 </select>
 
                 <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
-                  {quotaType === "hare"
+                  {committeeSize <= 1
+                    ? "Для одного победителя квота не используется."
+                    : quotaType === "hare"
                     ? "Квота Хэра: число голосов на один мандат."
                     : "Квота Друпа: более строгий порог избрания."}
                 </div>
@@ -929,17 +952,17 @@ export function AdminCreateElectionPage() {
             <SummaryGrid
               items={[
                 { label: "Название", value: title.trim() || "—" },
-                { label: "Формат бюллетеня", value: ballotFormat },
+                { label: "Формат бюллетеня", value: ballotFormatLabel(ballotFormat) },
                 { label: "Правило подсчёта", value: tallyRule },
                 { label: "Размер комитета", value: String(committeeSize) },
-                { label: "Тип квоты", value: committeeSize > 1 ? quotaType : "не используется" },
-                { label: "Режим доступа", value: accessMode },
+                { label: "Тип квоты", value: committeeSize > 1 ? quotaTypeLabel(quotaType) : "не используется" },
+                { label: "Режим доступа", value: accessModeLabel(accessMode) },
                 { label: "Показывать агрегаты", value: showAggregates ? "да" : "нет" },
-                { label: "Начало", value: startAtRFC3339 || "—" },
+                { label: "Начало", value: submitMode === "open" ? "Сразу после создания" : startAtRFC3339 || "—" },
                 { label: "Окончание", value: endAtRFC3339 || "—" },
                 { label: "Отложенная публикация", value: delayPublish ? publishAtRFC3339 || "—" : "нет" },
                 { label: "Кандидатов", value: String(candidateCount) },
-                { label: "После сохранения", value: submitMode },
+                { label: "После сохранения", value: submitModeLabel(submitMode) },
               ]}
             />
 

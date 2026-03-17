@@ -39,6 +39,10 @@ function normalizeTallyRule(value: string) {
   return TALLY_RULE_ALIASES[trimmed] ?? trimmed;
 }
 
+function accessModeLabel(value: "open" | "invite") {
+  return value === "open" ? "Открытый доступ" : "Только по приглашению";
+}
+
 function Hint({ text }: { text: string }) {
   return (
     <span
@@ -178,24 +182,24 @@ export function ElectionRulesPage() {
     const normalizedRule = normalizeTallyRule(tallyRule);
     if (!normalizedRule) return "Выберите правило подсчёта";
     if (!TALLY_RULES.includes(normalizedRule)) return "Недопустимое правило подсчёта";
-    if (committeeSize < 1) return "committee_size должен быть не меньше 1";
+    if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
 
     if (ballotFormat === "approval") {
-      if (approvalMaxChoices < 1) return "approval_max_choices должен быть не меньше 1";
-      if (approvalMaxChoices > candidatesCount) return "approval_max_choices не может превышать число кандидатов";
+      if (approvalMaxChoices < 1) return "Максимум отметок должен быть не меньше 1";
+      if (approvalMaxChoices > candidatesCount) return "Максимум отметок не может превышать число кандидатов";
     }
 
     if (ballotFormat === "ranking" && limitRankingTopK) {
       const topK = normalizedTopK();
-      if (topK < 1) return "ranking_top_k должен быть не меньше 1";
-      if (topK > candidatesCount) return "ranking_top_k не может превышать число кандидатов";
+      if (topK < 1) return "top-k должен быть не меньше 1";
+      if (topK > candidatesCount) return "top-k не может превышать число кандидатов";
     }
 
     if (ballotFormat === "score") {
-      if (scoreStep <= 0) return "score_step должен быть больше 0";
-      if (scoreMin > scoreMax) return "score_min не может быть больше score_max";
+      if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
+      if (scoreMin > scoreMax) return "Нижняя граница оценки не может быть больше верхней";
       if ((scoreMax - scoreMin) % scoreStep !== 0) {
-        return "Диапазон score должен делиться на score_step без остатка";
+        return "Диапазон оценок должен делиться на шаг без остатка";
       }
     }
 
@@ -366,14 +370,17 @@ export function ElectionRulesPage() {
               </div>
 
               <div>
-                <label>Access mode</label>
+                <label>
+                  Access mode
+                  <Hint text="Определяет, смогут ли пользователи участвовать свободно или только по приглашению." />
+                </label>
                 <select
                   style={styles.input}
                   value={accessMode}
                   onChange={(e) => setAccessMode(e.target.value as "open" | "invite")}
                 >
-                  <option value="open">open</option>
-                  <option value="invite">invite</option>
+                  <option value="open">{accessModeLabel("open")}</option>
+                  <option value="invite">{accessModeLabel("invite")}</option>
                 </select>
               </div>
 
@@ -425,7 +432,7 @@ export function ElectionRulesPage() {
             {ballotFormat === "approval" ? (
               <div style={styles.grid2}>
                 <div>
-                  <label>approval_max_choices</label>
+                  <label>Максимум отметок</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -473,7 +480,7 @@ export function ElectionRulesPage() {
             {ballotFormat === "score" ? (
               <div style={styles.grid2}>
                 <div>
-                  <label>score_min</label>
+                  <label>Нижняя граница оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -483,7 +490,7 @@ export function ElectionRulesPage() {
                 </div>
 
                 <div>
-                  <label>score_max</label>
+                  <label>Верхняя граница оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -493,7 +500,7 @@ export function ElectionRulesPage() {
                 </div>
 
                 <div>
-                  <label>score_step</label>
+                  <label>Шаг оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -510,7 +517,7 @@ export function ElectionRulesPage() {
                       checked={scoreAllowSkip}
                       onChange={(e) => setScoreAllowSkip(e.target.checked)}
                     />
-                    score_allow_skip
+                    Разрешить пропуск оценки
                   </label>
                 </div>
               </div>

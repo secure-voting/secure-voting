@@ -481,14 +481,14 @@ type Invite struct {
 }
 
 type InviteCreated struct {
-	InviteID             string  `json:"invite_id"`
-	Email                string  `json:"email"`
-	InviteCode           string  `json:"invite_code,omitempty"`
-	Status               string  `json:"status"`
-	CreatedAt            string  `json:"created_at"`
-	RegistrationRequired bool    `json:"registration_required"`
+	InviteID              string `json:"invite_id"`
+	Email                 string `json:"email"`
+	InviteCode            string `json:"invite_code,omitempty"`
+	Status                string `json:"status"`
+	CreatedAt             string `json:"created_at"`
+	RegistrationRequired  bool   `json:"registration_required"`
 	RegistrationEmailSent bool   `json:"registration_email_sent"`
-	InviteEmailSent      bool    `json:"invite_email_sent"`
+	InviteEmailSent       bool   `json:"invite_email_sent"`
 }
 
 type ElectionDetail struct {

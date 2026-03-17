@@ -47,7 +47,6 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 		return InviteCreated{}, "not_invite_mode", nil
 	}
 
-
 	var registered bool
 	err = tx.QueryRow(ctx, `
 		SELECT EXISTS (

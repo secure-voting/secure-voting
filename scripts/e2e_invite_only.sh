@@ -143,6 +143,9 @@ print(uuid.uuid4().hex[:10])
 PY
 }
 
+START_AT="$(date -u -d '+10 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+END_AT="$(date -u -d '+2 days' +%Y-%m-%dT%H:%M:%SZ)"
+
 echo "== detect api base =="
 detect_api_base
 
@@ -173,8 +176,8 @@ do_curl POST "$API_BASE/elections" \
   -d "{
     \"title\":\"E2E invite-only $SFX\",
     \"description\":\"invite-only flow\",
-    \"start_at\":\"2026-03-20T10:00:00Z\",
-    \"end_at\":\"2026-03-21T10:00:00Z\",
+    \"start_at\":\"$START_AT\",
+    \"end_at\":\"$END_AT\",
     \"tally_rule\":\"plurality\",
     \"ballot_format\":\"ranking\",
     \"access_mode\":\"invite\",
@@ -182,9 +185,9 @@ do_curl POST "$API_BASE/elections" \
     \"committee_size\":1,
     \"ranking_top_k\":3,
     \"candidates\":[
-      {\"name\":\"Alice\"},
-      {\"name\":\"Bob\"},
-      {\"name\":\"Carol\"}
+      {\"name\":\"Alice Alpha\",\"meta\":{\"description\":\"Candidate 1\"}},
+      {\"name\":\"Boris Beta\",\"meta\":{\"description\":\"Candidate 2\"}},
+      {\"name\":\"Carol Gamma\",\"meta\":{\"description\":\"Candidate 3\"}}
     ]
   }"
 assert_code 200
@@ -196,7 +199,34 @@ if [[ -z "$ELECTION_ID" ]]; then
   exit 1
 fi
 
-echo "== create invite =="
+echo "== register invited voter without invite =="
+do_curl POST "$API_BASE/auth/register" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$INVITED_EMAIL\",\"password\":\"$INVITED_PASSWORD\"}"
+assert_code 200
+
+INVITED_TOKEN="$(extract_token "$HTTP_BODY")"
+if [[ -z "$INVITED_TOKEN" ]]; then
+  echo "failed to extract invited voter token" >&2
+  echo "$HTTP_BODY" >&2
+  exit 1
+fi
+
+echo "== register ordinary voter without invite =="
+do_curl POST "$API_BASE/auth/register" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$PLAIN_EMAIL\",\"password\":\"$PLAIN_PASSWORD\"}"
+assert_code 200
+
+PLAIN_TOKEN="$(extract_token "$HTTP_BODY")"
+if [[ -z "$PLAIN_TOKEN" ]]; then
+  echo "failed to extract plain voter token" >&2
+  echo "$HTTP_BODY" >&2
+  exit 1
+fi
+PLAIN_AUTH="Authorization: Bearer $PLAIN_TOKEN"
+
+echo "== create invite for already registered invited voter =="
 do_curl POST "$API_BASE/elections/$ELECTION_ID/invites" \
   -H 'Content-Type: application/json' \
   -H "$ADMIN_AUTH" \
@@ -210,15 +240,15 @@ if [[ -z "$INVITE_CODE" ]]; then
   exit 1
 fi
 
-echo "== invited voter registers with invite_code =="
-do_curl POST "$API_BASE/auth/register" \
+echo "== invited voter accepts invite via login with invite_code =="
+do_curl POST "$API_BASE/auth/login" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$INVITED_EMAIL\",\"password\":\"$INVITED_PASSWORD\",\"invite_code\":\"$INVITE_CODE\"}"
 assert_code 200
 
 INVITED_TOKEN="$(extract_token "$HTTP_BODY")"
 if [[ -z "$INVITED_TOKEN" ]]; then
-  echo "failed to extract invited voter token" >&2
+  echo "failed to extract invited voter token after invite acceptance" >&2
   echo "$HTTP_BODY" >&2
   exit 1
 fi
@@ -227,20 +257,6 @@ INVITED_AUTH="Authorization: Bearer $INVITED_TOKEN"
 echo "== invited voter can access ballot meta =="
 do_curl GET "$API_BASE/elections/$ELECTION_ID/ballot" -H "$INVITED_AUTH"
 assert_code 200
-
-echo "== ordinary voter registers without invite =="
-do_curl POST "$API_BASE/auth/register" \
-  -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$PLAIN_EMAIL\",\"password\":\"$PLAIN_PASSWORD\"}"
-assert_code 200
-
-PLAIN_TOKEN="$(extract_token "$HTTP_BODY")"
-if [[ -z "$PLAIN_TOKEN" ]]; then
-  echo "failed to extract plain voter token" >&2
-  echo "$HTTP_BODY" >&2
-  exit 1
-fi
-PLAIN_AUTH="Authorization: Bearer $PLAIN_TOKEN"
 
 echo "== ordinary voter cannot access ballot meta =="
 do_curl GET "$API_BASE/elections/$ELECTION_ID/ballot" -H "$PLAIN_AUTH"
