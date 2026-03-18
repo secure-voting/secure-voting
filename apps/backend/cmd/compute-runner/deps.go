@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
@@ -16,6 +17,18 @@ func connectMongo(ctx context.Context, cfg Config) (*mongo.Client, *mongo.Databa
 		return nil, nil, err
 	}
 	return mc, mc.Database(cfg.MongoDB), nil
+}
+
+func connectPostgres(ctx context.Context, cfg Config) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, cfg.PostgresDSN)
+	if err != nil {
+		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
 }
 
 func connectCompute(ctx context.Context, cfg Config) (*computeclient.Client, error) {

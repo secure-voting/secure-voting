@@ -13,8 +13,9 @@ type Config struct {
 	ResultsTopic string
 	GroupID      string
 
-	MongoURI string
-	MongoDB  string
+	MongoURI    string
+	MongoDB     string
+	PostgresDSN string
 
 	GRPCAddr   string
 	UseTLS     bool
@@ -39,8 +40,9 @@ func loadConfig() Config {
 		ResultsTopic: envOr("KAFKA_RESULTS_TOPIC", "secure-voting.compute.results"),
 		GroupID:      envOr("KAFKA_GROUP_ID", "secure-voting-compute-runner"),
 
-		MongoURI: mustEnv("MONGO_URI"),
-		MongoDB:  envOr("MONGO_DB", "secure_voting"),
+		MongoURI:    mustEnv("MONGO_URI"),
+		MongoDB:     envOr("MONGO_DB", "secure_voting"),
+		PostgresDSN: mustEnv("POSTGRES_DSN"),
 
 		GRPCAddr:   envOr("COMPUTE_GRPC_ADDR", "rust-compute:50051"),
 		UseTLS:     parseBool(envOr("COMPUTE_TLS", "false")),

@@ -1,0 +1,128 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"strings"
+	"time"
+
+	"github.com/segmentio/kafka-go"
+
+	"secure-voting/apps/backend/internal/jobs"
+)
+
+var loadElectionTallyTaskFn = func(w *Worker, ctx context.Context, jobID, electionID string) (ElectionTallyTask, error) {
+	return w.loadElectionTallyTask(ctx, jobID, electionID)
+}
+
+func (w *Worker) handleElectionTallyExternal(ctx context.Context, job jobs.ClaimedJob) error {
+	if job.ElectionID == nil || strings.TrimSpace(*job.ElectionID) == "" {
+		_ = markJobErrorFn(w, ctx, job.ID, "missing election_id in jobs row")
+		return nil
+	}
+
+	task, err := loadElectionTallyTaskFn(w, ctx, job.ID, strings.TrimSpace(*job.ElectionID))
+	if err != nil {
+		return err
+	}
+
+	if !supportsExternalElectionTally(task.BallotFormat, task.TallyRule) {
+		return handleTallyLocalFn(w, ctx, job)
+	}
+
+	_ = updateProgressFn(w, ctx, job.ID, 20)
+
+	value, err := json.Marshal(task)
+	if err != nil {
+		_ = markJobErrorFn(w, ctx, job.ID, "failed to marshal election_tally task")
+		return nil
+	}
+
+	err = writeTaskMessageFn(ctx, w, kafka.Message{
+		Key:   []byte(task.JobID),
+		Value: value,
+		Time:  time.Now().UTC(),
+	})
+	if err != nil {
+		_ = markJobErrorFn(w, ctx, job.ID, "kafka publish failed: "+err.Error())
+		return nil
+	}
+
+	log.Printf(
+		"worker.handleElectionTallyExternal: published task job_id=%s election_id=%s tally_rule=%s ballot_format=%s",
+		task.JobID,
+		task.ElectionID,
+		task.TallyRule,
+		task.BallotFormat,
+	)
+
+	_ = updateProgressFn(w, ctx, job.ID, 45)
+	return nil
+}
+
+func (w *Worker) loadElectionTallyTask(ctx context.Context, jobID, electionID string) (ElectionTallyTask, error) {
+	var (
+		task           ElectionTallyTask
+		committeeSize  *int
+		quotaType      *string
+		rankingTopK    *int
+		showAggregates bool
+	)
+
+	err := w.db.QueryRow(ctx, `
+		SELECT tally_rule, ballot_format, committee_size, quota_type, ranking_top_k, show_aggregates
+		FROM elections
+		WHERE id = $1::uuid
+	`, electionID).Scan(
+		&task.TallyRule,
+		&task.BallotFormat,
+		&committeeSize,
+		&quotaType,
+		&rankingTopK,
+		&showAggregates,
+	)
+	if err != nil {
+		return ElectionTallyTask{}, err
+	}
+
+	task.Kind = electionTallyTaskKind
+	task.JobID = strings.TrimSpace(jobID)
+	task.ElectionID = strings.TrimSpace(electionID)
+	task.TallyRule = normalizeExternalRankingTallyRule(task.TallyRule)
+	task.BallotFormat = strings.TrimSpace(task.BallotFormat)
+	task.CommitteeSize = committeeSize
+	task.QuotaType = quotaType
+	task.RankingTopK = rankingTopK
+	task.ShowAggregates = showAggregates
+
+	rows, err := w.db.Query(ctx, `
+		SELECT id::text, name
+		FROM candidates
+		WHERE election_id = $1::uuid
+		ORDER BY name ASC, id ASC
+	`, electionID)
+	if err != nil {
+		return ElectionTallyTask{}, err
+	}
+	defer rows.Close()
+
+	task.Candidates = make([]ElectionCandidate, 0, 16)
+	for rows.Next() {
+		var c ElectionCandidate
+		if err := rows.Scan(&c.ID, &c.Name); err != nil {
+			return ElectionTallyTask{}, err
+		}
+		c.ID = strings.TrimSpace(c.ID)
+		c.Name = strings.TrimSpace(c.Name)
+		if c.ID == "" {
+			continue
+		}
+		task.Candidates = append(task.Candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return ElectionTallyTask{}, err
+	}
+
+	return task, nil
+}

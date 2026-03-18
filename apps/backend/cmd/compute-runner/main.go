@@ -39,6 +39,15 @@ func run() error {
 	log.Printf("mongo connected: db=%s", cfg.MongoDB)
 	defer func() { _ = mc.Disconnect(context.Background()) }()
 
+	pg, err := connectPostgres(ctx, cfg)
+	if err != nil {
+		log.Printf("postgres connect: %v", err)
+		stop()
+		return err
+	}
+	log.Printf("postgres connected")
+	defer pg.Close()
+
 	cc, err := connectCompute(ctx, cfg)
 	if err != nil {
 		log.Printf("compute connect failed: %v", err)
@@ -82,41 +91,99 @@ func run() error {
 			continue
 		}
 
-		task.RunID = strings.TrimSpace(task.RunID)
-		if task.RunID == "" && len(msg.Key) > 0 {
-			task.RunID = strings.TrimSpace(string(msg.Key))
-		}
-
-		log.Printf(
-			"processing task: run_id=%s experiment_id=%s dataset_id=%s",
-			task.RunID,
-			task.ExperimentID,
-			task.DatasetID,
-		)
-
-		res := processTask(ctx, mdb, cfg, cc.Compute(), task)
-
-		log.Printf(
-			"task processed: run_id=%s status=%s error=%q winners=%d",
-			res.RunID,
-			res.Status,
-			res.ErrorText,
-			len(res.Winners),
-		)
-
-		if err := writeResult(ctx, writer, res); err != nil {
-			if errors.Is(err, context.Canceled) {
-				log.Printf("context canceled while writing result")
-				return nil
+		switch task.Kind {
+		case "experiment_run":
+			if task.Experiment == nil {
+				log.Printf("decoded experiment task is nil: offset=%d", msg.Offset)
+				commitTask(ctx, reader, msg)
+				continue
 			}
-			log.Printf("kafka write result: %v", err)
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
 
-		log.Printf("result written: run_id=%s status=%s", res.RunID, res.Status)
-		commitTask(ctx, reader, msg)
-		log.Printf("task committed: offset=%d run_id=%s", msg.Offset, task.RunID)
+			task.Experiment.RunID = strings.TrimSpace(task.Experiment.RunID)
+			if task.Experiment.RunID == "" && len(msg.Key) > 0 {
+				task.Experiment.RunID = strings.TrimSpace(string(msg.Key))
+			}
+
+			log.Printf(
+				"processing experiment task: run_id=%s experiment_id=%s dataset_id=%s",
+				task.Experiment.RunID,
+				task.Experiment.ExperimentID,
+				task.Experiment.DatasetID,
+			)
+
+			res := processExperimentRunTask(ctx, mdb, cfg, cc.Compute(), *task.Experiment)
+
+			log.Printf(
+				"experiment task processed: run_id=%s status=%s error=%q winners=%d",
+				res.RunID,
+				res.Status,
+				res.ErrorText,
+				len(res.Winners),
+			)
+
+			if err := writeResult(ctx, writer, res); err != nil {
+				if errors.Is(err, context.Canceled) {
+					log.Printf("context canceled while writing result")
+					return nil
+				}
+				log.Printf("kafka write experiment result: %v", err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			log.Printf("experiment result written: run_id=%s status=%s", res.RunID, res.Status)
+			commitTask(ctx, reader, msg)
+			log.Printf("task committed: offset=%d run_id=%s", msg.Offset, task.Experiment.RunID)
+
+		case "election_tally":
+			if task.ElectionTally == nil {
+				log.Printf("decoded election_tally task is nil: offset=%d", msg.Offset)
+				commitTask(ctx, reader, msg)
+				continue
+			}
+
+			task.ElectionTally.JobID = strings.TrimSpace(task.ElectionTally.JobID)
+			if task.ElectionTally.JobID == "" && len(msg.Key) > 0 {
+				task.ElectionTally.JobID = strings.TrimSpace(string(msg.Key))
+			}
+
+			log.Printf(
+				"processing election task: job_id=%s election_id=%s tally_rule=%s ballot_format=%s",
+				task.ElectionTally.JobID,
+				task.ElectionTally.ElectionID,
+				task.ElectionTally.TallyRule,
+				task.ElectionTally.BallotFormat,
+			)
+
+			res := processElectionTallyTask(ctx, pg, cfg, cc.Compute(), *task.ElectionTally)
+
+			log.Printf(
+				"election task processed: job_id=%s election_id=%s status=%s error=%q winners=%d",
+				res.JobID,
+				res.ElectionID,
+				res.Status,
+				res.ErrorText,
+				len(res.Winners),
+			)
+
+			if err := writeResult(ctx, writer, res); err != nil {
+				if errors.Is(err, context.Canceled) {
+					log.Printf("context canceled while writing result")
+					return nil
+				}
+				log.Printf("kafka write election result: %v", err)
+				time.Sleep(500 * time.Millisecond)
+				continue
+			}
+
+			log.Printf("election result written: job_id=%s election_id=%s status=%s", res.JobID, res.ElectionID, res.Status)
+			commitTask(ctx, reader, msg)
+			log.Printf("task committed: offset=%d job_id=%s", msg.Offset, task.ElectionTally.JobID)
+
+		default:
+			log.Printf("unsupported decoded task kind=%q offset=%d", task.Kind, msg.Offset)
+			commitTask(ctx, reader, msg)
+		}
 	}
 }
 

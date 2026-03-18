@@ -237,6 +237,7 @@ services:
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute
+      
     volumes:
       - ./scripts/certs/out:/scripts/certs/out:ro
     restart: unless-stopped
@@ -263,6 +264,7 @@ services:
       - COMPUTE_TLS=true
       - COMPUTE_TLS_CA=/certs/ca.pem
       - COMPUTE_TLS_SERVER_NAME=rust-compute
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
     volumes:
       - ./scripts/certs/out:/certs:ro
     depends_on:

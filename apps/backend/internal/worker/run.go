@@ -38,6 +38,10 @@ var handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJo
 	return w.handleTallyLocal(ctx, job)
 }
 
+var handleTallyJobFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
+	return w.handleTallyJob(ctx, job)
+}
+
 func (w *Worker) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -87,7 +91,7 @@ func (w *Worker) tick(ctx context.Context) error {
 	case jobKindExperimentRun:
 		return handleExperimentRunFn(w, ctx, job)
 	case jobKindTally:
-		return handleTallyLocalFn(w, ctx, job)
+		return handleTallyJobFn(w, ctx, job)
 	default:
 		_ = markJobErrorFn(w, ctx, job.ID, "unsupported job kind: "+job.Kind)
 		return nil

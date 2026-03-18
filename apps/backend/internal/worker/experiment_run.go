@@ -147,6 +147,10 @@ func (w *Worker) handleExperimentRun(ctx context.Context, job jobs.ClaimedJob) e
 }
 
 func (w *Worker) consumeResults(ctx context.Context) error {
+	type resultKindEnvelope struct {
+		Kind string `json:"kind"`
+	}
+
 	for {
 		msg, err := fetchResultMessageFn(ctx, w)
 		if err != nil {
@@ -161,8 +165,8 @@ func (w *Worker) consumeResults(ctx context.Context) error {
 			msg.Topic, msg.Partition, msg.Offset, string(msg.Key), len(msg.Value),
 		)
 
-		var res ExperimentRunResult
-		if err := json.Unmarshal(msg.Value, &res); err != nil {
+		var env resultKindEnvelope
+		if err := json.Unmarshal(msg.Value, &env); err != nil {
 			log.Printf(
 				"worker.consumeResults: bad json topic=%s partition=%d offset=%d: %v",
 				msg.Topic, msg.Partition, msg.Offset, err,
@@ -173,76 +177,192 @@ func (w *Worker) consumeResults(ctx context.Context) error {
 			continue
 		}
 
-		res.RunID = strings.TrimSpace(res.RunID)
-		if res.RunID == "" {
+		kind := strings.TrimSpace(env.Kind)
+
+		switch kind {
+		case "", jobKindExperimentRun, experimentRunResultKind:
+			var res ExperimentRunResult
+			if err := json.Unmarshal(msg.Value, &res); err != nil {
+				log.Printf(
+					"worker.consumeResults: bad experiment result json topic=%s partition=%d offset=%d: %v",
+					msg.Topic, msg.Partition, msg.Offset, err,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			res.RunID = strings.TrimSpace(res.RunID)
+			if res.RunID == "" {
+				log.Printf(
+					"worker.consumeResults: missing run_id topic=%s partition=%d offset=%d",
+					msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := uuid.Parse(res.RunID); err != nil {
+				log.Printf(
+					"worker.consumeResults: invalid run_id=%q topic=%s partition=%d offset=%d",
+					res.RunID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			res.Kind = strings.TrimSpace(res.Kind)
+			if res.Kind != "" && res.Kind != jobKindExperimentRun && res.Kind != experimentRunResultKind {
+				log.Printf(
+					"worker.consumeResults: skip kind=%q run_id=%q topic=%s partition=%d offset=%d",
+					res.Kind, res.RunID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			res.Status = strings.TrimSpace(res.Status)
+			if res.Status != "done" && res.Status != "error" {
+				log.Printf(
+					"worker.consumeResults: invalid status=%q run_id=%q topic=%s partition=%d offset=%d",
+					res.Status, res.RunID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
 			log.Printf(
-				"worker.consumeResults: missing run_id topic=%s partition=%d offset=%d",
-				msg.Topic, msg.Partition, msg.Offset,
+				"worker.consumeResults: applying result run_id=%q kind=%q status=%q",
+				res.RunID, res.Kind, res.Status,
+			)
+
+			if err := applyExperimentRunResultFn(ctx, w, res); err != nil {
+				log.Printf(
+					"worker.applyExperimentRunResult error run_id=%q topic=%s partition=%d offset=%d: %v",
+					res.RunID, msg.Topic, msg.Partition, msg.Offset, err,
+				)
+				time.Sleep(750 * time.Millisecond)
+				continue
+			}
+
+			log.Printf("worker.consumeResults: applied result run_id=%q status=%q", res.RunID, res.Status)
+
+			if err := commitResultFn(ctx, w, msg); err != nil {
+				return err
+			}
+
+			log.Printf(
+				"worker.consumeResults: committed topic=%s partition=%d offset=%d run_id=%q",
+				msg.Topic, msg.Partition, msg.Offset, res.RunID,
+			)
+
+		case electionTallyTaskKind, electionTallyResultKind:
+			var res ElectionTallyResult
+			if err := json.Unmarshal(msg.Value, &res); err != nil {
+				log.Printf(
+					"worker.consumeResults: bad election result json topic=%s partition=%d offset=%d: %v",
+					msg.Topic, msg.Partition, msg.Offset, err,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			res.JobID = strings.TrimSpace(res.JobID)
+			res.ElectionID = strings.TrimSpace(res.ElectionID)
+			res.Kind = strings.TrimSpace(res.Kind)
+			res.Status = strings.TrimSpace(res.Status)
+
+			if res.JobID == "" || res.ElectionID == "" {
+				log.Printf(
+					"worker.consumeResults: missing job_id or election_id kind=%q topic=%s partition=%d offset=%d",
+					res.Kind, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if _, err := uuid.Parse(res.JobID); err != nil {
+				log.Printf(
+					"worker.consumeResults: invalid job_id=%q topic=%s partition=%d offset=%d",
+					res.JobID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if _, err := uuid.Parse(res.ElectionID); err != nil {
+				log.Printf(
+					"worker.consumeResults: invalid election_id=%q topic=%s partition=%d offset=%d",
+					res.ElectionID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			if res.Status != "done" && res.Status != "error" {
+				log.Printf(
+					"worker.consumeResults: invalid election status=%q job_id=%q topic=%s partition=%d offset=%d",
+					res.Status, res.JobID, msg.Topic, msg.Partition, msg.Offset,
+				)
+				if err := commitResultFn(ctx, w, msg); err != nil {
+					return err
+				}
+				continue
+			}
+
+			log.Printf(
+				"worker.consumeResults: applying election result job_id=%q election_id=%q kind=%q status=%q",
+				res.JobID, res.ElectionID, res.Kind, res.Status,
+			)
+
+			if err := applyElectionTallyResultFn(ctx, w, res); err != nil {
+				log.Printf(
+					"worker.applyElectionTallyResult error job_id=%q election_id=%q topic=%s partition=%d offset=%d: %v",
+					res.JobID, res.ElectionID, msg.Topic, msg.Partition, msg.Offset, err,
+				)
+				time.Sleep(750 * time.Millisecond)
+				continue
+			}
+
+			log.Printf(
+				"worker.consumeResults: applied election result job_id=%q election_id=%q status=%q",
+				res.JobID, res.ElectionID, res.Status,
+			)
+
+			if err := commitResultFn(ctx, w, msg); err != nil {
+				return err
+			}
+
+			log.Printf(
+				"worker.consumeResults: committed topic=%s partition=%d offset=%d job_id=%q",
+				msg.Topic, msg.Partition, msg.Offset, res.JobID,
+			)
+
+		default:
+			log.Printf(
+				"worker.consumeResults: skip unsupported kind=%q topic=%s partition=%d offset=%d",
+				kind, msg.Topic, msg.Partition, msg.Offset,
 			)
 			if err := commitResultFn(ctx, w, msg); err != nil {
 				return err
 			}
-			continue
 		}
-		if _, err := uuid.Parse(res.RunID); err != nil {
-			log.Printf(
-				"worker.consumeResults: invalid run_id=%q topic=%s partition=%d offset=%d",
-				res.RunID, msg.Topic, msg.Partition, msg.Offset,
-			)
-			if err := commitResultFn(ctx, w, msg); err != nil {
-				return err
-			}
-			continue
-		}
-
-		res.Kind = strings.TrimSpace(res.Kind)
-		if res.Kind != "" && res.Kind != jobKindExperimentRun && res.Kind != experimentRunResultKind {
-			log.Printf(
-				"worker.consumeResults: skip kind=%q run_id=%q topic=%s partition=%d offset=%d",
-				res.Kind, res.RunID, msg.Topic, msg.Partition, msg.Offset,
-			)
-			if err := commitResultFn(ctx, w, msg); err != nil {
-				return err
-			}
-			continue
-		}
-
-		res.Status = strings.TrimSpace(res.Status)
-		if res.Status != "done" && res.Status != "error" {
-			log.Printf(
-				"worker.consumeResults: invalid status=%q run_id=%q topic=%s partition=%d offset=%d",
-				res.Status, res.RunID, msg.Topic, msg.Partition, msg.Offset,
-			)
-			if err := commitResultFn(ctx, w, msg); err != nil {
-				return err
-			}
-			continue
-		}
-
-		log.Printf(
-			"worker.consumeResults: applying result run_id=%q kind=%q status=%q",
-			res.RunID, res.Kind, res.Status,
-		)
-
-		if err := applyExperimentRunResultFn(ctx, w, res); err != nil {
-			log.Printf(
-				"worker.applyExperimentRunResult error run_id=%q topic=%s partition=%d offset=%d: %v",
-				res.RunID, msg.Topic, msg.Partition, msg.Offset, err,
-			)
-			time.Sleep(750 * time.Millisecond)
-			continue
-		}
-
-		log.Printf("worker.consumeResults: applied result run_id=%q status=%q", res.RunID, res.Status)
-
-		if err := commitResultFn(ctx, w, msg); err != nil {
-			return err
-		}
-
-		log.Printf(
-			"worker.consumeResults: committed topic=%s partition=%d offset=%d run_id=%q",
-			msg.Topic, msg.Partition, msg.Offset, res.RunID,
-		)
 	}
 }
 

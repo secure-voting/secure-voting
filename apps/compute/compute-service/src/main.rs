@@ -153,7 +153,7 @@ impl Compute for ComputeService {
             "copeland-ii" => run_election(ballots, &CopelandIIRule::default()),
             "copeland-iii" => run_election(ballots, &CopelandIIIRule::default()),
             "simpson" => run_election(ballots, &SimpsonRule::default()),
-            "Minmax" => run_election(ballots, &MinmaxRule::default()),
+            "Minmax" | "minmax" => run_election(ballots, &MinmaxRule::default()),
             "hare" => run_election(ballots, &HareRule::default()),
             "nanson" => run_election(ballots, &NansonRule::default()),
             "coombs" => run_election(ballots, &CoombsRule::default()),
