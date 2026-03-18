@@ -3,8 +3,6 @@ package auth
 import (
 	"context"
 	"strings"
-
-	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error) {
@@ -14,7 +12,7 @@ func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *stri
 	}
 	tokenHashHex := sha256Hex(rawToken)
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := authBeginTxFn(ctx, s.db)
 	if err != nil {
 		return false, err
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) acceptInviteTx(ctx context.Context, tx pgx.Tx, email, inviteCode string) (acceptedInvite, string, error) {
+func (s *Service) acceptInviteTx(ctx context.Context, tx txLike, email, inviteCode string) (acceptedInvite, string, error) {
 	inviteCode = strings.TrimSpace(inviteCode)
 	if inviteCode == "" {
 		return acceptedInvite{}, "", nil

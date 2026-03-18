@@ -50,7 +50,7 @@ func (s *Service) List(ctx context.Context, role, userID string, p ListParams) (
 	q += " ORDER BY created_at DESC LIMIT $" + strconv.Itoa(i) + " OFFSET $" + strconv.Itoa(i+1)
 	args = append(args, limit, offset)
 
-	rows, err := s.db.Query(ctx, q, args...)
+	rows, err := listExperimentsQueryFn(ctx, s.db, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +69,10 @@ func (s *Service) List(ctx context.Context, role, userID string, p ListParams) (
 		e.Params = params
 		e.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 		out = append(out, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return out, nil

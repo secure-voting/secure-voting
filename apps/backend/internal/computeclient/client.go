@@ -30,32 +30,43 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	var opt grpc.DialOption
+	var transportOpt grpc.DialOption
 
 	if cfg.UseTLS {
 		caPEM, err := os.ReadFile(cfg.CACertPath)
 		if err != nil {
 			return nil, err
 		}
+
 		pool := x509.NewCertPool()
-		_ = pool.AppendCertsFromPEM(caPEM)
+		if ok := pool.AppendCertsFromPEM(caPEM); !ok {
+			return nil, os.ErrInvalid
+		}
 
 		tlsCfg := &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    pool,
 			ServerName: cfg.ServerName,
 		}
-		opt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
+		transportOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
-		opt = grpc.WithTransportCredentials(insecure.NewCredentials())
+		transportOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
 
-	conn, err := grpc.DialContext(ctx, cfg.Addr, opt)
+	conn, err := grpc.DialContext(
+		ctx,
+		cfg.Addr,
+		transportOpt,
+		grpc.WithBlock(),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{conn: conn, client: pb.NewComputeClient(conn)}, nil
+	return &Client{
+		conn:   conn,
+		client: pb.NewComputeClient(conn),
+	}, nil
 }
 
 func (c *Client) Close() error {

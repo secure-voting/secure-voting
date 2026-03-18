@@ -41,8 +41,8 @@ func DecodeJSON(r *http.Request, dst any) error {
 		return err
 	}
 
-	// запретить "}{", "[] []", и т.п. (любой мусор после валидного JSON)
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
 		if err == nil {
 			return errExtraJSON
 		}

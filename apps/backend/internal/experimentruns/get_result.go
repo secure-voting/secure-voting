@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func (s *Service) GetResult(ctx context.Context, role, userID, runID string) (Result, string, error) {
-	_, code, err := s.Get(ctx, role, userID, runID)
+	_, code, err := getRunAccessFn(s, ctx, role, userID, runID)
 	if err != nil {
 		return Result{}, "", err
 	}
@@ -18,7 +17,7 @@ func (s *Service) GetResult(ctx context.Context, role, userID, runID string) (Re
 	}
 
 	var res Result
-	err = s.mongodb.Collection("experiment_results").FindOne(ctx, bson.M{"run_id": runID}).Decode(&res)
+	err = findExperimentResultFn(ctx, s.mongodb, runID).Decode(&res)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return Result{}, "not_found", nil

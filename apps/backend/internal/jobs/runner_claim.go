@@ -47,7 +47,7 @@ RETURNING
 	var out ClaimedJob
 	var payload []byte
 
-	err := r.db.QueryRow(ctx, q, args...).Scan(
+	err := claimNextJobQueryRowFn(ctx, r.db, q, args...).Scan(
 		&out.ID, &out.Kind, &out.Status, &out.Progress,
 		&out.CreatedBy,
 		&out.ElectionID, &out.ExperimentID, &out.ExperimentRunID,

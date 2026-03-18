@@ -17,7 +17,7 @@ func (s *Service) VerifyAccessToken(ctx context.Context, rawToken string) (userI
 	tokenHashHex := sha256Hex(rawToken)
 
 	var expiresAt time.Time
-	err = s.db.QueryRow(ctx,
+	err = authDBQueryRowFn(ctx, s.db,
 		`SELECT u.id::text, u.email, u.role, t.expires_at
 		 FROM api_tokens t
 		 JOIN users u ON u.id = t.user_id

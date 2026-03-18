@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -28,7 +27,7 @@ func (s *Service) Register(ctx context.Context, email, password, _ string, invit
 	}
 	passHash := string(passHashBytes)
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := authBeginTxFn(ctx, s.db)
 	if err != nil {
 		return AuthResult{}, "", err
 	}

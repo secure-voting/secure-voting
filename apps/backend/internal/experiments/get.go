@@ -19,7 +19,7 @@ func (s *Service) Get(ctx context.Context, role, userID, id string) (Experiment,
 	var createdAt time.Time
 	var params []byte
 
-	err := s.db.QueryRow(ctx, `
+	err := getExperimentQueryRowFn(ctx, s.db, `
 		SELECT id::text, type, COALESCE(params,'{}'::jsonb), status, seed, created_by::text, created_at
 		FROM experiments
 		WHERE id=$1::uuid

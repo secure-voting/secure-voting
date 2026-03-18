@@ -3,12 +3,9 @@ package experimentruns
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"secure-voting/apps/backend/internal/auditlog"
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -22,16 +19,12 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 	}
 
 	if role != "admin" {
-		var x int
-		err := s.db.QueryRow(ctx, `
-			SELECT 1 FROM experiments
-			WHERE id=$1::uuid AND created_by=$2::uuid
-		`, expID, createdBy).Scan(&x)
+		ok, err := batchCheckExperimentOwnerFn(ctx, s.db, expID, createdBy)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, "not_found", nil
-			}
 			return nil, "", err
+		}
+		if !ok {
+			return nil, "not_found", nil
 		}
 	}
 
@@ -56,7 +49,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		oids = append(oids, oid)
 	}
 
-	ok, err := s.validateDatasetsExist(ctx, oids)
+	ok, err := batchValidateDatasetsExistFn(s, ctx, oids)
 	if err != nil {
 		return nil, "", err
 	}
@@ -64,7 +57,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		return nil, "dataset_not_found", nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := batchBeginTxFn(ctx, s.db)
 	if err != nil {
 		return nil, "", err
 	}
@@ -73,12 +66,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 	out := make([]BatchItem, 0, len(unique))
 
 	for _, dsid := range unique {
-		var runID string
-		err := tx.QueryRow(ctx, `
-			INSERT INTO experiment_runs (experiment_id, dataset_id, status)
-			VALUES ($1::uuid, $2, 'queued')
-			RETURNING id::text
-		`, expID, dsid).Scan(&runID)
+		runID, err := batchInsertRunFn(ctx, tx, expID, dsid)
 		if err != nil {
 			return nil, "", err
 		}
@@ -90,12 +78,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		}
 		pb, _ := json.Marshal(payload)
 
-		var jobID string
-		err = tx.QueryRow(ctx, `
-			INSERT INTO jobs (kind, status, progress, created_by, experiment_id, experiment_run_id, payload)
-			VALUES ('experiment_run', 'queued', 0, $1::uuid, $2::uuid, $3::uuid, $4::jsonb)
-			RETURNING id::text
-		`, createdBy, expID, runID, string(pb)).Scan(&jobID)
+		jobID, err := batchInsertJobFn(ctx, tx, createdBy, expID, runID, string(pb))
 		if err != nil {
 			return nil, "", err
 		}
@@ -103,13 +86,7 @@ func (s *Service) BatchCreate(ctx context.Context, createdBy, role string, req B
 		out = append(out, BatchItem{RunID: runID, JobID: jobID})
 	}
 
-	_ = auditlog.Insert(ctx, tx, &createdBy, "experiment_runs_batch_created", map[string]any{
-		"target_type": "experiment",
-		"target_id":   expID,
-		"after": map[string]any{
-			"count": len(out),
-		},
-	})
+	_ = batchAuditInsertFn(ctx, tx, createdBy, expID, len(out))
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, "", err

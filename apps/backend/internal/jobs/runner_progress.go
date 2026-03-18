@@ -10,12 +10,11 @@ func (r *Runner) UpdateProgress(ctx context.Context, jobID string, progress int)
 		progress = 100
 	}
 
-	_, err := r.db.Exec(ctx, `
+	return runnerExecFn(ctx, r.db, `
 UPDATE jobs
 SET progress = $2
 WHERE id = $1::uuid
   AND status = 'running'
   AND progress <> $2
 `, jobID, progress)
-	return err
 }

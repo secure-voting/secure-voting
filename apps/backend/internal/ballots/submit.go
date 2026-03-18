@@ -67,7 +67,7 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		defer unlock()
 	}
 
-	cRows, err := s.db.Query(ctx, `SELECT id::text FROM candidates WHERE election_id=$1::uuid`, electionID)
+	cRows, err := ballotsQueryFn(ctx, s.db, `SELECT id::text FROM candidates WHERE election_id=$1::uuid`, electionID)
 	if err != nil {
 		return SubmitResp{}, "", err
 	}
@@ -82,6 +82,9 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		}
 		cset[cid] = struct{}{}
 		candidates = append(candidates, cid)
+	}
+	if err := cRows.Err(); err != nil {
+		return SubmitResp{}, "", err
 	}
 	if len(candidates) == 0 {
 		return SubmitResp{}, "no_candidates", nil
@@ -112,7 +115,7 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 		return SubmitResp{}, "invalid_ballot_format", nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := ballotsBeginTxFn(ctx, s.db)
 	if err != nil {
 		return SubmitResp{}, "", err
 	}
@@ -120,28 +123,28 @@ func (s *Service) Submit(ctx context.Context, electionID, userID, email, idemKey
 
 	var ballotID string
 	err = tx.QueryRow(ctx, `
-		INSERT INTO ballots (
-			election_id, voter_hash, format,
-			approval_set, ranking, scores,
-			status, submitted_at, updated_at
-		)
-		VALUES (
-			$1::uuid, $2, $3,
-			$4::jsonb, $5::jsonb, $6::jsonb,
-			'accepted', now(), now()
-		)
-		ON CONFLICT (election_id, voter_hash)
-		DO UPDATE SET
-			format = EXCLUDED.format,
-			approval_set = EXCLUDED.approval_set,
-			ranking = EXCLUDED.ranking,
-			scores = EXCLUDED.scores,
-			status = 'accepted',
-			submitted_at = now(),
-			updated_at = now()
-		WHERE ballots.status = 'draft'
-		RETURNING id::text
-	`, electionID, voterHash, cfg.BallotFormat,
+                INSERT INTO ballots (
+                        election_id, voter_hash, format,
+                        approval_set, ranking, scores,
+                        status, submitted_at, updated_at
+                )
+                VALUES (
+                        $1::uuid, $2, $3,
+                        $4::jsonb, $5::jsonb, $6::jsonb,
+                        'accepted', now(), now()
+                )
+                ON CONFLICT (election_id, voter_hash)
+                DO UPDATE SET
+                        format = EXCLUDED.format,
+                        approval_set = EXCLUDED.approval_set,
+                        ranking = EXCLUDED.ranking,
+                        scores = EXCLUDED.scores,
+                        status = 'accepted',
+                        submitted_at = now(),
+                        updated_at = now()
+                WHERE ballots.status = 'draft'
+                RETURNING id::text
+        `, electionID, voterHash, cfg.BallotFormat,
 		toJSONBOrNull(approvalJSON),
 		toJSONBOrNull(rankingJSON),
 		toJSONBOrNull(scoresJSON),

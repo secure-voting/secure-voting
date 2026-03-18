@@ -16,12 +16,11 @@ func (r *Runner) MarkDone(ctx context.Context, jobID string, resultRef map[strin
 		ref = string(b)
 	}
 
-	_, err := r.db.Exec(ctx, `
+	return runnerExecFn(ctx, r.db, `
 UPDATE jobs
 SET status='done', progress=100, finished_at=now(), error_text=NULL, result_ref=$2::jsonb
 WHERE id=$1::uuid
 `, jobID, ref)
-	return err
 }
 
 func (r *Runner) MarkError(ctx context.Context, jobID string, errorText string) error {
@@ -30,10 +29,9 @@ func (r *Runner) MarkError(ctx context.Context, jobID string, errorText string) 
 		errorText = "job failed"
 	}
 
-	_, err := r.db.Exec(ctx, `
+	return runnerExecFn(ctx, r.db, `
 UPDATE jobs
 SET status='error', finished_at=now(), error_text=$2
 WHERE id=$1::uuid
 `, jobID, errorText)
-	return err
 }

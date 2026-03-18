@@ -18,7 +18,7 @@ func (s *Service) Get(ctx context.Context, id string) (Dataset, string, error) {
 	}
 
 	var d DatasetDoc
-	err = s.db.Collection("datasets").FindOne(ctx, bson.M{"_id": oid}).Decode(&d)
+	err = datasetFindOneFn(ctx, s.db, "datasets", bson.M{"_id": oid}).Decode(&d)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return Dataset{}, "not_found", nil

@@ -22,7 +22,7 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string)
 	}
 
 	var userID, dbEmail, role, passHash string
-	err := s.db.QueryRow(ctx,
+	err := authDBQueryRowFn(ctx, s.db,
 		`SELECT id::text, email, role, password_hash
 		 FROM users
 		 WHERE email = $1`,
@@ -39,7 +39,7 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string)
 		return AuthResult{}, "invalid_credentials", nil
 	}
 
-	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	tx, err := authBeginTxFn(ctx, s.db)
 	if err != nil {
 		return AuthResult{}, "", err
 	}

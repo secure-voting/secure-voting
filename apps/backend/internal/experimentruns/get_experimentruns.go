@@ -20,7 +20,7 @@ func (s *Service) Get(ctx context.Context, role, userID, runID string) (Run, str
 	var started, finished *time.Time
 	var createdBy string
 
-	err := s.db.QueryRow(ctx, `
+	err := getRunQueryRowFn(ctx, s.db, `
 		SELECT r.id::text, r.experiment_id::text, r.dataset_id, r.status, r.kernel_task_id, r.started_at, r.finished_at,
 		       e.created_by::text
 		FROM experiment_runs r

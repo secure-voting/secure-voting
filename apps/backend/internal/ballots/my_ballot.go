@@ -28,12 +28,12 @@ func (s *Service) MyBallot(ctx context.Context, electionID, userID, email string
 	var sub *time.Time
 	var upd *time.Time
 
-	err = s.db.QueryRow(ctx, `
-		SELECT status, submitted_at, updated_at
-		FROM ballots
-		WHERE election_id=$1::uuid AND voter_hash=$2
-		LIMIT 1
-	`, electionID, voterHash).Scan(&st, &sub, &upd)
+	err = ballotsQueryRowFn(ctx, s.db, `
+                SELECT status, submitted_at, updated_at
+                FROM ballots
+                WHERE election_id=$1::uuid AND voter_hash=$2
+                LIMIT 1
+        `, electionID, voterHash).Scan(&st, &sub, &upd)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

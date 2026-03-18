@@ -117,7 +117,7 @@ jobs:
 
       - name: Create .env.integration
         run: |
-          cat > .env.integration <<'EOF'
+          cat > .env.integration <<'EOF2'
           POSTGRES_USER=postgres
           POSTGRES_PASSWORD=postgres
           POSTGRES_DB=secure_voting
@@ -138,7 +138,7 @@ jobs:
           MONGO_URI=mongodb://root:mongopass@127.0.0.1:17017/?authSource=admin
 
           SECURE_VOTING_INTEGRATION=1
-          EOF
+          EOF2
 
       - name: Run integration suite
         run: bash scripts/ci/run_integration_suite.sh
@@ -159,6 +159,8 @@ jobs:
       - backend-fast
       - frontend-fast
       - openapi-validate
+    env:
+      RUN_EXPERIMENT_E2E: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -3,11 +3,9 @@ package auth
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) insertAudit(ctx context.Context, tx pgx.Tx, actorUserID *string, eventType string, details map[string]any) error {
+func (s *Service) insertAudit(ctx context.Context, tx txLike, actorUserID *string, eventType string, details map[string]any) error {
 	if details == nil {
 		details = map[string]any{}
 	}

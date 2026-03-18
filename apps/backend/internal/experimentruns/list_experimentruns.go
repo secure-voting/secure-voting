@@ -25,16 +25,18 @@ func (s *Service) List(ctx context.Context, role, userID, experimentID string) (
 		}
 		q += ` AND r.experiment_id = $` + itoa(argn) + `::uuid`
 		args = append(args, experimentID)
+		argn++
 	}
 
 	if role != "admin" {
 		q += ` AND e.created_by = $` + itoa(argn) + `::uuid`
 		args = append(args, userID)
+		argn++
 	}
 
 	q += ` ORDER BY r.started_at NULLS LAST, r.id DESC`
 
-	rows, err := s.db.Query(ctx, q, args...)
+	rows, err := listRunsQueryFn(ctx, s.db, q, args...)
 	if err != nil {
 		return nil, "", err
 	}
@@ -59,6 +61,10 @@ func (s *Service) List(ctx context.Context, role, userID, experimentID string) (
 			r.FinishedAt = &s
 		}
 		out = append(out, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, "", err
 	}
 
 	return out, "", nil
