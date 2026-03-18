@@ -42,7 +42,7 @@ services:
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
       - MONGO_DB=secure_voting
 
-      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
@@ -86,7 +86,7 @@ services:
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
       - MONGO_DB=secure_voting
       - WORKER_POLL_INTERVAL=1s
-      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
@@ -233,7 +233,7 @@ services:
       - TLS_CERT=/scripts/certs/out/compute.pem
       - TLS_KEY=/scripts/certs/out/compute.key
 
-      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute
@@ -253,7 +253,7 @@ services:
       - db_network
       - rpc_network
     environment:
-      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute-runner
@@ -318,7 +318,7 @@ services:
         condition: service_healthy
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
     ports:
       - "127.0.0.1:8089:8080"
     networks:
@@ -338,12 +338,17 @@ services:
         condition: service_healthy
     entrypoint:
       - /bin/sh
-      - -ec
-    command: >
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1 &&
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1 &&
-      kafka-topics --bootstrap-server kafka:9092 --list | sort &&
-      echo "kafka-init done"
+      - -lc
+      - |
+          set -eu
+          until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
+            echo "waiting for kafka topics api..."
+            sleep 2
+          done
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --list | sort
+          echo "kafka-init done"
     restart: "no"
     profiles:
       - prod
