@@ -4,6 +4,7 @@ set -euo pipefail
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing $1"; exit 1; }; }
 need curl
 need jq
+need docker
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -21,6 +22,38 @@ set +a
 : "${BOOTSTRAP_RESEARCHER_PASSWORD:?missing BOOTSTRAP_RESEARCHER_PASSWORD in .env}"
 
 BASE="${BASE:-http://127.0.0.1:3001/api/v1}"
+RUN_TIMEOUT_SECONDS="${RUN_TIMEOUT_SECONDS:-300}"
+BACKEND_HEALTH_TIMEOUT_SECONDS="${BACKEND_HEALTH_TIMEOUT_SECONDS:-120}"
+ASYNC_READY_TIMEOUT_SECONDS="${ASYNC_READY_TIMEOUT_SECONDS:-120}"
+
+dc() {
+  (
+    cd "$ROOT_DIR"
+    docker compose "$@"
+  )
+}
+
+dump_compose_debug() {
+  echo
+  echo "==== docker compose ps -a ===="
+  dc ps -a || true
+  echo
+  echo "==== docker compose logs --tail=300 worker compute-runner compute backend kafka db ===="
+  dc logs --tail=300 worker compute-runner compute backend kafka db || true
+  echo
+}
+
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [[ $rc -ne 0 ]]; then
+    echo
+    echo "E2E experiment failed with exit code $rc"
+    dump_compose_debug
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
 
 post_json() {
   local url="$1"; shift
@@ -33,10 +66,89 @@ get_auth() {
   curl -sS -H "Authorization: Bearer $token" "$url"
 }
 
-echo "[1/8] wait backend health"
-curl -fsS http://127.0.0.1:3001/health >/dev/null
+wait_http_ok() {
+  local url="$1"
+  local timeout="$2"
+  local started_at
+  started_at="$(date +%s)"
 
-echo "[2/8] login as bootstrap researcher"
+  while true; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for HTTP endpoint: $url"
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+wait_service_running() {
+  local service="$1"
+  local timeout="$2"
+  local started_at
+  started_at="$(date +%s)"
+
+  while true; do
+    if dc ps --status running "$service" 2>/dev/null | grep -q "$service"; then
+      return 0
+    fi
+
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for service to be running: $service"
+      dc ps -a || true
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+wait_log_pattern() {
+  local service="$1"
+  local pattern="$2"
+  local timeout="$3"
+  local started_at
+  local logs
+
+  started_at="$(date +%s)"
+
+  while true; do
+    logs="$(dc logs --no-color "$service" 2>/dev/null || true)"
+
+    if grep -F -q -- "$pattern" <<<"$logs"; then
+      return 0
+    fi
+
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for log pattern in service=$service pattern=$pattern"
+      dc logs --tail=200 "$service" || true
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+echo "[1/10] wait backend health"
+wait_http_ok "http://127.0.0.1:3001/health" "$BACKEND_HEALTH_TIMEOUT_SECONDS"
+
+echo "[2/10] wait worker container running"
+wait_service_running "worker" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[3/10] wait compute-runner container running"
+wait_service_running "compute-runner" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[4/10] wait worker readiness"
+wait_log_pattern "worker" "worker started:" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[5/10] wait compute-runner readiness"
+wait_log_pattern "compute-runner" "compute client connected:" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[6/10] login as bootstrap researcher"
 LOGIN_JSON="$(post_json "$BASE/auth/login" -d "{
   \"email\": \"${BOOTSTRAP_RESEARCHER_EMAIL}\",
   \"password\": \"${BOOTSTRAP_RESEARCHER_PASSWORD}\"
@@ -67,7 +179,7 @@ fi
 
 echo "user_id=$USER_ID role=$USER_ROLE"
 
-echo "[3/8] generate dataset via API"
+echo "[7/10] generate dataset via API"
 DATASET_NAME="e2e-exp-ranking-$(date +%s)"
 DATASET_JSON="$(post_json "$BASE/datasets/generate" \
   -H "Authorization: Bearer $RESEARCHER_TOKEN" \
@@ -92,7 +204,7 @@ if [[ -z "$DATASET_ID" || "$DATASET_ID" == "null" ]]; then
 fi
 echo "dataset_id=$DATASET_ID"
 
-echo "[4/8] create experiment via API"
+echo "[8/10] create experiment via API"
 EXPERIMENT_JSON="$(post_json "$BASE/experiments" \
   -H "Authorization: Bearer $RESEARCHER_TOKEN" \
   -d '{
@@ -113,7 +225,7 @@ if [[ -z "$EXPERIMENT_ID" || "$EXPERIMENT_ID" == "null" ]]; then
 fi
 echo "experiment_id=$EXPERIMENT_ID"
 
-echo "[5/8] create experiment run batch via API"
+echo "[9/10] create experiment run batch via API"
 BATCH_JSON="$(post_json "$BASE/experiment-runs/batch" \
   -H "Authorization: Bearer $RESEARCHER_TOKEN" \
   -d "{
@@ -132,8 +244,8 @@ fi
 echo "run_id=$RUN_ID"
 echo "job_id=${JOB_ID:-<none>}"
 
-echo "[6/8] poll run until done/error"
-deadline=$(( $(date +%s) + 180 ))
+echo "[10/10] poll run until done/error"
+deadline=$(( $(date +%s) + RUN_TIMEOUT_SECONDS ))
 RUN_JSON=""
 RUN_STATUS=""
 while [[ $(date +%s) -lt $deadline ]]; do
@@ -155,7 +267,7 @@ while [[ $(date +%s) -lt $deadline ]]; do
     exit 1
   fi
 
-  sleep 1
+  sleep 2
 done
 
 if [[ "$RUN_STATUS" != "done" ]]; then
@@ -165,17 +277,16 @@ if [[ "$RUN_STATUS" != "done" ]]; then
     echo "job snapshot:"
     get_auth "$BASE/jobs/$JOB_ID" "$RESEARCHER_TOKEN" | jq .
   fi
-  echo "tips: check docker compose logs --tail=300 worker compute-runner compute backend"
   exit 1
 fi
 
 if [[ -n "${JOB_ID:-}" && "$JOB_ID" != "null" ]]; then
-  echo "[7/8] fetch job snapshot"
+  echo "[extra] fetch job snapshot"
   JOB_JSON="$(get_auth "$BASE/jobs/$JOB_ID" "$RESEARCHER_TOKEN" || true)"
   echo "$JOB_JSON" | jq .
 fi
 
-echo "[8/8] fetch experiment result via API"
+echo "[extra] fetch experiment result via API"
 RESULT_JSON="$(get_auth "$BASE/experiment-runs/$RUN_ID/result" "$RESEARCHER_TOKEN" || true)"
 echo "$RESULT_JSON" | jq .
 
