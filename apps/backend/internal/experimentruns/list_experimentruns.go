@@ -31,7 +31,6 @@ func (s *Service) List(ctx context.Context, role, userID, experimentID string) (
 	if role != "admin" {
 		q += ` AND e.created_by = $` + itoa(argn) + `::uuid`
 		args = append(args, userID)
-		argn++
 	}
 
 	q += ` ORDER BY r.started_at NULLS LAST, r.id DESC`
