@@ -11,6 +11,24 @@ export type Me = {
   role?: "admin" | "voter" | "researcher" | string;
 };
 
+export type Candidate = {
+  id: string;
+  name: string;
+  meta?: Record<string, unknown> | null;
+};
+
+export type CandidateDraft = {
+  name: string;
+  description: string;
+};
+
+export type CandidatePayload = {
+  name: string;
+  meta?: {
+    description?: string;
+  };
+};
+
 export type ElectionSummary = {
   id: string;
   title: string;
@@ -20,12 +38,6 @@ export type ElectionSummary = {
   start_at: string;
   end_at: string;
   published_at?: string | null;
-};
-
-export type Candidate = {
-  id: string;
-  name: string;
-  meta?: Record<string, unknown> | null;
 };
 
 export type ElectionDetail = {
@@ -105,9 +117,12 @@ export type Invite = {
 export type InviteCreated = {
   invite_id: string;
   email: string;
-  invite_code: string;
+  invite_code?: string;
   status: string;
   created_at: string;
+  registration_required: boolean;
+  registration_email_sent: boolean;
+  invite_email_sent: boolean;
 };
 
 export type UpdateElectionRulesInput = {
@@ -122,7 +137,7 @@ export type UpdateElectionRulesInput = {
   show_aggregates?: boolean;
 
   approval_max_choices?: number;
-  ranking_top_k?: number;
+  ranking_top_k?: number | null;
 
   score_min?: number;
   score_max?: number;

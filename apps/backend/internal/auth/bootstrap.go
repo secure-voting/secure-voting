@@ -38,7 +38,7 @@ func EnsureBootstrapUser(ctx context.Context, db *pgxpool.Pool, email, password,
 		return err
 	}
 
-	_, err = db.Exec(ctx, `
+	_, err = authDBExecFn(ctx, db, `
 		INSERT INTO users (email, password_hash, role)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (email)

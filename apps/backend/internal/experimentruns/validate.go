@@ -3,7 +3,6 @@ package experimentruns
 import (
 	"context"
 
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -11,10 +10,7 @@ func (s *Service) validateDatasetsExist(ctx context.Context, oids []primitive.Ob
 	if len(oids) == 0 {
 		return false, nil
 	}
-	coll := s.mongodb.Collection("datasets")
-
-	filter := bson.M{"_id": bson.M{"$in": oids}}
-	cnt, err := coll.CountDocuments(ctx, filter)
+	cnt, err := countDatasetsFn(ctx, s.mongodb, oids)
 	if err != nil {
 		return false, err
 	}

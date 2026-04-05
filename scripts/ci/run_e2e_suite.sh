@@ -65,6 +65,41 @@ wait_http() {
   return 1
 }
 
+wait_kafka_topic() {
+  local topic="$1"
+  local attempts="${2:-60}"
+  local sleep_seconds="${3:-2}"
+
+  for ((i=1; i<=attempts; i++)); do
+    if docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list 2>/dev/null | grep -qx "$topic"; then
+      return 0
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  return 1
+}
+
+require_container_exit_zero() {
+  local service="$1"
+  local cid exit_code
+
+  cid="$(docker compose ps -q "$service" 2>/dev/null || true)"
+  if [[ -z "$cid" ]]; then
+    echo "cannot find container for service=$service"
+    return 1
+  fi
+
+  exit_code="$(docker inspect -f '{{.State.ExitCode}}' "$cid" 2>/dev/null || true)"
+  if [[ "$exit_code" != "0" ]]; then
+    echo "service $service exited with code $exit_code"
+    docker compose logs "$service" || true
+    return 1
+  fi
+
+  return 0
+}
+
 wait_running() {
   local service="$1"
   local attempts="${2:-60}"
@@ -96,7 +131,16 @@ wait_http "http://localhost:3001/health" 90 5
 wait_http "http://localhost:8080/" 90 5
 
 echo "== init kafka topics =="
-docker compose up --build kafka-init
+docker compose rm -fs kafka-init >/dev/null 2>&1 || true
+docker compose run --rm kafka-init
+
+echo "== verify kafka topics =="
+docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qx 'secure-voting.compute.tasks'
+docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qx 'secure-voting.compute.results'
+
+echo "== wait for kafka topics =="
+wait_kafka_topic secure-voting.compute.tasks 60 2
+wait_kafka_topic secure-voting.compute.results 60 2
 
 echo "== start worker services =="
 docker compose up -d --build worker compute-runner
@@ -109,7 +153,4 @@ bash scripts/e2e_smoke.sh
 bash scripts/e2e_election_lifecycle.sh
 bash scripts/e2e_invite_only.sh
 bash scripts/e2e_vote_formats.sh
-
-if [[ "${RUN_EXPERIMENT_E2E:-0}" == "1" ]] && [[ -f scripts/e2e_smoke_experiment.sh ]]; then
-  bash scripts/e2e_smoke_experiment.sh
-fi
+bash scripts/e2e_smoke_experiment.sh

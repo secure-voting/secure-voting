@@ -12,6 +12,11 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 		limit = 50
 	}
 
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+
 	base := `
 		SELECT id::text, kind, status, progress, created_by::text,
 		       election_id::text, experiment_id::text, experiment_run_id::text,
@@ -40,9 +45,9 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	}
 
 	base += ` ORDER BY created_at DESC LIMIT $` + strconv.Itoa(argn) + ` OFFSET $` + strconv.Itoa(argn+1)
-	args = append(args, limit, f.Offset)
+	args = append(args, limit, offset)
 
-	rows, err := s.db.Query(ctx, base, args...)
+	rows, err := listJobsQueryFn(ctx, s.db, base, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -74,5 +79,10 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 
 		out = append(out, j)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return out, nil
 }

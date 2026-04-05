@@ -9,9 +9,13 @@ import (
 )
 
 func (s *Service) List(ctx context.Context) ([]ListItem, error) {
-	coll := s.db.Collection("datasets")
-
-	cur, err := coll.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}))
+	cur, err := datasetFindFn(
+		ctx,
+		s.db,
+		"datasets",
+		bson.M{},
+		options.Find().SetSort(bson.D{{Key: "created_at", Value: -1}}),
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -25,7 +25,7 @@ func (s *Service) Get(ctx context.Context, role, userID, jobID string) (Job, str
 		FROM jobs
 		WHERE id = $1::uuid
 	`
-	err := s.db.QueryRow(ctx, q, jobID).Scan(
+	err := getJobQueryRowFn(ctx, s.db, q, jobID).Scan(
 		&j.ID, &j.Kind, &j.Status, &j.Progress, &j.CreatedBy,
 		&j.ElectionID, &j.ExperimentID, &j.ExperimentRunID,
 		&j.ErrorText, &createdAt, &startedAt, &finishedAt,

@@ -24,27 +24,6 @@ func NewHandlers(svc Service) *Handlers {
 	return &Handlers{svc: svc}
 }
 
-func mapSubmitCode(code string) error {
-		switch code {
-		case "not_found":
-			return apperr.NotFound("election not found")
-		case "invalid_id":
-			return apperr.Invalid(code, "invalid id")
-		case "missing_idempotency_key":
-			return apperr.Invalid(code, "missing Idempotency-Key header")
-		case "invalid_idempotency_key":
-			return apperr.Invalid(code, "invalid Idempotency-Key header")
-		case "not_active":
-			return apperr.Conflict(code, "election is not active")
-		case "idempotency_in_progress":
-			return apperr.Conflict(code, "idempotency request in progress")
-		case "already_submitted":
-			return apperr.Conflict(code, "already submitted")
-		default:
-			return apperr.Invalid(code, code)
-		}
-}
-
 func mapMeCode(code string) error {
 	switch code {
 	case "not_found":

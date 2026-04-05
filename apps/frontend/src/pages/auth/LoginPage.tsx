@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import { useNotifications } from "../../app/notifications";
@@ -13,6 +13,10 @@ type FieldErrors = {
   email?: string;
   password?: string;
   inviteCode?: string;
+};
+
+type LocationState = {
+  from?: string;
 };
 
 function isEmailLike(s: string) {
@@ -54,7 +58,7 @@ function fieldErrorText(v?: string) {
 
 export function LoginPage() {
   const nav = useNavigate();
-  const loc = useLocation() as any;
+  const loc = useLocation() as { state?: LocationState };
   const { setToken, authed } = useAuth();
   const { addNotification } = useNotifications();
 
@@ -64,7 +68,6 @@ export function LoginPage() {
   const [inviteCode, setInviteCode] = useState("");
 
   const [showPass, setShowPass] = useState(false);
-  const [role, setRole] = useState<"voter" | "researcher" | "admin">("voter");
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
@@ -80,12 +83,6 @@ export function LoginPage() {
     setRawResp(null);
     setFieldErrors({});
   }, [mode]);
-
-  const roleDescription = useMemo(() => {
-    if (role === "voter") return "Участник голосований";
-    if (role === "researcher") return "Пользователь для экспериментов и наборов данных";
-    return "Роль администратора должна использоваться только в рамках настроенного контура доступа";
-  }, [role]);
 
   const submit = async () => {
     setLoading(true);
@@ -110,13 +107,13 @@ export function LoginPage() {
       const normalizedInviteCode = inviteCode.trim() ? inviteCode.trim() : null;
 
       if (mode === "register") {
-        const t = await api.auth.register(normalizedEmail, password, role, normalizedInviteCode);
+        const t = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
         if (IS_DEV) setRawResp({ ok: true, mode: "register" });
         setToken(t);
         addNotification({
           kind: "success",
           title: "Регистрация завершена",
-          message: `Пользователь ${normalizedEmail} успешно зарегистрирован`,
+          message: `Учётная запись для ${normalizedEmail} успешно создана`,
         });
       } else {
         const t = await api.auth.login(normalizedEmail, password, normalizedInviteCode);
@@ -145,10 +142,18 @@ export function LoginPage() {
         <h2 style={{ marginTop: 0 }}>{mode === "login" ? "Вход в систему" : "Регистрация"}</h2>
 
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <button style={mode === "login" ? styles.btnPrimary : styles.btn} onClick={() => setMode("login")}>
+          <button
+            type="button"
+            style={mode === "login" ? styles.btnPrimary : styles.btn}
+            onClick={() => setMode("login")}
+          >
             Вход
           </button>
-          <button style={mode === "register" ? styles.btnPrimary : styles.btn} onClick={() => setMode("register")}>
+          <button
+            type="button"
+            style={mode === "register" ? styles.btnPrimary : styles.btn}
+            onClick={() => setMode("register")}
+          >
             Регистрация
           </button>
         </div>
@@ -197,22 +202,9 @@ export function LoginPage() {
         />
         {fieldErrorText(fieldErrors.inviteCode)}
 
-        {mode === "register" ? (
-          <>
-            <div style={{ height: 10 }} />
-            <label style={{ display: "block", marginBottom: 6 }}>Роль</label>
-            <select style={styles.input} value={role} onChange={(e) => setRole(e.target.value as any)}>
-              <option value="voter">voter</option>
-              <option value="researcher">researcher</option>
-              <option value="admin">admin</option>
-            </select>
-            <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>{roleDescription}</div>
-          </>
-        ) : null}
-
         <div style={{ height: 14 }} />
 
-        <button style={styles.btnPrimary} onClick={submit} disabled={loading}>
+        <button style={styles.btnPrimary} onClick={submit} disabled={loading} type="button">
           {loading ? "Загрузка…" : mode === "login" ? "Войти" : "Зарегистрироваться"}
         </button>
       </div>
@@ -227,8 +219,9 @@ export function LoginPage() {
           <h3 style={{ marginTop: 0 }}>Информация</h3>
           <div style={{ ...styles.muted, display: "grid", gap: 8 }}>
             <div>• После успешного входа открывается рабочий раздел пользователя.</div>
-            <div>• В режиме приглашений может понадобиться код приглашения.</div>
-            <div>• Для регистрации исследователя и голосующего используется тот же защищённый интерфейс.</div>
+            <div>• В голосованиях с доступом по приглашению может понадобиться код приглашения.</div>
+            <div>• Самостоятельная регистрация создаёт учётную запись голосующего.</div>
+            <div>• Учётные записи администратора и исследователя настраиваются отдельно.</div>
           </div>
         </div>
       )}

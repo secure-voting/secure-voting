@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type { DatasetDetail, DatasetGenerateReq, DatasetListItem } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
@@ -10,6 +11,42 @@ import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
+
+const RANKING_EXPERIMENT_RULES = [
+  { value: "plurality", label: "Plurality" },
+  { value: "borda", label: "Borda" },
+  { value: "black", label: "Black" },
+  { value: "simpson", label: "Simpson" },
+  { value: "hare", label: "Hare" },
+  { value: "nanson", label: "Nanson" },
+  { value: "coombs", label: "Coombs" },
+] as const;
+
+type CreatedSyntheticRun = {
+  rule: string;
+  experimentId: string;
+  runId: string;
+  jobId: string;
+};
+
+function extractCreatedRun(value: unknown): { runId: string; jobId: string } {
+  if (!value || typeof value !== "object") {
+    return { runId: "", jobId: "" };
+  }
+
+  const rec = value as Record<string, unknown>;
+
+  const runId =
+    typeof rec.run_id === "string"
+      ? rec.run_id
+      : typeof rec.id === "string"
+      ? rec.id
+      : "";
+
+  const jobId = typeof rec.job_id === "string" ? rec.job_id : "";
+
+  return { runId, jobId };
+}
 
 function renderParameters(value: Record<string, unknown> | undefined) {
   if (!value || Object.keys(value).length === 0) {
@@ -29,6 +66,7 @@ function renderParameters(value: Record<string, unknown> | undefined) {
 
 export function DatasetsPage() {
   const { token, setToken } = useAuth();
+  const nav = useNavigate();
   const { addNotification } = useNotifications();
 
   const [items, setItems] = useState<DatasetListItem[]>([]);
@@ -55,6 +93,11 @@ export function DatasetsPage() {
   const [genScoreMin, setGenScoreMin] = useState(0);
   const [genScoreMax, setGenScoreMax] = useState(10);
   const [genScoreStep, setGenScoreStep] = useState(1);
+  const [runRules, setRunRules] = useState<string[]>(["plurality", "borda", "black"]);
+  const [runCommitteeSize, setRunCommitteeSize] = useState(1);
+  const [runRankingTopK, setRunRankingTopK] = useState(3);
+  const [runLoading, setRunLoading] = useState(false);
+  const [createdRuns, setCreatedRuns] = useState<CreatedSyntheticRun[]>([]);
 
   const listAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -219,6 +262,12 @@ export function DatasetsPage() {
     return parsed;
   };
 
+  const toggleRunRule = (rule: string) => {
+    setRunRules((prev) =>
+      prev.includes(rule) ? prev.filter((item) => item !== rule) : [...prev, rule]
+    );
+  };
+
   const handleGenerate = async () => {
     if (!token) return;
 
@@ -266,6 +315,11 @@ export function DatasetsPage() {
 
       const id = await api.datasets.generate(token, body);
       setInfo(`Синтетический набор данных создан: ${id}`);
+      setCreatedRuns([]);
+
+      if (genFormat === "ranking") {
+        setRunRankingTopK(genRankingTopK);
+      }
 
       addNotification({
         kind: "success",
@@ -274,11 +328,102 @@ export function DatasetsPage() {
       });
 
       await loadList();
+      await loadDetail(id);
     } catch (e: any) {
       if (e?.status === 401) setToken(null);
       setErr(e?.message || "Не удалось сгенерировать набор данных");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateAndRunExperiments = async () => {
+    if (!token) return;
+    if (!selected) {
+      setErr("Сначала выберите набор данных");
+      return;
+    }
+
+    if (selected.format !== "ranking") {
+      setErr("Через кнопку сейчас запускаются только ranking-эксперименты");
+      return;
+    }
+
+    if (runRules.length === 0) {
+      setErr("Выберите хотя бы одно правило");
+      return;
+    }
+
+    if (runCommitteeSize < 1) {
+      setErr("Размер комитета должен быть не меньше 1");
+      return;
+    }
+
+    if (runRankingTopK < 1) {
+      setErr("ranking_top_k должен быть не меньше 1");
+      return;
+    }
+
+    if (runRankingTopK > selected.candidates.length) {
+      setErr("ranking_top_k не может превышать число кандидатов в наборе данных");
+      return;
+    }
+
+    setRunLoading(true);
+    setErr(null);
+    setInfo(null);
+    setCreatedRuns([]);
+
+    try {
+      const created: CreatedSyntheticRun[] = [];
+
+      for (const rule of runRules) {
+        const experimentId = await api.experiments.create(token, {
+          type: "algo",
+          params: {
+            ballot_format: "ranking",
+            tally_rule: rule,
+            committee_size: runCommitteeSize,
+            ranking_top_k: runRankingTopK,
+          },
+        });
+
+        const batchItems = await api.experimentRuns.batch(token, {
+          experiment_id: experimentId,
+          dataset_ids: [selected.id],
+        });
+
+        const first = Array.isArray(batchItems) ? batchItems[0] : null;
+        const { runId, jobId } = extractCreatedRun(first);
+
+        if (!runId) {
+          throw new Error(`Не удалось получить run_id для правила ${rule}`);
+        }
+
+        created.push({
+          rule,
+          experimentId,
+          runId,
+          jobId,
+        });
+      }
+
+      setCreatedRuns(created);
+      setInfo(`Создано и запущено экспериментов: ${created.length}`);
+
+      addNotification({
+        kind: "success",
+        title: "Эксперименты запущены",
+        message: `Создано и запущено экспериментов: ${created.length}`,
+      });
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+      } else {
+        setErr(e?.message || "Не удалось создать и запустить эксперименты");
+      }
+    } finally {
+      setRunLoading(false);
     }
   };
 
@@ -538,6 +683,110 @@ export function DatasetsPage() {
               <h4 style={{ marginBottom: 8 }}>Параметры</h4>
               {renderParameters(selected.parameters)}
             </div>
+
+            {selected.format === "ranking" ? (
+              <div style={{ ...styles.card, padding: 12 }}>
+                <h4 style={{ marginTop: 0, marginBottom: 8 }}>Создание и запуск экспериментов</h4>
+
+                <div style={{ ...styles.muted, marginBottom: 12 }}>
+                  Для ranking-набора данных можно сразу создать и запустить серию экспериментов без JSON.
+                </div>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                        gap: 8,
+                      }}
+                    >
+                      {RANKING_EXPERIMENT_RULES.map((rule) => {
+                        const checked = runRules.includes(rule.value);
+
+                        return (
+                          <label
+                            key={rule.value}
+                            style={{
+                              ...styles.card,
+                              padding: 10,
+                              display: "flex",
+                              gap: 8,
+                              alignItems: "center",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleRunRule(rule.value)}
+                            />
+                            <span>{rule.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={styles.grid2}>
+                    <div>
+                      <label>Committee size</label>
+                      <input
+                        style={styles.input}
+                        type="number"
+                        min={1}
+                        value={runCommitteeSize}
+                        onChange={(e) => setRunCommitteeSize(Number(e.target.value))}
+                      />
+                    </div>
+
+                    <div>
+                      <label>ranking_top_k</label>
+                      <input
+                        style={styles.input}
+                        type="number"
+                        min={1}
+                        max={selected.candidates.length}
+                        value={runRankingTopK}
+                        onChange={(e) => setRunRankingTopK(Number(e.target.value))}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      style={styles.btnPrimary}
+                      onClick={handleCreateAndRunExperiments}
+                      disabled={runLoading}
+                    >
+                      {runLoading ? "Создание и запуск…" : "Создать и запустить эксперименты"}
+                    </button>
+
+                    {createdRuns.length > 0 ? (
+                      <button style={styles.btn} onClick={() => nav("/research/runs")}>
+                        К запускам
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {createdRuns.length > 0 ? (
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div style={{ fontWeight: 600 }}>Созданные запуски</div>
+
+                      {createdRuns.map((item) => (
+                        <div key={`${item.rule}-${item.runId}`} style={{ ...styles.card, padding: 10 }}>
+                          <div><b>{item.rule}</b></div>
+                          <div style={styles.muted}>experiment_id: {item.experimentId}</div>
+                          <div style={styles.muted}>run_id: {item.runId}</div>
+                          <div style={styles.muted}>job_id: {item.jobId || "—"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div style={styles.muted}>Ничего не выбрано</div>

@@ -50,3 +50,47 @@ func parseParams(raw json.RawMessage) map[string]any {
 	}
 	return m
 }
+
+func normalizeBallotFormat(s string) string {
+	v := strings.ToLower(strings.TrimSpace(s))
+	v = strings.ReplaceAll(v, "_", "-")
+	switch v {
+	case "ranking":
+		return "ranking"
+	case "approval":
+		return "approval"
+	case "score":
+		return "score"
+	default:
+		return ""
+	}
+}
+
+func normalizeComputeTallyRule(s string) string {
+	v := strings.ToLower(strings.TrimSpace(s))
+	v = strings.ReplaceAll(v, "_", "-")
+
+	switch v {
+	case "plurality",
+		"borda",
+		"black",
+		"copeland-i",
+		"copeland-ii",
+		"copeland-iii",
+		"simpson",
+		"hare",
+		"nanson",
+		"coombs",
+		"inverse-borda",
+		"inverse-plurality",
+		"approval-2",
+		"approval-3":
+		return v
+	case "anti-plurality":
+		return "inverse-plurality"
+	case "minimax", "minmax":
+		return "minmax"
+	default:
+		return ""
+	}
+}

@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: secure-voting-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,6 +15,7 @@ jobs:
   backend-fast:
     name: backend fast checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: apps/backend
@@ -24,6 +28,9 @@ jobs:
         with:
           go-version-file: apps/backend/go.mod
           cache: true
+          cache-dependency-path: |
+            apps/backend/go.sum
+            apps/backend/go.mod
 
       - name: Run go test
         run: go test ./...
@@ -31,16 +38,23 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Build backend binaries
+        run: |
+          go build ./cmd/api
+          go build ./cmd/worker
+          go build ./cmd/compute-runner
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.61.0
+          version: v1.64.2
           working-directory: apps/backend
           args: --timeout=5m
 
   frontend-fast:
     name: frontend typecheck and build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/frontend
@@ -67,6 +81,7 @@ jobs:
   openapi-validate:
     name: openapi validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,6 +100,7 @@ jobs:
   integration-tests:
     name: integration tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - backend-fast
       - frontend-fast
@@ -99,6 +115,31 @@ jobs:
       - name: Ensure scripts are executable
         run: chmod +x scripts/ci/*.sh scripts/*.sh
 
+      - name: Create .env.integration
+        run: |
+          cat > .env.integration <<'EOF2'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=secure_voting
+
+          REDIS_PASSWORD=redispass
+
+          MONGO_INITDB_ROOT_USERNAME=root
+          MONGO_INITDB_ROOT_PASSWORD=mongopass
+
+          BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+          BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+          BOOTSTRAP_RESEARCHER_EMAIL=researcher@example.com
+          BOOTSTRAP_RESEARCHER_PASSWORD=ResearcherPass123!
+
+          POSTGRES_DSN=postgres://postgres:postgres@127.0.0.1:15432/secure_voting?sslmode=disable
+          REDIS_ADDR=127.0.0.1:16379
+          REDIS_PASSWORD=redispass
+          MONGO_URI=mongodb://root:mongopass@127.0.0.1:17017/?authSource=admin
+
+          SECURE_VOTING_INTEGRATION=1
+          EOF2
+
       - name: Run integration suite
         run: bash scripts/ci/run_integration_suite.sh
 
@@ -108,14 +149,18 @@ jobs:
         with:
           name: integration-artifacts
           path: .ci-artifacts/
+          if-no-files-found: ignore
 
   e2e-tests:
     name: e2e tests
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     needs:
       - backend-fast
       - frontend-fast
       - openapi-validate
+    env:
+      RUN_EXPERIMENT_E2E: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -135,3 +180,4 @@ jobs:
         with:
           name: e2e-artifacts
           path: .ci-artifacts/
+          if-no-files-found: ignore

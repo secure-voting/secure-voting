@@ -2,13 +2,11 @@ package audit
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -90,7 +88,7 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 	q += ` ORDER BY occurred_at DESC LIMIT $` + itoa(argn) + ` OFFSET $` + itoa(argn+1)
 	args = append(args, limit, f.Offset)
 
-	rows, err := s.db.Query(ctx, q, args...)
+	rows, err := auditQueryFn(ctx, s.db, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +106,11 @@ func (s *Service) List(ctx context.Context, role, userID string, f ListFilter) (
 		r.Details = details
 		out = append(out, r)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return out, nil
 }
 
@@ -133,6 +136,3 @@ func ParseInt(v string) (int, bool) {
 }
 
 func itoa(i int) string { return strconv.Itoa(i) }
-
-var _ = errors.Is
-var _ = pgx.ErrNoRows

@@ -24,11 +24,18 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 		return InviteCreated{}, "invalid_email", nil
 	}
 
+	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return InviteCreated{}, "", err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
 	var accessMode string
-	err := s.db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		SELECT access_mode
 		FROM elections
-		WHERE id=$1::uuid AND created_by=$2::uuid
+		WHERE id = $1::uuid AND created_by = $2::uuid
+		FOR UPDATE
 	`, electionID, adminUserID).Scan(&accessMode)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -40,15 +47,32 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 		return InviteCreated{}, "not_invite_mode", nil
 	}
 
-	code, codeHash := generateInviteCode()
+	var registered bool
+	err = tx.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM users
+			WHERE lower(email) = lower($1)
+		)
+	`, email).Scan(&registered)
+	if err != nil {
+		return InviteCreated{}, "", err
+	}
+
+	if !registered {
+		return InviteCreated{}, "registration_required", nil
+	}
+
+	rawCode, codeHash := generateInviteCode()
 
 	var inviteID string
 	var createdAt time.Time
-	err = s.db.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 		INSERT INTO election_invites (election_id, email, invite_code_hash, status)
 		VALUES ($1::uuid, $2, $3, 'created')
 		RETURNING id::text, created_at
 	`, electionID, email, codeHash).Scan(&inviteID, &createdAt)
+
 	if err != nil {
 		low := strings.ToLower(err.Error())
 		if strings.Contains(low, "unique") || strings.Contains(low, "duplicate") {
@@ -57,23 +81,33 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 		return InviteCreated{}, "", err
 	}
 
-	_ = insertAudit(ctx, s.db, &adminUserID, "invite_created", map[string]any{
+	_ = insertAudit(ctx, tx, &adminUserID, "invite_created", map[string]any{
 		"target_type": "election_invite",
 		"target_id":   inviteID,
 		"after": map[string]any{
-			"election_id": electionID,
-			"email":       email,
-			"status":      "created",
+			"election_id":           electionID,
+			"email":                 email,
+			"status":                "created",
+			"registration_required": !registered,
 		},
 	})
 
-	return InviteCreated{
-		InviteID:   inviteID,
-		Email:      email,
-		InviteCode: code,
-		Status:     "created",
-		CreatedAt:  createdAt.UTC().Format(time.RFC3339),
-	}, "", nil
+	if err := tx.Commit(ctx); err != nil {
+		return InviteCreated{}, "", err
+	}
+
+	resp := InviteCreated{
+		InviteID:              inviteID,
+		Email:                 email,
+		InviteCode:            rawCode,
+		Status:                "created",
+		CreatedAt:             createdAt.UTC().Format(time.RFC3339),
+		RegistrationRequired:  false,
+		RegistrationEmailSent: false,
+		InviteEmailSent:       false,
+	}
+
+	return resp, "", nil
 }
 
 func (s *Service) ListInvites(ctx context.Context, electionID, adminUserID string) ([]Invite, string, error) {
@@ -82,7 +116,11 @@ func (s *Service) ListInvites(ctx context.Context, electionID, adminUserID strin
 	}
 
 	var exists int
-	err := s.db.QueryRow(ctx, `SELECT 1 FROM elections WHERE id=$1::uuid AND created_by=$2::uuid`, electionID, adminUserID).Scan(&exists)
+	err := s.db.QueryRow(ctx, `
+		SELECT 1
+		FROM elections
+		WHERE id = $1::uuid AND created_by = $2::uuid
+	`, electionID, adminUserID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, "not_found", nil
@@ -93,7 +131,7 @@ func (s *Service) ListInvites(ctx context.Context, electionID, adminUserID strin
 	rows, err := s.db.Query(ctx, `
 		SELECT id::text, email, status, sent_at, accepted_at, created_at
 		FROM election_invites
-		WHERE election_id=$1::uuid
+		WHERE election_id = $1::uuid
 		ORDER BY created_at DESC
 	`, electionID)
 	if err != nil {
@@ -101,24 +139,32 @@ func (s *Service) ListInvites(ctx context.Context, electionID, adminUserID strin
 	}
 	defer rows.Close()
 
-	var out []Invite
+	out := make([]Invite, 0)
 	for rows.Next() {
 		var it Invite
-		var sentAt, accAt *time.Time
+		var sentAt *time.Time
+		var accAt *time.Time
 		var createdAt time.Time
+
 		if err := rows.Scan(&it.ID, &it.Email, &it.Status, &sentAt, &accAt, &createdAt); err != nil {
 			return nil, "", err
 		}
+
 		it.CreatedAt = createdAt.UTC().Format(time.RFC3339)
 		if sentAt != nil {
-			sv := sentAt.UTC().Format(time.RFC3339)
-			it.SentAt = &sv
+			v := sentAt.UTC().Format(time.RFC3339)
+			it.SentAt = &v
 		}
 		if accAt != nil {
-			sv := accAt.UTC().Format(time.RFC3339)
-			it.AcceptedAt = &sv
+			v := accAt.UTC().Format(time.RFC3339)
+			it.AcceptedAt = &v
 		}
+
 		out = append(out, it)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, "", err
 	}
 
 	return out, "", nil

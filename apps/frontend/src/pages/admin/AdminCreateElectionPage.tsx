@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import { useAuth } from "../../app/auth";
@@ -7,6 +7,7 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
+import type { CandidateDraft, CandidatePayload } from "../../shared/api/types";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -48,57 +49,78 @@ function toRFC3339FromLocalInput(value: string) {
   return parsed.toISOString();
 }
 
-function parseCandidateNames(text: string) {
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function normalizedCandidateName(value: string) {
+  return value.trim().replace(/\s+/g, " ");
 }
 
-function candidateValidation(text: string) {
-  const names = parseCandidateNames(text);
+function candidateError(candidate: CandidateDraft, all: CandidateDraft[]) {
+  const name = normalizedCandidateName(candidate.name);
 
-  if (names.length < 2) {
-    return {
-      ok: false,
-      message: "Добавьте минимум двух кандидатов",
-      names: [] as string[],
-    };
-  }
+  if (!name) return "Укажите ФИО кандидата";
+  if (name.length < 2) return "Имя кандидата слишком короткое";
+  if (name.length > 200) return "Имя кандидата слишком длинное";
+  if (candidate.description.trim().length > 1000) return "Описание слишком длинное";
 
-  const seen = new Map<string, number>();
-  const duplicates: string[] = [];
+  const key = name.toLowerCase();
+  const duplicates = all.filter(
+    (x) => normalizedCandidateName(x.name).toLowerCase() === key && key !== ""
+  );
+  if (duplicates.length > 1) return "Дубликат имени кандидата";
 
-  names.forEach((name) => {
-    const key = name.toLowerCase();
-    const count = seen.get(key) ?? 0;
-    seen.set(key, count + 1);
-    if (count === 1) duplicates.push(name);
-  });
-
-  if (duplicates.length > 0) {
-    return {
-      ok: false,
-      message: `Имена кандидатов не должны повторяться: ${duplicates.join(", ")}`,
-      names,
-    };
-  }
-
-  return {
-    ok: true,
-    message: "",
-    names,
-  };
+  return "";
 }
 
 function ballotFormatHint(format: "approval" | "ranking" | "score") {
   if (format === "approval") {
-    return "Для одобрительного бюллетеня задайте максимальное число допустимых отметок.";
+    return "Для approval задайте максимальное число допустимых отметок.";
   }
   if (format === "ranking") {
-    return "Для ранжированного бюллетеня задайте top-k, если требуется ограничить только первые позиции.";
+    return "Для ranking можно включить top-k и ограничить только первые позиции.";
   }
-  return "Для оценочного бюллетеня задайте диапазон значений и шаг оценки.";
+  return "Для score задайте диапазон значений и шаг оценки.";
+}
+
+function Hint({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      style={{
+        display: "inline-flex",
+        marginLeft: 6,
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        border: "1px solid #98a2b3",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 12,
+        cursor: "help",
+        userSelect: "none",
+      }}
+    >
+      ?
+    </span>
+  );
+}
+
+function ballotFormatLabel(value: "approval" | "ranking" | "score") {
+  if (value === "approval") return "Одобрение";
+  if (value === "ranking") return "Ранжирование";
+  return "Оценивание";
+}
+
+function accessModeLabel(value: "open" | "invite") {
+  return value === "open" ? "Открытый доступ" : "Только по приглашениям";
+}
+
+function quotaTypeLabel(value: "hare" | "droop") {
+  return value === "hare" ? "Хэра" : "Друпа";
+}
+
+function submitModeLabel(value: "draft" | "open" | "schedule") {
+  if (value === "draft") return "Сохранить как черновик";
+  if (value === "open") return "Открыть сразу";
+  return "Запланировать открытие";
 }
 
 function StepHeader({
@@ -148,8 +170,6 @@ export function AdminCreateElectionPage() {
   const { token, setToken } = useAuth();
   const { addNotification } = useNotifications();
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
   const [step, setStep] = useState(0);
 
   const [title, setTitle] = useState("Новое голосование");
@@ -162,7 +182,10 @@ export function AdminCreateElectionPage() {
     toLocalInputValue(new Date(Date.now() + 70 * 60_000))
   );
 
-  const [candidatesText, setCandidatesText] = useState("Alice\nBob\nCarol");
+  const [candidates, setCandidates] = useState<CandidateDraft[]>([
+    { name: "", description: "" },
+    { name: "", description: "" },
+  ]);
 
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
   const [tallyRule, setTallyRule] = useState("plurality");
@@ -171,7 +194,9 @@ export function AdminCreateElectionPage() {
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
 
   const [approvalMax, setApprovalMax] = useState<number>(2);
-  const [rankingTopK, setRankingTopK] = useState<number>(3);
+
+  const [limitRankingTopK, setLimitRankingTopK] = useState(true);
+  const [rankingTopKInput, setRankingTopKInput] = useState("3");
 
   const [scoreMin, setScoreMin] = useState<number>(0);
   const [scoreMax, setScoreMax] = useState<number>(10);
@@ -186,13 +211,36 @@ export function AdminCreateElectionPage() {
     toLocalInputValue(new Date(Date.now() + 24 * 60 * 60_000))
   );
 
+  const [submitMode, setSubmitMode] = useState<"draft" | "open" | "schedule">("draft");
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [createdID, setCreatedID] = useState<string | null>(null);
   const [rawResp, setRawResp] = useState<unknown>(null);
 
-  const parsedCandidates = useMemo(() => candidateValidation(candidatesText), [candidatesText]);
-  const candidateNames = parsedCandidates.names;
+  const candidateCount = candidates.length;
+
+  const candidateErrors = useMemo(
+    () => candidates.map((candidate) => candidateError(candidate, candidates)),
+    [candidates]
+  );
+
+  const candidatesValid =
+    candidates.length >= 2 && candidateErrors.every((x) => x === "");
+
+  const candidatePayload = useMemo<CandidatePayload[]>(
+    () =>
+      candidates.map((candidate) => {
+        const name = normalizedCandidateName(candidate.name);
+        const desc = candidate.description.trim();
+
+        return {
+          name,
+          meta: desc ? { description: desc } : undefined,
+        };
+      }),
+    [candidates]
+  );
 
   const startAtRFC3339 = useMemo(() => toRFC3339FromLocalInput(startAtLocal), [startAtLocal]);
   const endAtRFC3339 = useMemo(() => toRFC3339FromLocalInput(endAtLocal), [endAtLocal]);
@@ -201,43 +249,90 @@ export function AdminCreateElectionPage() {
     [delayPublish, publishAtLocal]
   );
 
+  const normalizedTopK = () => {
+    const raw = Number(rankingTopKInput);
+    if (!Number.isFinite(raw) || raw < 1) return 1;
+    if (raw > candidateCount) return candidateCount;
+    return Math.floor(raw);
+  };
+
+  const updateCandidate = (index: number, patch: Partial<CandidateDraft>) => {
+    setCandidates((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, ...patch } : item))
+    );
+  };
+
+  const addCandidate = () => {
+    setCandidates((prev) => [...prev, { name: "", description: "" }]);
+  };
+
+  const removeCandidate = (index: number) => {
+    setCandidates((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length >= 2 ? next : prev;
+    });
+  };
+
   const validateStep = (targetStep: number) => {
+    
     if (targetStep >= 0) {
       if (!title.trim()) return "Введите название голосования";
       if (!startAtRFC3339) return "Укажите корректную дату и время начала";
       if (!endAtRFC3339) return "Укажите корректную дату и время окончания";
 
+      const nowTs = Date.now();
       const startTs = new Date(startAtRFC3339).getTime();
       const endTs = new Date(endAtRFC3339).getTime();
 
-      if (startTs <= Date.now()) {
-        return "Дата начала должна быть позже текущего времени";
-      }
       if (startTs >= endTs) {
         return "Дата начала должна быть раньше даты окончания";
+      }
+      if (endTs <= nowTs) {
+        return "Дата окончания должна быть позже текущего времени";
+      }
+    }
+
+    if (targetStep >= 3) {
+      if (submitMode !== "open") {
+        const startTs = new Date(startAtRFC3339).getTime();
+        if (startTs <= Date.now()) {
+          return "Для черновика или запланированного старта дата начала должна быть позже текущего времени";
+        }
+      }
+
+      if (delayPublish) {
+        if (!publishAtRFC3339) {
+          return "Укажите корректную дату и время публикации";
+        }
+        const publishTs = new Date(publishAtRFC3339).getTime();
+        const endTs = new Date(endAtRFC3339).getTime();
+        if (publishTs <= endTs) {
+          return "Дата публикации результатов должна быть позже окончания голосования";
+        }
       }
     }
 
     if (targetStep >= 1) {
-      if (!parsedCandidates.ok) return parsedCandidates.message;
+      if (!candidatesValid) {
+        return candidateErrors.find(Boolean) || "Проверьте список кандидатов";
+      }
     }
 
     if (targetStep >= 2) {
       if (!tallyRule.trim()) return "Выберите правило подсчёта";
       if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
 
-      const candidatesCount = candidateNames.length;
-
       if (ballotFormat === "approval") {
         if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
-        if (approvalMax > candidatesCount) {
+        if (approvalMax > candidateCount) {
           return "approval_max_choices не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "ranking") {
-        if (rankingTopK < 1) return "ranking_top_k должен быть не меньше 1";
-        if (rankingTopK > candidatesCount) {
+      if (ballotFormat === "ranking" && limitRankingTopK) {
+        const topK = normalizedTopK();
+        if (topK < 1) return "ranking_top_k должен быть не меньше 1";
+        if (topK > candidateCount) {
           return "ranking_top_k не может превышать число кандидатов";
         }
       }
@@ -293,22 +388,6 @@ export function AdminCreateElectionPage() {
     setStep(nextStep);
   };
 
-  const handleCandidatesFile = async (file: File | null) => {
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      setCandidatesText(text.replace(/\r\n/g, "\n"));
-      setErr(null);
-    } catch {
-      setErr("Не удалось прочитать файл с кандидатами");
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
   const submit = async () => {
     if (!token) return;
 
@@ -324,10 +403,12 @@ export function AdminCreateElectionPage() {
     setRawResp(null);
 
     try {
+      const effectiveStartAtRFC3339 =
+        submitMode === "open" ? new Date().toISOString() : startAtRFC3339;
       const body: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim() ? description.trim() : null,
-        start_at: startAtRFC3339,
+        start_at: effectiveStartAtRFC3339,
         end_at: endAtRFC3339,
         tally_rule: tallyRule,
         ballot_format: ballotFormat,
@@ -336,7 +417,7 @@ export function AdminCreateElectionPage() {
         access_mode: accessMode,
         publish_at: delayPublish ? publishAtRFC3339 : null,
         show_aggregates: showAggregates,
-        candidates: candidateNames.map((name) => ({ name })),
+        candidates: candidatePayload,
       };
 
       if (ballotFormat === "approval") {
@@ -344,7 +425,7 @@ export function AdminCreateElectionPage() {
       }
 
       if (ballotFormat === "ranking") {
-        body.ranking_top_k = rankingTopK;
+        body.ranking_top_k = limitRankingTopK ? normalizedTopK() : null;
       }
 
       if (ballotFormat === "score") {
@@ -355,16 +436,29 @@ export function AdminCreateElectionPage() {
       }
 
       const id = await api.elections.create(token, body);
+
+      if (submitMode === "open") {
+        await api.elections.action(token, id, "open");
+      }
+      if (submitMode === "schedule") {
+        await api.elections.action(token, id, "schedule");
+      }
+
       setCreatedID(id);
 
       addNotification({
         kind: "success",
         title: "Голосование создано",
-        message: `Создано новое голосование с id ${id}`,
+        message:
+          submitMode === "open"
+            ? `Создано и открыто голосование ${id}`
+            : submitMode === "schedule"
+            ? `Создано и запланировано голосование ${id}`
+            : `Создано новое голосование ${id}`,
       });
 
       if (IS_DEV) {
-        setRawResp({ id, body });
+        setRawResp({ id, body, submitMode });
       }
 
       setStep(STEPS.length - 1);
@@ -394,7 +488,7 @@ export function AdminCreateElectionPage() {
           <h2 style={{ margin: 0 }}>Создание голосования</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link to="/dashboard/admin" style={{ textDecoration: "none" }}>
-              <button style={styles.btn}>К dashboard</button>
+              <button style={styles.btn}>К дашборду</button>
             </Link>
             <Link to="/elections" style={{ textDecoration: "none" }}>
               <button style={styles.btn}>К списку</button>
@@ -403,7 +497,7 @@ export function AdminCreateElectionPage() {
         </div>
 
         <div style={{ marginTop: 8, ...styles.muted }}>
-          Пошаговый мастер создания голосования с клиентской валидацией по ключевым требованиям ТЗ.
+          Пошаговый мастер создания голосования с валидацией ключевых параметров.
         </div>
 
         <div style={{ marginTop: 16 }}>
@@ -430,7 +524,10 @@ export function AdminCreateElectionPage() {
               </div>
 
               <div>
-                <label>Дата и время начала</label>
+                <label>
+                  Дата и время начала
+                  <Hint text="Для режима «Открыть сразу» время начала будет заменено текущим моментом." />
+                </label>
                 <input
                   style={styles.input}
                   type="datetime-local"
@@ -440,7 +537,10 @@ export function AdminCreateElectionPage() {
               </div>
 
               <div>
-                <label>Дата и время окончания</label>
+                <label>
+                  Дата и время окончания
+                  <Hint text="После этой даты новые бюллетени приниматься не должны." />
+                </label>
                 <input
                   style={styles.input}
                   type="datetime-local"
@@ -449,78 +549,76 @@ export function AdminCreateElectionPage() {
                 />
               </div>
             </div>
-
-            <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <div><b>Проверки на этом шаге:</b></div>
-              <div style={{ ...styles.muted, marginTop: 6 }}>
-                • название не пустое;
-                <br />
-                • дата начала позже текущего времени;
-                <br />
-                • дата окончания позже даты начала.
-              </div>
-            </div>
           </div>
         ) : null}
 
         {step === 1 ? (
           <div style={{ display: "grid", gap: 12 }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 10,
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={styles.muted}>
-                Введите кандидатов по одному на строку или загрузите текстовый файл.
-              </div>
+            <div style={styles.muted}>
+              Добавьте не менее двух кандидатов. Для каждого можно указать краткое описание.
+            </div>
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".txt,.csv"
-                onChange={(e) => handleCandidatesFile(e.target.files?.[0] ?? null)}
-              />
+            <div style={{ display: "grid", gap: 16 }}>
+              {candidates.map((candidate, index) => (
+                <div
+                  key={index}
+                  style={{
+                    border: "1px solid #d0d7de",
+                    borderRadius: 12,
+                    padding: 16,
+                    background: "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                    <strong>Кандидат #{index + 1}</strong>
+                    <button
+                      type="button"
+                      onClick={() => removeCandidate(index)}
+                      disabled={candidates.length <= 2}
+                    >
+                      Удалить
+                    </button>
+                  </div>
+
+                  <label style={{ display: "block", marginBottom: 12 }}>
+                    <div style={{ marginBottom: 6 }}>ФИО</div>
+                    <input
+                      style={styles.input}
+                      maxLength={200}
+                      value={candidate.name}
+                      onChange={(e) => updateCandidate(index, { name: e.target.value })}
+                      onBlur={(e) =>
+                        updateCandidate(index, { name: normalizedCandidateName(e.target.value) })
+                      }
+                      placeholder="Иванов Иван Иванович"
+                    />
+                  </label>
+
+                  <label style={{ display: "block", marginBottom: 8 }}>
+                    <div style={{ marginBottom: 6 }}>Описание</div>
+                    <textarea
+                      style={{ ...styles.input, minHeight: 90 }}
+                      maxLength={1000}
+                      value={candidate.description}
+                      onChange={(e) => updateCandidate(index, { description: e.target.value })}
+                      placeholder="Краткая информация о кандидате"
+                    />
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#667085" }}>
+                      {candidate.description.trim().length}/1000
+                    </div>
+                  </label>
+
+                  {candidateErrors[index] ? (
+                    <div style={{ color: "#b42318", fontSize: 14 }}>{candidateErrors[index]}</div>
+                  ) : null}
+                </div>
+              ))}
             </div>
 
             <div>
-              <label>Кандидаты (по одному на строку)</label>
-              <textarea
-                style={{
-                  ...styles.input,
-                  minHeight: 220,
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                }}
-                value={candidatesText}
-                onChange={(e) => setCandidatesText(e.target.value)}
-              />
-            </div>
-
-            <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <div><b>Предпросмотр:</b></div>
-              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-                {candidateNames.length > 0 ? (
-                  candidateNames.map((name, index) => (
-                    <div key={`${name}-${index}`}>
-                      {index + 1}. {name}
-                    </div>
-                  ))
-                ) : (
-                  <div style={styles.muted}>Список пока пуст</div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ ...styles.card, background: parsedCandidates.ok ? "#f0fdf4" : "#fff1f2" }}>
-              <div><b>Статус валидации:</b></div>
-              <div style={{ marginTop: 6 }}>
-                {parsedCandidates.ok
-                  ? `Корректно. Кандидатов: ${candidateNames.length}`
-                  : parsedCandidates.message}
-              </div>
+              <button type="button" style={styles.btn} onClick={addCandidate}>
+                + Добавить кандидата
+              </button>
             </div>
           </div>
         ) : null}
@@ -529,7 +627,10 @@ export function AdminCreateElectionPage() {
           <div style={{ display: "grid", gap: 12 }}>
             <div style={styles.grid2}>
               <div>
-                <label>Формат бюллетеня</label>
+                <label>
+                  Формат бюллетеня
+                  <Hint text="Тип данных, которые будет вводить избиратель: approval, ranking или score." />
+                </label>
                 <select
                   style={styles.input}
                   value={ballotFormat}
@@ -542,7 +643,10 @@ export function AdminCreateElectionPage() {
               </div>
 
               <div>
-                <label>Правило подсчёта</label>
+                <label>
+                  Правило подсчёта
+                  <Hint text="Алгоритм определения победителей на основе бюллетеней." />
+                </label>
                 <select
                   style={styles.input}
                   value={tallyRule}
@@ -557,7 +661,10 @@ export function AdminCreateElectionPage() {
               </div>
 
               <div>
-                <label>Размер комитета</label>
+                <label>
+                  Размер комитета
+                  <Hint text="Количество победителей. Для части правил параметр обязателен." />
+                </label>
                 <input
                   style={styles.input}
                   type="number"
@@ -568,15 +675,27 @@ export function AdminCreateElectionPage() {
               </div>
 
               <div>
-                <label>Тип квоты</label>
+                <label>
+                  Тип квоты
+                  <Hint text="Квота определяет порог голосов, необходимый для распределения мандатов в некоторых многомандатных правилах." />
+                </label>
                 <select
                   style={styles.input}
                   value={quotaType}
+                  disabled={committeeSize <= 1}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
                   <option value="droop">droop</option>
                 </select>
+
+                <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                  {committeeSize <= 1
+                    ? "Для одного победителя квота не используется."
+                    : quotaType === "hare"
+                    ? "Квота Хэра: число голосов на один мандат."
+                    : "Квота Друпа: более строгий порог избрания."}
+                </div>
               </div>
             </div>
 
@@ -592,7 +711,7 @@ export function AdminCreateElectionPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={Math.max(candidateNames.length, 1)}
+                    max={Math.max(candidateCount, 1)}
                     value={approvalMax}
                     onChange={(e) => setApprovalMax(Number(e.target.value))}
                   />
@@ -601,17 +720,32 @@ export function AdminCreateElectionPage() {
             ) : null}
 
             {ballotFormat === "ranking" ? (
-              <div style={styles.grid2}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={limitRankingTopK}
+                    onChange={(e) => setLimitRankingTopK(e.target.checked)}
+                  />
+                  <span>
+                    Ограничить ранжирование top-k
+                    <Hint text="Если включено, избиратель сможет выбрать только первые k позиций." />
+                  </span>
+                </label>
+
                 <div>
-                  <label>top-k</label>
                   <input
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={Math.max(candidateNames.length, 1)}
-                    value={rankingTopK}
-                    onChange={(e) => setRankingTopK(Number(e.target.value))}
+                    disabled={!limitRankingTopK}
+                    value={rankingTopKInput}
+                    onChange={(e) => setRankingTopKInput(e.target.value)}
+                    onBlur={() => setRankingTopKInput(String(normalizedTopK()))}
                   />
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    Максимально допустимое значение: {candidateCount}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -668,7 +802,10 @@ export function AdminCreateElectionPage() {
           <div style={{ display: "grid", gap: 12 }}>
             <div style={styles.grid2}>
               <div>
-                <label>Режим доступа</label>
+                <label>
+                  Режим доступа
+                  <Hint text="open — доступно всем, invite — только приглашённым пользователям." />
+                </label>
                 <select
                   style={styles.input}
                   value={accessMode}
@@ -687,6 +824,7 @@ export function AdminCreateElectionPage() {
                     onChange={(e) => setShowAggregates(e.target.checked)}
                   />
                   Показывать агрегированные данные в результатах
+                  <Hint text="Определяет, будут ли в опубликованных результатах показаны агрегированные метрики и сводные значения." />
                 </label>
               </div>
             </div>
@@ -700,6 +838,7 @@ export function AdminCreateElectionPage() {
                     onChange={(e) => setDelayPublish(e.target.checked)}
                   />
                   Отложить публикацию результатов
+                  <Hint text="Если включено, результаты не будут опубликованы сразу после завершения голосования." />
                 </label>
               </div>
 
@@ -721,10 +860,89 @@ export function AdminCreateElectionPage() {
             </div>
 
             <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <div><b>Примечание:</b></div>
-              <div style={{ marginTop: 6, ...styles.muted }}>
-                Если выбран режим invite, сами приглашения можно будет создать на карточке голосования после его создания.
+              <h3>Что сделать после сохранения</h3>
+
+              <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                <label>
+                  <input
+                    type="radio"
+                    checked={submitMode === "draft"}
+                    onChange={() => setSubmitMode("draft")}
+                  />
+                  <span style={{ marginLeft: 8 }}>Сохранить как черновик</span>
+                </label>
+
+                <label>
+                  <input
+                    type="radio"
+                    checked={submitMode === "open"}
+                    onChange={() => setSubmitMode("open")}
+                  />
+                  <span style={{ marginLeft: 8 }}>Открыть сразу</span>
+                </label>
+
+                <label>
+                  <input
+                    type="radio"
+                    checked={submitMode === "schedule"}
+                    onChange={() => setSubmitMode("schedule")}
+                  />
+                  <span style={{ marginLeft: 8 }}>Запланировать открытие</span>
+                </label>
               </div>
+
+              {submitMode === "open" ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "#fff7e6",
+                    border: "1px solid #f7b955",
+                    color: "#8a4b00",
+                    fontWeight: 500,
+                  }}
+                >
+                  Голосование будет открыто сразу после создания.
+                  Время начала будет зафиксировано текущим моментом.
+                  Участники смогут начать голосование немедленно.
+                </div>
+              ) : null}
+
+              {submitMode === "schedule" ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "#eff8ff",
+                    border: "1px solid #84caff",
+                    color: "#175cd3",
+                    fontWeight: 500,
+                  }}
+                >
+                   Голосование будет создано в статусе scheduled.
+                   Оно откроется по запланированному жизненному циклу, а не сразу.
+                </div>
+              ) : null}
+
+              {submitMode === "draft" ? (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 10,
+                    background: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    color: "#334155",
+                    fontWeight: 500,
+                  }}
+                >
+                  Голосование сохранится как черновик.
+                  Участники не увидят его и не смогут голосовать, пока вы не выполните schedule или open.
+                </div>
+              ) : null}
+
             </div>
           </div>
         ) : null}
@@ -734,25 +952,31 @@ export function AdminCreateElectionPage() {
             <SummaryGrid
               items={[
                 { label: "Название", value: title.trim() || "—" },
-                { label: "Формат бюллетеня", value: ballotFormat },
+                { label: "Формат бюллетеня", value: ballotFormatLabel(ballotFormat) },
                 { label: "Правило подсчёта", value: tallyRule },
                 { label: "Размер комитета", value: String(committeeSize) },
-                { label: "Тип квоты", value: committeeSize > 1 ? quotaType : "не используется" },
-                { label: "Режим доступа", value: accessMode },
+                { label: "Тип квоты", value: committeeSize > 1 ? quotaTypeLabel(quotaType) : "не используется" },
+                { label: "Режим доступа", value: accessModeLabel(accessMode) },
                 { label: "Показывать агрегаты", value: showAggregates ? "да" : "нет" },
-                { label: "Начало", value: startAtRFC3339 || "—" },
+                { label: "Начало", value: submitMode === "open" ? "Сразу после создания" : startAtRFC3339 || "—" },
                 { label: "Окончание", value: endAtRFC3339 || "—" },
                 { label: "Отложенная публикация", value: delayPublish ? publishAtRFC3339 || "—" : "нет" },
-                { label: "Кандидатов", value: String(candidateNames.length) },
+                { label: "Кандидатов", value: String(candidateCount) },
+                { label: "После сохранения", value: submitModeLabel(submitMode) },
               ]}
             />
 
             <div style={styles.card}>
               <h3 style={{ marginTop: 0 }}>Кандидаты</h3>
-              <div style={{ display: "grid", gap: 6 }}>
-                {candidateNames.map((name, index) => (
-                  <div key={`${name}-${index}`}>
-                    {index + 1}. {name}
+              <div style={{ display: "grid", gap: 10 }}>
+                {candidatePayload.map((candidate, index) => (
+                  <div key={`${candidate.name}-${index}`}>
+                    <div>
+                      {index + 1}. {candidate.name}
+                    </div>
+                    {candidate.meta?.description ? (
+                      <div style={{ marginTop: 4, ...styles.muted }}>{candidate.meta.description}</div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -761,17 +985,17 @@ export function AdminCreateElectionPage() {
             <div style={styles.card}>
               <h3 style={{ marginTop: 0 }}>Параметры бюллетеня</h3>
 
-              {ballotFormat === "approval" ? (
-                <div>Максимум отметок: {approvalMax}</div>
-              ) : null}
+              {ballotFormat === "approval" ? <div>Максимум отметок: {approvalMax}</div> : null}
 
               {ballotFormat === "ranking" ? (
-                <div>top-k: {rankingTopK}</div>
+                <div>top-k: {limitRankingTopK ? normalizedTopK() : "не ограничен"}</div>
               ) : null}
 
               {ballotFormat === "score" ? (
                 <div style={{ display: "grid", gap: 6 }}>
-                  <div>Диапазон: {scoreMin}..{scoreMax}</div>
+                  <div>
+                    Диапазон: {scoreMin}..{scoreMax}
+                  </div>
                   <div>Шаг: {scoreStep}</div>
                   <div>Разрешить пропуск: {scoreAllowSkip ? "да" : "нет"}</div>
                 </div>

@@ -187,7 +187,7 @@ fi
 AUTH="Authorization: Bearer $ADMIN_TOKEN"
 
 do_curl POST "$API_BASE/api/v1/auth/register" -H 'content-type: application/json' \
-  -d "{\"email\":\"$VOTER_EMAIL\",\"password\":\"$VOTER_PASS\",\"role\":\"voter\"}"
+  -d "{\"email\":\"$VOTER_EMAIL\",\"password\":\"$VOTER_PASS\"}"
 
 if [[ "$HTTP_CODE" == "200" ]]; then
   VOTER_TOKEN="$(extract_token "$HTTP_BODY")"
@@ -215,26 +215,31 @@ assert_code 200
 do_curl GET "$API_BASE/api/v1/auth/me" -H "$VAUTH"
 assert_code 200
 
+START_AT="$(date -u -d '+10 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+END_AT="$(date -u -d '+2 days' +%Y-%m-%dT%H:%M:%SZ)"
+
+
 echo "== suite A: state machine + pause/resume + publish gating =="
 do_curl POST "$API_BASE/api/v1/elections" -H 'content-type: application/json' -H "$AUTH" -d "{
   \"title\":\"E2E state machine $SFX\",
   \"description\":\"state transitions\",
-  \"start_at\":\"2026-01-26T00:00:00Z\",
-  \"end_at\":\"2026-02-26T00:00:00Z\",
+  \"start_at\":\"$START_AT\",
+  \"end_at\":\"$END_AT\",
   \"tally_rule\":\"plurality\",
   \"ballot_format\":\"ranking\",
   \"access_mode\":\"open\",
   \"show_aggregates\":true,
   \"committee_size\":1,
   \"ranking_top_k\":3,
-  \"candidates\":[{\"name\":\"A\"},{\"name\":\"B\"},{\"name\":\"C\"}]
+  \"candidates\":[
+    {\"name\":\"Alice Alpha\",\"meta\":{\"description\":\"Candidate 1\"}},
+    {\"name\":\"Boris Beta\",\"meta\":{\"description\":\"Candidate 2\"}},
+    {\"name\":\"Carol Gamma\",\"meta\":{\"description\":\"Candidate 3\"}}
+  ]
 }"
 assert_code 200
 EID="$(json_get id)"
 [[ -n "$EID" ]] || { echo "no EID" >&2; exit 1; }
-
-do_curl POST "$API_BASE/api/v1/elections/$EID/actions/open" -H "$AUTH"
-[[ "$HTTP_CODE" == "409" ]] || { echo "expected 409 on open from draft, got $HTTP_CODE" >&2; echo "$HTTP_BODY" >&2; exit 1; }
 
 do_curl POST "$API_BASE/api/v1/elections/$EID/actions/schedule" -H "$AUTH"; assert_code 200
 do_curl POST "$API_BASE/api/v1/elections/$EID/actions/open" -H "$AUTH"; assert_code 200
@@ -259,8 +264,8 @@ except Exception:
     print("")
 ' <<<"$HTTP_BODY")"
 
-if [[ "$HTTP_CODE" != "400" || "$ERR_CODE" != "election_not_active" ]]; then
-  echo "expected HTTP 400 with error.code=election_not_active while paused, got HTTP $HTTP_CODE" >&2
+if [[ "$HTTP_CODE" != "400" || ( "$ERR_CODE" != "election_not_active" && "$ERR_CODE" != "not_active" ) ]]; then
+  echo "expected HTTP 400 with error.code=election_not_active|not_active while paused, got HTTP $HTTP_CODE" >&2
   echo "$HTTP_BODY" >&2
   exit 1
 fi

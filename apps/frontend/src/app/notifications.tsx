@@ -6,6 +6,9 @@ export type NotificationItem = {
   id: string;
   title: string;
   message: string;
+  details?: string;
+  action_label?: string;
+  action_to?: string;
   kind: NotificationKind;
   created_at: string;
   read: boolean;
@@ -14,6 +17,9 @@ export type NotificationItem = {
 type AddNotificationInput = {
   title: string;
   message: string;
+  details?: string;
+  action_label?: string;
+  action_to?: string;
   kind?: NotificationKind;
 };
 
@@ -51,6 +57,9 @@ function readInitialState(): NotificationItem[] {
         typeof item.id === "string" &&
         typeof item.title === "string" &&
         typeof item.message === "string" &&
+        (item.details === undefined || typeof item.details === "string") &&
+        (item.action_label === undefined || typeof item.action_label === "string") &&
+        (item.action_to === undefined || typeof item.action_to === "string") &&
         typeof item.kind === "string" &&
         typeof item.created_at === "string" &&
         typeof item.read === "boolean"
@@ -85,6 +94,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
         id: newNotificationId(),
         title: input.title,
         message: input.message,
+        details: input.details,
+        action_label: input.action_label,
+        action_to: input.action_to,
         kind: input.kind ?? "info",
         created_at: new Date().toISOString(),
         read: false,

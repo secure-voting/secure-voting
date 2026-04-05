@@ -16,7 +16,6 @@ import type {
   Me,
   MyBallotResp,
   ResultResp,
-  UpdateElectionRulesInput,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -152,7 +151,7 @@ async function authorizedDownload(path: string, token: string, fallbackFilename:
 
 export const api = {
   auth: {
-    async register(email: string, password: string, _role: string, inviteCode: string | null) {
+    async register(email: string, password: string, inviteCode: string | null) {
       const body: Record<string, unknown> = { email, password };
       if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
 
@@ -195,11 +194,11 @@ export const api = {
     },
 
     get(token: string, id: string, signal?: AbortSignal) {
-        return request<ElectionDetail>(
+      return request<ElectionDetail>(
         `/api/v1/elections/${id}`,
         { method: "GET", signal },
         token
-        );
+      );
     },
 
     ballotMeta(token: string, id: string, signal?: AbortSignal) {
@@ -238,8 +237,8 @@ export const api = {
       return request<{ items: Invite[] }>(
         `/api/v1/elections/${id}/invites`,
         {
-            method: "GET",
-            signal,
+          method: "GET",
+          signal,
         },
         token
       ).then((resp) => (Array.isArray(resp.items) ? resp.items : []));

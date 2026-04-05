@@ -6,7 +6,7 @@ import (
 )
 
 func (s *Service) DownloadResult(ctx context.Context, role, userID, runID string) ([]byte, string, string, string, error) {
-	res, code, err := s.GetResult(ctx, role, userID, runID)
+	res, code, err := downloadResultGetFn(s, ctx, role, userID, runID)
 	if err != nil {
 		return nil, "", "", "", err
 	}

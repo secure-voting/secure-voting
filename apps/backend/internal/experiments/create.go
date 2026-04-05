@@ -36,7 +36,7 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateReq) (s
 	}
 
 	var id string
-	err = s.db.QueryRow(ctx, `
+	err = createExperimentQueryRowFn(ctx, s.db, `
 		INSERT INTO experiments (type, params, created_by, status, seed)
 		VALUES ($1, $2::jsonb, $3::uuid, 'draft', $4)
 		RETURNING id::text
@@ -45,7 +45,7 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateReq) (s
 		return "", "", err
 	}
 
-	_ = insertAudit(ctx, s.db, createdBy, "experiment_created", map[string]any{
+	_ = insertAuditFn(ctx, s.db, createdBy, "experiment_created", map[string]any{
 		"target_type": "experiment",
 		"target_id":   id,
 		"after": map[string]any{

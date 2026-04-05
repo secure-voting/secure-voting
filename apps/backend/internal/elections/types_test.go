@@ -49,6 +49,7 @@ func TestValidateTallyRuleAliases(t *testing.T) {
 	}{
 		{in: "minimax", want: "minmax"},
 		{in: "condorcet_practical", want: "practical_condorcet"},
+		{in: "condorcet-practical", want: "practical_condorcet"},
 		{in: "  minimax  ", want: "minmax"},
 		{in: "  condorcet_practical  ", want: "practical_condorcet"},
 	}
@@ -94,5 +95,61 @@ func TestValidateTallyRuleRejectsUnknown(t *testing.T) {
 				t.Fatalf("validateTallyRule(%q) returned %q, want empty string", tc, got)
 			}
 		})
+	}
+}
+
+func TestNormalizeRankingTopK(t *testing.T) {
+	t.Parallel()
+
+	t.Run("non ranking clears value", func(t *testing.T) {
+		t.Parallel()
+
+		v := 5
+		got, err := normalizeRankingTopK("approval", &v, 3)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != nil {
+			t.Fatalf("expected nil, got %v", *got)
+		}
+	})
+
+	t.Run("ranking nil is allowed", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := normalizeRankingTopK("ranking", nil, 3)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != nil {
+			t.Fatalf("expected nil, got %v", *got)
+		}
+	})
+
+	t.Run("ranking clamps to candidates count", func(t *testing.T) {
+		t.Parallel()
+
+		v := 10
+		got, err := normalizeRankingTopK("ranking", &v, 4)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got == nil || *got != 4 {
+			t.Fatalf("expected 4, got %v", got)
+		}
+	})
+}
+
+func TestCanOpenElection(t *testing.T) {
+	t.Parallel()
+
+	if !canOpenElection("draft") {
+		t.Fatal("draft should be openable")
+	}
+	if !canOpenElection("scheduled") {
+		t.Fatal("scheduled should be openable")
+	}
+	if canOpenElection("active") {
+		t.Fatal("active should not be openable")
 	}
 }

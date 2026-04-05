@@ -39,6 +39,44 @@ function normalizeTallyRule(value: string) {
   return TALLY_RULE_ALIASES[trimmed] ?? trimmed;
 }
 
+function accessModeLabel(value: "open" | "invite") {
+  return value === "open" ? "Открытый доступ" : "Только по приглашению";
+}
+
+function Hint({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      style={{
+        display: "inline-flex",
+        marginLeft: 6,
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        border: "1px solid #98a2b3",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: 12,
+        cursor: "help",
+        userSelect: "none",
+      }}
+    >
+      ?
+    </span>
+  );
+}
+
+function toLocalInputValue(date: Date) {
+  const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return adjusted.toISOString().slice(0, 16);
+}
+
+function toRFC3339FromLocalInput(value: string) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString();
+}
+
 export function ElectionRulesPage() {
   const { id } = useParams();
   const electionId = String(id || "");
@@ -54,11 +92,13 @@ export function ElectionRulesPage() {
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
 
   const [accessMode, setAccessMode] = useState<"open" | "invite">("open");
-  const [publishAt, setPublishAt] = useState("");
+  const [delayPublish, setDelayPublish] = useState(false);
+  const [publishAtLocal, setPublishAtLocal] = useState("");
   const [showAggregates, setShowAggregates] = useState(true);
 
   const [approvalMaxChoices, setApprovalMaxChoices] = useState<number>(1);
-  const [rankingTopK, setRankingTopK] = useState<number>(1);
+  const [limitRankingTopK, setLimitRankingTopK] = useState(true);
+  const [rankingTopKInput, setRankingTopKInput] = useState("1");
 
   const [scoreMin, setScoreMin] = useState<number>(0);
   const [scoreMax, setScoreMax] = useState<number>(10);
@@ -72,16 +112,26 @@ export function ElectionRulesPage() {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const normalizedTopK = () => {
+    const candidatesCount = item?.candidates.length ?? 1;
+    const raw = Number(rankingTopKInput);
+    if (!Number.isFinite(raw) || raw < 1) return 1;
+    if (raw > candidatesCount) return candidatesCount;
+    return Math.floor(raw);
+  };
+
   const hydrate = (e: ElectionDetail) => {
     setTallyRule(normalizeTallyRule(e.tally_rule));
     setBallotFormat((e.ballot_format as "approval" | "ranking" | "score") || "ranking");
     setCommitteeSize(e.committee_size ?? 1);
     setQuotaType((e.quota_type as "hare" | "droop") ?? "hare");
     setAccessMode((e.access_mode as "open" | "invite") ?? "open");
-    setPublishAt(e.publish_at ?? "");
+    setDelayPublish(Boolean(e.publish_at));
+    setPublishAtLocal(e.publish_at ? toLocalInputValue(new Date(e.publish_at)) : "");
     setShowAggregates(Boolean(e.show_aggregates));
     setApprovalMaxChoices(e.approval_max_choices ?? 1);
-    setRankingTopK(e.ranking_top_k ?? 1);
+    setLimitRankingTopK(e.ranking_top_k != null);
+    setRankingTopKInput(String(e.ranking_top_k ?? 1));
     setScoreMin(e.score_min ?? 0);
     setScoreMax(e.score_max ?? 10);
     setScoreStep(e.score_step ?? 1);
@@ -132,29 +182,36 @@ export function ElectionRulesPage() {
     const normalizedRule = normalizeTallyRule(tallyRule);
     if (!normalizedRule) return "Выберите правило подсчёта";
     if (!TALLY_RULES.includes(normalizedRule)) return "Недопустимое правило подсчёта";
-    if (committeeSize < 1) return "committee_size должен быть не меньше 1";
+    if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
 
     if (ballotFormat === "approval") {
-      if (approvalMaxChoices < 1) return "approval_max_choices должен быть не меньше 1";
-      if (approvalMaxChoices > candidatesCount) return "approval_max_choices не может превышать число кандидатов";
+      if (approvalMaxChoices < 1) return "Максимум отметок должен быть не меньше 1";
+      if (approvalMaxChoices > candidatesCount) return "Максимум отметок не может превышать число кандидатов";
     }
 
-    if (ballotFormat === "ranking") {
-      if (rankingTopK < 1) return "ranking_top_k должен быть не меньше 1";
-      if (rankingTopK > candidatesCount) return "ranking_top_k не может превышать число кандидатов";
+    if (ballotFormat === "ranking" && limitRankingTopK) {
+      const topK = normalizedTopK();
+      if (topK < 1) return "top-k должен быть не меньше 1";
+      if (topK > candidatesCount) return "top-k не может превышать число кандидатов";
     }
 
     if (ballotFormat === "score") {
-      if (scoreStep <= 0) return "score_step должен быть больше 0";
-      if (scoreMin > scoreMax) return "score_min не может быть больше score_max";
+      if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
+      if (scoreMin > scoreMax) return "Нижняя граница оценки не может быть больше верхней";
       if ((scoreMax - scoreMin) % scoreStep !== 0) {
-        return "Диапазон score должен делиться на score_step без остатка";
+        return "Диапазон оценок должен делиться на шаг без остатка";
       }
     }
 
-    if (publishAt.trim()) {
-      const parsed = Date.parse(publishAt);
-      if (Number.isNaN(parsed)) return "publish_at должен быть в формате RFC3339";
+    if (delayPublish) {
+      const publishAtRFC3339 = toRFC3339FromLocalInput(publishAtLocal);
+      if (!publishAtRFC3339) return "Укажите корректную дату и время публикации";
+
+      const publishTs = Date.parse(publishAtRFC3339);
+      const endTs = Date.parse(item.end_at);
+      if (!Number.isNaN(endTs) && publishTs <= endTs) {
+        return "Дата публикации результатов должна быть позже окончания голосования";
+      }
     }
 
     return null;
@@ -180,7 +237,7 @@ export function ElectionRulesPage() {
         committee_size: committeeSize,
         quota_type: committeeSize > 1 ? quotaType : null,
         access_mode: accessMode,
-        publish_at: publishAt.trim() ? publishAt.trim() : null,
+        publish_at: delayPublish ? toRFC3339FromLocalInput(publishAtLocal) : null,
         show_aggregates: showAggregates,
       };
 
@@ -189,7 +246,7 @@ export function ElectionRulesPage() {
       }
 
       if (ballotFormat === "ranking") {
-        body.ranking_top_k = rankingTopK;
+        body.ranking_top_k = limitRankingTopK ? normalizedTopK() : null;
       }
 
       if (ballotFormat === "score") {
@@ -251,7 +308,7 @@ export function ElectionRulesPage() {
 
             <div style={styles.grid2}>
               <div>
-                <label>Tally rule</label>
+                <label>Правило подсчёта</label>
                 <select style={styles.input} value={tallyRule} onChange={(e) => setTallyRule(e.target.value)}>
                   {TALLY_RULES.map((rule) => (
                     <option key={rule} value={rule}>
@@ -262,7 +319,10 @@ export function ElectionRulesPage() {
               </div>
 
               <div>
-                <label>Ballot format</label>
+                <label>
+                  Формат бюллетеня
+                  <Hint text="Тип данных, которые вводит избиратель: approval, ranking или score." />
+                </label>
                 <select
                   style={styles.input}
                   value={ballotFormat}
@@ -275,7 +335,7 @@ export function ElectionRulesPage() {
               </div>
 
               <div>
-                <label>Committee size</label>
+                <label>Размер комитета</label>
                 <input
                   style={styles.input}
                   type="number"
@@ -286,36 +346,72 @@ export function ElectionRulesPage() {
               </div>
 
               <div>
-                <label>Quota type</label>
+                <label>
+                  Тип квоты
+                  <Hint text="Квота определяет порог голосов, необходимый для распределения мандатов в некоторых многомандатных правилах." />
+                </label>
                 <select
                   style={styles.input}
                   value={quotaType}
+                  disabled={committeeSize <= 1}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
                   <option value="droop">droop</option>
                 </select>
+
+                <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                  {committeeSize <= 1
+                    ? "Для одного победителя квота не используется."
+                    : quotaType === "hare"
+                    ? "Квота Хэра: число голосов на один мандат."
+                    : "Квота Друпа: более строгий порог избрания."}
+                </div>
               </div>
 
               <div>
-                <label>Access mode</label>
+                <label>
+                  Access mode
+                  <Hint text="Определяет, смогут ли пользователи участвовать свободно или только по приглашению." />
+                </label>
                 <select
                   style={styles.input}
                   value={accessMode}
                   onChange={(e) => setAccessMode(e.target.value as "open" | "invite")}
                 >
-                  <option value="open">open</option>
-                  <option value="invite">invite</option>
+                  <option value="open">{accessModeLabel("open")}</option>
+                  <option value="invite">{accessModeLabel("invite")}</option>
                 </select>
               </div>
 
-              <div>
-                <label>Publish at (RFC3339, optional)</label>
-                <input
-                  style={styles.input}
-                  value={publishAt}
-                  onChange={(e) => setPublishAt(e.target.value)}
-                />
+              <div style={{ ...styles.card, background: "#f9fafb" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={delayPublish}
+                    onChange={(e) => setDelayPublish(e.target.checked)}
+                  />
+                  <span>
+                    Отложить публикацию результатов
+                    <Hint text="Если включено, результаты будут опубликованы в заданный момент времени." />
+                  </span>
+                </label>
+
+                {delayPublish ? (
+                  <div style={{ marginTop: 12, maxWidth: 420 }}>
+                    <label>Дата и время публикации</label>
+                    <input
+                      style={styles.input}
+                      type="datetime-local"
+                      value={publishAtLocal}
+                      onChange={(e) => setPublishAtLocal(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 12, ...styles.muted }}>
+                    Результаты можно будет публиковать вручную после завершения голосования.
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", alignItems: "center" }}>
@@ -325,7 +421,8 @@ export function ElectionRulesPage() {
                     checked={showAggregates}
                     onChange={(e) => setShowAggregates(e.target.checked)}
                   />
-                  show_aggregates
+                  Показывать агрегированные данные
+                  <Hint text="Определяет, будут ли в опубликованных результатах показаны агрегированные метрики и сводные значения." />
                 </label>
               </div>
             </div>
@@ -335,7 +432,7 @@ export function ElectionRulesPage() {
             {ballotFormat === "approval" ? (
               <div style={styles.grid2}>
                 <div>
-                  <label>approval_max_choices</label>
+                  <label>Максимум отметок</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -348,18 +445,34 @@ export function ElectionRulesPage() {
               </div>
             ) : null}
 
+
             {ballotFormat === "ranking" ? (
-              <div style={styles.grid2}>
+              <div style={{ display: "grid", gap: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={limitRankingTopK}
+                    onChange={(e) => setLimitRankingTopK(e.target.checked)}
+                  />
+                  <span>
+                    Ограничить ранжирование top-k
+                    <Hint text="Если включено, избиратель сможет выбрать только первые k позиций." />
+                  </span>
+                </label>
+
                 <div>
-                  <label>ranking_top_k</label>
                   <input
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={item.candidates.length}
-                    value={rankingTopK}
-                    onChange={(e) => setRankingTopK(Number(e.target.value))}
+                    disabled={!limitRankingTopK}
+                    value={rankingTopKInput}
+                    onChange={(e) => setRankingTopKInput(e.target.value)}
+                    onBlur={() => setRankingTopKInput(String(normalizedTopK()))}
                   />
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    Максимально допустимое значение: {item.candidates.length}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -367,7 +480,7 @@ export function ElectionRulesPage() {
             {ballotFormat === "score" ? (
               <div style={styles.grid2}>
                 <div>
-                  <label>score_min</label>
+                  <label>Нижняя граница оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -377,7 +490,7 @@ export function ElectionRulesPage() {
                 </div>
 
                 <div>
-                  <label>score_max</label>
+                  <label>Верхняя граница оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -387,7 +500,7 @@ export function ElectionRulesPage() {
                 </div>
 
                 <div>
-                  <label>score_step</label>
+                  <label>Шаг оценки</label>
                   <input
                     style={styles.input}
                     type="number"
@@ -404,7 +517,7 @@ export function ElectionRulesPage() {
                       checked={scoreAllowSkip}
                       onChange={(e) => setScoreAllowSkip(e.target.checked)}
                     />
-                    score_allow_skip
+                    Разрешить пропуск оценки
                   </label>
                 </div>
               </div>

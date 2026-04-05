@@ -1,5 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useNotifications } from "../../app/notifications";
+import { useI18n } from "../../app/i18n";
 import { Badge } from "../../shared/ui/Badge";
 import { styles } from "../../shared/ui/styles";
 
@@ -17,33 +19,49 @@ function kindStyle(kind: string): React.CSSProperties {
 }
 
 export function NotificationsPage() {
+  const { t } = useI18n();
   const { items, unreadCount, markRead, markAllRead, removeNotification, clearAll } = useNotifications();
-
-  useEffect(() => {
-    if (unreadCount > 0) {
-      markAllRead();
-    }
-  }, [unreadCount, markAllRead]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-          <h2 style={{ margin: 0 }}>Уведомления</h2>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 10,
+            alignItems: "baseline",
+            flexWrap: "wrap",
+          }}
+        >
+          <h2 style={{ margin: 0 }}>{t("notifications.title")}</h2>
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Badge text={`count: ${items.length}`} />
-            <button style={styles.btn} onClick={markAllRead}>
-              Отметить все как прочитанные
+            <Badge text={`${t("notifications.total")}: ${items.length}`} />
+            <Badge text={`${t("notifications.unread")}: ${unreadCount}`} />
+
+            <button
+              style={styles.btn}
+              onClick={markAllRead}
+              disabled={unreadCount === 0}
+            >
+              {t("notifications.markAllRead")}
             </button>
-            <button style={styles.btnDanger} onClick={clearAll}>
-              Очистить всё
+
+            <button
+              style={styles.btnDanger}
+              onClick={clearAll}
+              disabled={items.length === 0}
+            >
+              {t("notifications.clearAll")}
             </button>
           </div>
         </div>
 
         <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           {items.length === 0 ? (
-            <div style={styles.muted}>Список уведомлений пуст</div>
+            <div style={styles.muted}>{t("notifications.empty")}</div>
           ) : (
             items.map((item) => (
               <div
@@ -55,22 +73,66 @@ export function NotificationsPage() {
                   opacity: item.read ? 0.9 : 1,
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                  <div>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ minWidth: 260, flex: 1 }}>
                     <div style={{ fontWeight: 700 }}>{item.title}</div>
                     <div style={styles.muted}>{item.message}</div>
-                    <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>{item.created_at}</div>
+
+                    {item.details ? (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          style={styles.btn}
+                          onClick={() =>
+                            setExpanded((prev) => ({ ...prev, [item.id]: !prev[item.id] }))
+                          }
+                        >
+                          {expanded[item.id] ? "Скрыть детали" : "Показать детали"}
+                        </button>
+
+                        {expanded[item.id] ? (
+                          <div style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+                            {item.details}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
+                      {item.created_at}
+                    </div>
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "end" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                      alignItems: "end",
+                    }}
+                  >
                     <Badge text={item.kind} />
+
                     {!item.read ? (
                       <button style={styles.btn} onClick={() => markRead(item.id)}>
-                        Прочитать
+                        {t("notifications.read")}
                       </button>
                     ) : null}
+
+                    {item.action_label && item.action_to ? (
+                      <Link to={item.action_to} style={{ textDecoration: "none" }}>
+                        <button style={styles.btn}>{item.action_label}</button>
+                      </Link>
+                    ) : null}
+
                     <button style={styles.btnDanger} onClick={() => removeNotification(item.id)}>
-                      Удалить
+                      {t("notifications.delete")}
                     </button>
                   </div>
                 </div>

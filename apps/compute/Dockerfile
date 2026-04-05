@@ -14,9 +14,16 @@ RUN cargo build --release
 # ---- runtime ----
 
 FROM debian:bookworm-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-COPY --from=builder /app/target/release/compute-service .
+RUN mkdir -p /app/compute-service
+
+COPY --from=builder /app/target/release/compute-service /usr/local/bin/compute-service
 
 EXPOSE 50051
-CMD ["./compute-service"]
+CMD ["/usr/local/bin/compute-service"]

@@ -377,7 +377,6 @@ func TestListInvites_NotFound_MapsTo404(t *testing.T) {
 	}
 }
 
-
 func TestCreate_Success_ReturnsID(t *testing.T) {
 	svc := newBaseFakeSvc()
 	svc.createFn = func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
@@ -594,10 +593,10 @@ func TestListInvites_Success_ReturnsItemsArray(t *testing.T) {
 	svc.listInvFn = func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error) {
 		return []elections.Invite{
 			{
-				ID:         "33333333-3333-3333-3333-333333333333",
-				Email:      "first@example.com",
-				Status:     "created",
-				CreatedAt:  "2026-03-12T10:00:00Z",
+				ID:        "33333333-3333-3333-3333-333333333333",
+				Email:     "first@example.com",
+				Status:    "created",
+				CreatedAt: "2026-03-12T10:00:00Z",
 			},
 			{
 				ID:         "44444444-4444-4444-4444-444444444444",
@@ -665,7 +664,6 @@ func TestListInvites_Success_ReturnsItemsArray(t *testing.T) {
 		t.Fatalf("unexpected second accepted_at: %q", resp.Items[1].AcceptedAt)
 	}
 }
-
 
 func TestListInvites_EmptySlice_ReturnsItemsArray(t *testing.T) {
 	svc := newBaseFakeSvc()

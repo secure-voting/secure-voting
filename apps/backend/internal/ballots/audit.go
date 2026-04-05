@@ -3,11 +3,9 @@ package ballots
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/jackc/pgx/v5"
 )
 
-func insertAuditTx(ctx context.Context, tx pgx.Tx, actorUserID, eventType string, details map[string]any) error {
+func insertAuditTx(ctx context.Context, tx txLike, actorUserID, eventType string, details map[string]any) error {
 	if details == nil {
 		details = map[string]any{}
 	}
@@ -17,7 +15,7 @@ func insertAuditTx(ctx context.Context, tx pgx.Tx, actorUserID, eventType string
 	}
 	_, err = tx.Exec(ctx,
 		`INSERT INTO audit_log (actor_user_id, event_type, details)
-		 VALUES ($1::uuid, $2, $3::jsonb)`,
+                 VALUES ($1::uuid, $2, $3::jsonb)`,
 		actorUserID, eventType, string(b),
 	)
 	return err

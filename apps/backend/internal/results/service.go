@@ -38,7 +38,7 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 	var eStatus, accessMode, createdBy string
 	var showAggregates bool
 
-	err := s.db.QueryRow(ctx, `
+	err := resultQueryRowFn(ctx, s.db, `
 		SELECT status, access_mode, show_aggregates, created_by::text
 		FROM elections
 		WHERE id=$1::uuid
@@ -62,7 +62,7 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 			accessible = true
 		case "invite":
 			var x int
-			err := s.db.QueryRow(ctx, `
+			err := resultQueryRowFn(ctx, s.db, `
 				SELECT 1
 				FROM election_invites
 				WHERE election_id=$1::uuid
@@ -96,7 +96,7 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 	var params, winners, metrics, protocol []byte
 	var publishedAt *time.Time
 
-	err = s.db.QueryRow(ctx, `
+	err = resultQueryRowFn(ctx, s.db, `
 		SELECT version, method, COALESCE(params,'{}'::jsonb), winners,
 		       COALESCE(metrics,'null'::jsonb), COALESCE(protocol,'null'::jsonb), published_at
 		FROM results
@@ -104,7 +104,6 @@ func (s *Service) Get(ctx context.Context, electionID, role, userID, email strin
 		ORDER BY version DESC
 		LIMIT 1
 	`, electionID).Scan(&r.Version, &r.Method, &params, &winners, &metrics, &protocol, &publishedAt)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ResultResp{}, "no_results", nil

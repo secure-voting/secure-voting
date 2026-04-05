@@ -276,12 +276,12 @@ func createElectionAsAdmin(t *testing.T, env *integrationEnv, token, accessMode 
 	now := time.Now().UTC()
 
 	status, data, raw := doJSONRequest(t, env.client, http.MethodPost, env.server.URL+"/api/v1/elections", token, map[string]any{
-		"title":         "Integration election",
-		"description":   "integration-test",
-		"start_at":      now.Add(1 * time.Hour).Format(time.RFC3339),
-		"end_at":        now.Add(2 * time.Hour).Format(time.RFC3339),
-		"tally_rule":    "borda",
-		"ballot_format": "ranking",
+		"title":          "Integration election",
+		"description":    "integration-test",
+		"start_at":       now.Add(1 * time.Hour).Format(time.RFC3339),
+		"end_at":         now.Add(2 * time.Hour).Format(time.RFC3339),
+		"tally_rule":     "borda",
+		"ballot_format":  "ranking",
 		"committee_size": 1,
 		"ranking_top_k":  2,
 		"access_mode":    accessMode,

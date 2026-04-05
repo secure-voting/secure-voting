@@ -9,7 +9,9 @@ import (
 	"secure-voting/apps/backend/internal/worker"
 )
 
-const resultKind = "experiment_run_result"
+const (
+	resultKind = "experiment_run_result"
+)
 
 func anySliceToStringSlice(in []any) []string {
 	if len(in) == 0 {
@@ -111,5 +113,73 @@ func makeDoneResult(runID string, winners []string, metrics, timings, artifacts 
 		Metrics:   metrics,
 		Timings:   timings,
 		Artifacts: artifacts,
+	}
+}
+
+func makeElectionErrorResult(task worker.ElectionTallyTask, errText string) worker.ElectionTallyResult {
+	errText = strings.TrimSpace(errText)
+	if errText == "" {
+		errText = "error"
+	}
+
+	return worker.ElectionTallyResult{
+		Kind:       "election_tally_result",
+		JobID:      strings.TrimSpace(task.JobID),
+		ElectionID: strings.TrimSpace(task.ElectionID),
+		Status:     "error",
+		ErrorText:  errText,
+		Method:     normalizeComputeTallyRule(task.TallyRule),
+		TallyRule:  normalizeComputeTallyRule(task.TallyRule),
+	}
+}
+
+func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, metrics, timings, artifacts map[string]any) worker.ElectionTallyResult {
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
+	if timings == nil {
+		timings = map[string]any{}
+	}
+	if artifacts == nil {
+		artifacts = map[string]any{}
+	}
+
+	protocol := map[string]any{}
+	if rawProtocol, ok := artifacts["protocol"]; ok && rawProtocol != nil {
+		if p, ok := rawProtocol.(map[string]any); ok {
+			protocol = p
+		} else {
+			protocol["raw"] = rawProtocol
+		}
+	}
+
+	params := map[string]any{
+		"ballot_format": "ranking",
+		"tally_rule":    normalizeComputeTallyRule(task.TallyRule),
+	}
+	if task.CommitteeSize != nil {
+		params["committee_size"] = *task.CommitteeSize
+	}
+	if task.QuotaType != nil {
+		params["quota_type"] = *task.QuotaType
+	}
+	if task.RankingTopK != nil {
+		params["ranking_top_k"] = *task.RankingTopK
+	}
+	params["show_aggregates"] = task.ShowAggregates
+
+	return worker.ElectionTallyResult{
+		Kind:       "election_tally_result",
+		JobID:      strings.TrimSpace(task.JobID),
+		ElectionID: strings.TrimSpace(task.ElectionID),
+		Status:     "done",
+		Method:     normalizeComputeTallyRule(task.TallyRule),
+		TallyRule:  normalizeComputeTallyRule(task.TallyRule),
+		Params:     params,
+		Winners:    winners,
+		Metrics:    metrics,
+		Protocol:   protocol,
+		Timings:    timings,
+		Artifacts:  artifacts,
 	}
 }

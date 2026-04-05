@@ -22,12 +22,23 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	var status string
+	var tallyRule string
+	var ballotFormat string
+	var committeeSize *int
+	var rankingTopK *int
+
 	err = tx.QueryRow(ctx, `
-		SELECT status
+		SELECT status, tally_rule, ballot_format, committee_size, ranking_top_k
 		FROM elections
-		WHERE id=$1::uuid AND created_by=$2::uuid
+		WHERE id = $1::uuid AND created_by = $2::uuid
 		FOR UPDATE
-	`, electionID, adminUserID).Scan(&status)
+	`, electionID, adminUserID).Scan(
+		&status,
+		&tallyRule,
+		&ballotFormat,
+		&committeeSize,
+		&rankingTopK,
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "not_found", nil
@@ -35,16 +46,50 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		return "", err
 	}
 
-	next, ok := nextStatus(status, action)
-	if !ok {
-		return "invalid_transition", nil
+	var next string
+	if action == "open" {
+		if !canOpenElection(status) {
+			return "invalid_transition", nil
+		}
+
+		var candidateCount int
+		err = tx.QueryRow(ctx, `
+			SELECT count(*)
+			FROM candidates
+			WHERE election_id = $1::uuid
+		`, electionID).Scan(&candidateCount)
+		if err != nil {
+			return "", err
+		}
+
+		if err := validateElectionReadyToOpen(
+			tallyRule,
+			ballotFormat,
+			committeeSize,
+			rankingTopK,
+			candidateCount,
+		); err != nil {
+			return actionValidationCode(err), nil
+		}
+
+		next = "active"
+	} else {
+		var ok bool
+		next, ok = nextStatus(status, action)
+		if !ok {
+			return "invalid_transition", nil
+		}
 	}
 
 	now := time.Now().UTC()
 
 	switch action {
 	case "close":
-		_, err = tx.Exec(ctx, `UPDATE elections SET status=$2 WHERE id=$1::uuid`, electionID, next)
+		_, err = tx.Exec(ctx, `
+			UPDATE elections
+			SET status = $2
+			WHERE id = $1::uuid
+		`, electionID, next)
 		if err != nil {
 			return "", err
 		}
@@ -64,7 +109,11 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		}
 
 	case "publish":
-		_, err = tx.Exec(ctx, `UPDATE elections SET status=$2, published_at=$3 WHERE id=$1::uuid`, electionID, next, now)
+		_, err = tx.Exec(ctx, `
+			UPDATE elections
+			SET status = $2, published_at = $3
+			WHERE id = $1::uuid
+		`, electionID, next, now)
 		if err != nil {
 			return "", err
 		}
@@ -90,7 +139,11 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		}
 
 	default:
-		_, err = tx.Exec(ctx, `UPDATE elections SET status=$2 WHERE id=$1::uuid`, electionID, next)
+		_, err = tx.Exec(ctx, `
+			UPDATE elections
+			SET status = $2
+			WHERE id = $1::uuid
+		`, electionID, next)
 		if err != nil {
 			return "", err
 		}
@@ -132,4 +185,44 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 	}
 
 	return "", tx.Commit(ctx)
+}
+
+func validateElectionReadyToOpen(
+	rule string,
+	ballotFormat string,
+	committeeSize *int,
+	rankingTopK *int,
+	candidateCount int,
+) error {
+	if candidateCount < 2 {
+		return errors.New("at least 2 candidates required")
+	}
+
+	if _, err := normalizeCommitteeSize(rule, committeeSize, candidateCount); err != nil {
+		return err
+	}
+
+	if _, err := normalizeRankingTopK(ballotFormat, rankingTopK, candidateCount); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func actionValidationCode(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	if code := candidateNormalizationCode(err); code != "" && code != "invalid_candidates" {
+		return code
+	}
+	if code := committeeSizeCode(err); code != "" {
+		return code
+	}
+	if code := rankingTopKCode(err); code != "" {
+		return code
+	}
+
+	return "invalid_configuration"
 }
