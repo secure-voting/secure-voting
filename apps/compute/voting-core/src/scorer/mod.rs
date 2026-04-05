@@ -14,6 +14,7 @@ pub mod copeland;
 pub mod minmax;
 pub mod plurality;
 pub mod simpson;
+pub mod threshold;
 
 pub mod zip;
 

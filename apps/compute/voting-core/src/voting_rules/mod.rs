@@ -24,6 +24,7 @@ pub mod plurality;
 pub mod practical_condorcet;
 pub mod q_paretian;
 pub mod simpson;
+pub mod threshold;
 
 /// Trait for all the voting rules, simple and complex ones.
 pub trait VotingRuleExec<Ballot> {

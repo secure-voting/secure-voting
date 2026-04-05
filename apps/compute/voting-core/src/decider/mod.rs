@@ -9,6 +9,7 @@ use crate::{models::candidate_id::CandidateId, scorer::Score};
 pub mod condorcet;
 pub mod maxscore;
 pub mod minscore;
+pub mod threshold;
 
 /// Chooses a winner or a set of winners from computed scores.
 pub trait Decider {
