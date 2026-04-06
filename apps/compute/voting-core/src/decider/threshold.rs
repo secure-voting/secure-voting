@@ -25,7 +25,7 @@ impl Decider for ThresholdDecider {
                     winners.push(*candidate);
                 }
                 Some(best_vec) => match score_vec.cmp(best_vec) {
-                    std::cmp::Ordering::Less => {
+                    std::cmp::Ordering::Greater => {
                         best = Some(score_vec);
                         winners.clear();
                         winners.push(*candidate);
@@ -33,7 +33,7 @@ impl Decider for ThresholdDecider {
                     std::cmp::Ordering::Equal => {
                         winners.push(*candidate);
                     }
-                    std::cmp::Ordering::Greater => {}
+                    std::cmp::Ordering::Less => {}
                 },
             }
         }
@@ -43,5 +43,25 @@ impl Decider for ThresholdDecider {
 
     fn new() -> Self {
         Self {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn threshold_correct() {
+        let scores = Score::new(
+            vec![vec![2, 1], vec![0, 1], vec![1, 1]],
+            &[
+                CandidateId::new(0),
+                CandidateId::new(1),
+                CandidateId::new(2),
+            ],
+        );
+
+        let decider = ThresholdDecider;
+        assert_eq!(decider.decide(&scores).unwrap(), vec![CandidateId::new(0)]);
     }
 }
