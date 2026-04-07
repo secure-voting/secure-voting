@@ -18,11 +18,14 @@ type Worker struct {
 	kw *kafka.Writer
 	kr *kafka.Reader
 
-	pollInterval time.Duration
+	pollInterval     time.Duration
+	scheduleInterval time.Duration
+	nextScheduleAt   time.Time
 }
 
 type Config struct {
-	PollInterval time.Duration
+	PollInterval     time.Duration
+	ScheduleInterval time.Duration
 
 	TasksTopic   string
 	ResultsTopic string
@@ -39,13 +42,19 @@ func New(db *pgxpool.Pool, mdb *mongo.Database, cfg Config) *Worker {
 		pi = 1 * time.Second
 	}
 
+	si := cfg.ScheduleInterval
+	if si <= 0 {
+		si = 5 * time.Second
+	}
+
 	return &Worker{
-		db:           db,
-		mdb:          mdb,
-		runner:       jobs.NewRunner(db),
-		kw:           kw,
-		kr:           kr,
-		pollInterval: pi,
+		db:               db,
+		mdb:              mdb,
+		runner:           jobs.NewRunner(db),
+		kw:               kw,
+		kr:               kr,
+		pollInterval:     pi,
+		scheduleInterval: si,
 	}
 }
 

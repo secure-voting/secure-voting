@@ -39,11 +39,12 @@ func run() error {
 	mdb := mc.Database(cfg.MongoDBName)
 
 	w := worker.New(pg, mdb, worker.Config{
-		PollInterval: cfg.WorkerPollInterval,
-		TasksTopic:   cfg.KafkaTasksTopic,
-		ResultsTopic: cfg.KafkaResultsTopic,
-		GroupID:      cfg.KafkaGroupID,
-		Brokers:      cfg.KafkaBrokers,
+		PollInterval:     cfg.WorkerPollInterval,
+		ScheduleInterval: cfg.WorkerScheduleInterval,
+		TasksTopic:       cfg.KafkaTasksTopic,
+		ResultsTopic:     cfg.KafkaResultsTopic,
+		GroupID:          cfg.KafkaGroupID,
+		Brokers:          cfg.KafkaBrokers,
 	})
 	defer w.Close()
 
@@ -55,8 +56,15 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("worker started: poll=%s brokers=%v tasks=%s results=%s group=%s",
-			cfg.WorkerPollInterval, cfg.KafkaBrokers, cfg.KafkaTasksTopic, cfg.KafkaResultsTopic, cfg.KafkaGroupID)
+		log.Printf(
+			"worker started: poll=%s schedule=%s brokers=%v tasks=%s results=%s group=%s",
+			cfg.WorkerPollInterval,
+			cfg.WorkerScheduleInterval,
+			cfg.KafkaBrokers,
+			cfg.KafkaTasksTopic,
+			cfg.KafkaResultsTopic,
+			cfg.KafkaGroupID,
+		)
 		errCh <- w.Run(ctx)
 	}()
 

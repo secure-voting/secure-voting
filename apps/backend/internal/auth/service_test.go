@@ -476,3 +476,142 @@ func TestLogout(t *testing.T) {
 		t.Fatalf("unexpected success logout result: %v %v", ok, err)
 	}
 }
+
+
+func TestChangePasswordValidation(t *testing.T) {
+	svc := NewService(nil, time.Hour)
+
+	code, err := svc.ChangePassword(context.Background(), "", "old-pass", "new-pass-123")
+	if err != nil || code != "unauthorized" {
+		t.Fatalf("unexpected unauthorized result: %q %v", code, err)
+	}
+
+	code, err = svc.ChangePassword(context.Background(), "u1", "", "new-pass-123")
+	if err != nil || code != "invalid_current_password" {
+		t.Fatalf("unexpected current password result: %q %v", code, err)
+	}
+
+	code, err = svc.ChangePassword(context.Background(), "u1", "old-pass", "123")
+	if err != nil || code != "invalid_password" {
+		t.Fatalf("unexpected invalid password result: %q %v", code, err)
+	}
+}
+
+func TestChangePasswordSuccessAndErrors(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("old-pass-123"), 12)
+	if err != nil {
+		t.Fatalf("bcrypt old hash error: %v", err)
+	}
+
+	t.Run("user not found", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error { return pgx.ErrNoRows }}
+				},
+			}, nil
+		}
+
+		svc := NewService(nil, time.Hour)
+		code, err := svc.ChangePassword(context.Background(), "u1", "old-pass-123", "new-pass-456")
+		if err != nil || code != "unauthorized" {
+			t.Fatalf("unexpected not found result: %q %v", code, err)
+		}
+	})
+
+	t.Run("invalid current password", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = string(oldHash)
+						return nil
+					}}
+				},
+			}, nil
+		}
+
+		svc := NewService(nil, time.Hour)
+		code, err := svc.ChangePassword(context.Background(), "u1", "wrong-pass", "new-pass-456")
+		if err != nil || code != "invalid_current_password" {
+			t.Fatalf("unexpected invalid current password result: %q %v", code, err)
+		}
+	})
+
+	t.Run("password unchanged", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = string(oldHash)
+						return nil
+					}}
+				},
+			}, nil
+		}
+
+		svc := NewService(nil, time.Hour)
+		code, err := svc.ChangePassword(context.Background(), "u1", "old-pass-123", "old-pass-123")
+		if err != nil || code != "password_unchanged" {
+			t.Fatalf("unexpected unchanged result: %q %v", code, err)
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = string(oldHash)
+						return nil
+					}}
+				},
+				execFn: func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+					if strings.Contains(sql, "UPDATE users") {
+						return pgconn.CommandTag{}, errors.New("update boom")
+					}
+					return pgconn.NewCommandTag("INSERT 0 1"), nil
+				},
+			}, nil
+		}
+
+		svc := NewService(nil, time.Hour)
+		code, err := svc.ChangePassword(context.Background(), "u1", "old-pass-123", "new-pass-456")
+		if err == nil || code != "" || !strings.Contains(err.Error(), "update boom") {
+			t.Fatalf("unexpected update error result: %q %v", code, err)
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		committed := false
+
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = string(oldHash)
+						return nil
+					}}
+				},
+				execFn: func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+					return pgconn.NewCommandTag("UPDATE 1"), nil
+				},
+				commitFn: func(ctx context.Context) error {
+					committed = true
+					return nil
+				},
+			}, nil
+		}
+
+		svc := NewService(nil, time.Hour)
+		code, err := svc.ChangePassword(context.Background(), "u1", "old-pass-123", "new-pass-456")
+		if err != nil || code != "" {
+			t.Fatalf("unexpected success result: %q %v", code, err)
+		}
+		if !committed {
+			t.Fatal("expected commit")
+		}
+	})
+}

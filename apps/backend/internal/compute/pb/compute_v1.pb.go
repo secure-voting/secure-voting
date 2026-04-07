@@ -7,6 +7,7 @@
 package pb
 
 import (
+	empty "github.com/golang/protobuf/ptypes/empty"
 	wrappers "github.com/golang/protobuf/ptypes/wrappers"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -778,11 +779,171 @@ func (x *RunResult) GetArtifactsJson() []byte {
 	return nil
 }
 
+type TallyRuleInfo struct {
+	state                      protoimpl.MessageState `protogen:"open.v1"`
+	Id                         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Label                      string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	BallotFormats              []string               `protobuf:"bytes,3,rep,name=ballot_formats,json=ballotFormats,proto3" json:"ballot_formats,omitempty"`
+	SupportsElectionTally      bool                   `protobuf:"varint,4,opt,name=supports_election_tally,json=supportsElectionTally,proto3" json:"supports_election_tally,omitempty"`
+	SupportsExperimentRuns     bool                   `protobuf:"varint,5,opt,name=supports_experiment_runs,json=supportsExperimentRuns,proto3" json:"supports_experiment_runs,omitempty"`
+	RequiresCommitteeSize      bool                   `protobuf:"varint,6,opt,name=requires_committee_size,json=requiresCommitteeSize,proto3" json:"requires_committee_size,omitempty"`
+	SupportsQuotaType          bool                   `protobuf:"varint,7,opt,name=supports_quota_type,json=supportsQuotaType,proto3" json:"supports_quota_type,omitempty"`
+	RequiresApprovalMaxChoices bool                   `protobuf:"varint,8,opt,name=requires_approval_max_choices,json=requiresApprovalMaxChoices,proto3" json:"requires_approval_max_choices,omitempty"`
+	SupportsRankingTopK        bool                   `protobuf:"varint,9,opt,name=supports_ranking_top_k,json=supportsRankingTopK,proto3" json:"supports_ranking_top_k,omitempty"`
+	RequiresScoreRange         bool                   `protobuf:"varint,10,opt,name=requires_score_range,json=requiresScoreRange,proto3" json:"requires_score_range,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
+}
+
+func (x *TallyRuleInfo) Reset() {
+	*x = TallyRuleInfo{}
+	mi := &file_compute_v1_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TallyRuleInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TallyRuleInfo) ProtoMessage() {}
+
+func (x *TallyRuleInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_compute_v1_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TallyRuleInfo.ProtoReflect.Descriptor instead.
+func (*TallyRuleInfo) Descriptor() ([]byte, []int) {
+	return file_compute_v1_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *TallyRuleInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TallyRuleInfo) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *TallyRuleInfo) GetBallotFormats() []string {
+	if x != nil {
+		return x.BallotFormats
+	}
+	return nil
+}
+
+func (x *TallyRuleInfo) GetSupportsElectionTally() bool {
+	if x != nil {
+		return x.SupportsElectionTally
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetSupportsExperimentRuns() bool {
+	if x != nil {
+		return x.SupportsExperimentRuns
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetRequiresCommitteeSize() bool {
+	if x != nil {
+		return x.RequiresCommitteeSize
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetSupportsQuotaType() bool {
+	if x != nil {
+		return x.SupportsQuotaType
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetRequiresApprovalMaxChoices() bool {
+	if x != nil {
+		return x.RequiresApprovalMaxChoices
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetSupportsRankingTopK() bool {
+	if x != nil {
+		return x.SupportsRankingTopK
+	}
+	return false
+}
+
+func (x *TallyRuleInfo) GetRequiresScoreRange() bool {
+	if x != nil {
+		return x.RequiresScoreRange
+	}
+	return false
+}
+
+type ListTallyRulesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Rules         []*TallyRuleInfo       `protobuf:"bytes,1,rep,name=rules,proto3" json:"rules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListTallyRulesResponse) Reset() {
+	*x = ListTallyRulesResponse{}
+	mi := &file_compute_v1_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListTallyRulesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListTallyRulesResponse) ProtoMessage() {}
+
+func (x *ListTallyRulesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_compute_v1_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListTallyRulesResponse.ProtoReflect.Descriptor instead.
+func (*ListTallyRulesResponse) Descriptor() ([]byte, []int) {
+	return file_compute_v1_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListTallyRulesResponse) GetRules() []*TallyRuleInfo {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
 var File_compute_v1_proto protoreflect.FileDescriptor
 
 const file_compute_v1_proto_rawDesc = "" +
 	"\n" +
-	"\x10compute_v1.proto\x12\x17securevoting.compute.v1\x1a\x1egoogle/protobuf/wrappers.proto\"/\n" +
+	"\x10compute_v1.proto\x12\x17securevoting.compute.v1\x1a\x1egoogle/protobuf/wrappers.proto\x1a\x1bgoogle/protobuf/empty.proto\"/\n" +
 	"\tCandidate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x90\a\n" +
@@ -847,9 +1008,24 @@ const file_compute_v1_proto_rawDesc = "" +
 	"\fmetrics_json\x18\x06 \x01(\fR\vmetricsJson\x12#\n" +
 	"\rprotocol_json\x18\a \x01(\fR\fprotocolJson\x12!\n" +
 	"\ftimings_json\x18\b \x01(\fR\vtimingsJson\x12%\n" +
-	"\x0eartifacts_json\x18\t \x01(\fR\rartifactsJson2Y\n" +
+	"\x0eartifacts_json\x18\t \x01(\fR\rartifactsJson\"\xe0\x03\n" +
+	"\rTallyRuleInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12%\n" +
+	"\x0eballot_formats\x18\x03 \x03(\tR\rballotFormats\x126\n" +
+	"\x17supports_election_tally\x18\x04 \x01(\bR\x15supportsElectionTally\x128\n" +
+	"\x18supports_experiment_runs\x18\x05 \x01(\bR\x16supportsExperimentRuns\x126\n" +
+	"\x17requires_committee_size\x18\x06 \x01(\bR\x15requiresCommitteeSize\x12.\n" +
+	"\x13supports_quota_type\x18\a \x01(\bR\x11supportsQuotaType\x12A\n" +
+	"\x1drequires_approval_max_choices\x18\b \x01(\bR\x1arequiresApprovalMaxChoices\x123\n" +
+	"\x16supports_ranking_top_k\x18\t \x01(\bR\x13supportsRankingTopK\x120\n" +
+	"\x14requires_score_range\x18\n" +
+	" \x01(\bR\x12requiresScoreRange\"V\n" +
+	"\x16ListTallyRulesResponse\x12<\n" +
+	"\x05rules\x18\x01 \x03(\v2&.securevoting.compute.v1.TallyRuleInfoR\x05rules2\xb4\x01\n" +
 	"\aCompute\x12N\n" +
-	"\x03Run\x12!.securevoting.compute.v1.RunChunk\x1a\".securevoting.compute.v1.RunResult(\x01B3Z1secure-voting/apps/backend/internal/compute/pb;pbb\x06proto3"
+	"\x03Run\x12!.securevoting.compute.v1.RunChunk\x1a\".securevoting.compute.v1.RunResult(\x01\x12Y\n" +
+	"\x0eListTallyRules\x12\x16.google.protobuf.Empty\x1a/.securevoting.compute.v1.ListTallyRulesResponseB3Z1secure-voting/apps/backend/internal/compute/pb;pbb\x06proto3"
 
 var (
 	file_compute_v1_proto_rawDescOnce sync.Once
@@ -863,33 +1039,36 @@ func file_compute_v1_proto_rawDescGZIP() []byte {
 	return file_compute_v1_proto_rawDescData
 }
 
-var file_compute_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_compute_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_compute_v1_proto_goTypes = []any{
-	(*Candidate)(nil),            // 0: securevoting.compute.v1.Candidate
-	(*RunHeader)(nil),            // 1: securevoting.compute.v1.RunHeader
-	(*ApprovalBallot)(nil),       // 2: securevoting.compute.v1.ApprovalBallot
-	(*RankingBallot)(nil),        // 3: securevoting.compute.v1.RankingBallot
-	(*ScoreEntry)(nil),           // 4: securevoting.compute.v1.ScoreEntry
-	(*ScoreBallot)(nil),          // 5: securevoting.compute.v1.ScoreBallot
-	(*Ballot)(nil),               // 6: securevoting.compute.v1.Ballot
-	(*BallotBatch)(nil),          // 7: securevoting.compute.v1.BallotBatch
-	(*RunChunk)(nil),             // 8: securevoting.compute.v1.RunChunk
-	(*RunResult)(nil),            // 9: securevoting.compute.v1.RunResult
-	(*wrappers.Int32Value)(nil),  // 10: google.protobuf.Int32Value
-	(*wrappers.StringValue)(nil), // 11: google.protobuf.StringValue
-	(*wrappers.BoolValue)(nil),   // 12: google.protobuf.BoolValue
+	(*Candidate)(nil),              // 0: securevoting.compute.v1.Candidate
+	(*RunHeader)(nil),              // 1: securevoting.compute.v1.RunHeader
+	(*ApprovalBallot)(nil),         // 2: securevoting.compute.v1.ApprovalBallot
+	(*RankingBallot)(nil),          // 3: securevoting.compute.v1.RankingBallot
+	(*ScoreEntry)(nil),             // 4: securevoting.compute.v1.ScoreEntry
+	(*ScoreBallot)(nil),            // 5: securevoting.compute.v1.ScoreBallot
+	(*Ballot)(nil),                 // 6: securevoting.compute.v1.Ballot
+	(*BallotBatch)(nil),            // 7: securevoting.compute.v1.BallotBatch
+	(*RunChunk)(nil),               // 8: securevoting.compute.v1.RunChunk
+	(*RunResult)(nil),              // 9: securevoting.compute.v1.RunResult
+	(*TallyRuleInfo)(nil),          // 10: securevoting.compute.v1.TallyRuleInfo
+	(*ListTallyRulesResponse)(nil), // 11: securevoting.compute.v1.ListTallyRulesResponse
+	(*wrappers.Int32Value)(nil),    // 12: google.protobuf.Int32Value
+	(*wrappers.StringValue)(nil),   // 13: google.protobuf.StringValue
+	(*wrappers.BoolValue)(nil),     // 14: google.protobuf.BoolValue
+	(*empty.Empty)(nil),            // 15: google.protobuf.Empty
 }
 var file_compute_v1_proto_depIdxs = []int32{
-	10, // 0: securevoting.compute.v1.RunHeader.committee_size:type_name -> google.protobuf.Int32Value
-	11, // 1: securevoting.compute.v1.RunHeader.quota_type:type_name -> google.protobuf.StringValue
-	10, // 2: securevoting.compute.v1.RunHeader.approval_max_choices:type_name -> google.protobuf.Int32Value
-	10, // 3: securevoting.compute.v1.RunHeader.ranking_top_k:type_name -> google.protobuf.Int32Value
-	10, // 4: securevoting.compute.v1.RunHeader.score_min:type_name -> google.protobuf.Int32Value
-	10, // 5: securevoting.compute.v1.RunHeader.score_max:type_name -> google.protobuf.Int32Value
-	10, // 6: securevoting.compute.v1.RunHeader.score_step:type_name -> google.protobuf.Int32Value
-	12, // 7: securevoting.compute.v1.RunHeader.score_allow_skip:type_name -> google.protobuf.BoolValue
+	12, // 0: securevoting.compute.v1.RunHeader.committee_size:type_name -> google.protobuf.Int32Value
+	13, // 1: securevoting.compute.v1.RunHeader.quota_type:type_name -> google.protobuf.StringValue
+	12, // 2: securevoting.compute.v1.RunHeader.approval_max_choices:type_name -> google.protobuf.Int32Value
+	12, // 3: securevoting.compute.v1.RunHeader.ranking_top_k:type_name -> google.protobuf.Int32Value
+	12, // 4: securevoting.compute.v1.RunHeader.score_min:type_name -> google.protobuf.Int32Value
+	12, // 5: securevoting.compute.v1.RunHeader.score_max:type_name -> google.protobuf.Int32Value
+	12, // 6: securevoting.compute.v1.RunHeader.score_step:type_name -> google.protobuf.Int32Value
+	14, // 7: securevoting.compute.v1.RunHeader.score_allow_skip:type_name -> google.protobuf.BoolValue
 	0,  // 8: securevoting.compute.v1.RunHeader.candidates:type_name -> securevoting.compute.v1.Candidate
-	12, // 9: securevoting.compute.v1.RunHeader.show_aggregates:type_name -> google.protobuf.BoolValue
+	14, // 9: securevoting.compute.v1.RunHeader.show_aggregates:type_name -> google.protobuf.BoolValue
 	4,  // 10: securevoting.compute.v1.ScoreBallot.scores:type_name -> securevoting.compute.v1.ScoreEntry
 	2,  // 11: securevoting.compute.v1.Ballot.approval:type_name -> securevoting.compute.v1.ApprovalBallot
 	3,  // 12: securevoting.compute.v1.Ballot.ranking:type_name -> securevoting.compute.v1.RankingBallot
@@ -897,13 +1076,16 @@ var file_compute_v1_proto_depIdxs = []int32{
 	6,  // 14: securevoting.compute.v1.BallotBatch.ballots:type_name -> securevoting.compute.v1.Ballot
 	1,  // 15: securevoting.compute.v1.RunChunk.header:type_name -> securevoting.compute.v1.RunHeader
 	7,  // 16: securevoting.compute.v1.RunChunk.batch:type_name -> securevoting.compute.v1.BallotBatch
-	8,  // 17: securevoting.compute.v1.Compute.Run:input_type -> securevoting.compute.v1.RunChunk
-	9,  // 18: securevoting.compute.v1.Compute.Run:output_type -> securevoting.compute.v1.RunResult
-	18, // [18:19] is the sub-list for method output_type
-	17, // [17:18] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	10, // 17: securevoting.compute.v1.ListTallyRulesResponse.rules:type_name -> securevoting.compute.v1.TallyRuleInfo
+	8,  // 18: securevoting.compute.v1.Compute.Run:input_type -> securevoting.compute.v1.RunChunk
+	15, // 19: securevoting.compute.v1.Compute.ListTallyRules:input_type -> google.protobuf.Empty
+	9,  // 20: securevoting.compute.v1.Compute.Run:output_type -> securevoting.compute.v1.RunResult
+	11, // 21: securevoting.compute.v1.Compute.ListTallyRules:output_type -> securevoting.compute.v1.ListTallyRulesResponse
+	20, // [20:22] is the sub-list for method output_type
+	18, // [18:20] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_compute_v1_proto_init() }
@@ -926,7 +1108,7 @@ func file_compute_v1_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_compute_v1_proto_rawDesc), len(file_compute_v1_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

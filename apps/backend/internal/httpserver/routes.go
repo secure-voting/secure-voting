@@ -19,6 +19,7 @@ func Routes(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mongo.D
 	registerBallotRoutes(r)
 	registerResultsRoutes(r)
 	registerResearchRoutes(r)
+	registerCapabilitiesRoutes(r)
 
 	return r.mux
 }

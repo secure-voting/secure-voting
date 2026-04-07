@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import { useAuth } from "../../app/auth";
@@ -7,7 +7,7 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
-import type { CandidateDraft, CandidatePayload } from "../../shared/api/types";
+import type { CandidateDraft, CandidatePayload, TallyRuleInfo } from "../../shared/api/types";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -19,24 +19,7 @@ const STEPS = [
   "Проверка",
 ] as const;
 
-const TALLY_RULES = [
-  { value: "plurality", label: "Plurality" },
-  { value: "approval", label: "Approval voting" },
-  { value: "inverse_plurality", label: "Inverse plurality" },
-  { value: "borda", label: "Borda" },
-  { value: "black", label: "Black" },
-  { value: "copeland_i", label: "Copeland I" },
-  { value: "copeland_ii", label: "Copeland II" },
-  { value: "copeland_iii", label: "Copeland III" },
-  { value: "simpson", label: "Simpson (Maxmin)" },
-  { value: "minmax", label: "Minmax" },
-  { value: "threshold", label: "Threshold" },
-  { value: "hare", label: "Hare" },
-  { value: "inverse_borda", label: "Inverse Borda" },
-  { value: "nanson", label: "Nanson" },
-  { value: "coombs", label: "Coombs" },
-  { value: "practical_condorcet", label: "Condorcet practical" },
-] as const;
+
 
 function toLocalInputValue(date: Date) {
   const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -123,6 +106,20 @@ function submitModeLabel(value: "draft" | "open" | "schedule") {
   return "Запланировать открытие";
 }
 
+function supportsBallotFormat(
+  rule: TallyRuleInfo | undefined,
+  format: "approval" | "ranking" | "score"
+) {
+  return Boolean(rule?.ballot_formats?.includes(format));
+}
+
+function selectedRuleInfo(
+  rules: TallyRuleInfo[],
+  ruleId: string
+) {
+  return rules.find((rule) => rule.id === ruleId);
+}
+
 function StepHeader({
   current,
   onGo,
@@ -168,6 +165,40 @@ function StepHeader({
 export function AdminCreateElectionPage() {
   const nav = useNavigate();
   const { token, setToken } = useAuth();
+
+  const [availableRules, setAvailableRules] = useState<TallyRuleInfo[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setRulesLoading(true);
+
+    api.capabilities
+      .tallyRules(token, ac.signal)
+      .then((items) => {
+        const electionRules = items.filter((item) => item.supports_election_tally);
+        setAvailableRules(electionRules);
+
+        if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {
+          setTallyRule(electionRules[0].id);
+        }
+      })
+      .catch((e: any) => {
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setErr((prev) => prev || "Не удалось загрузить список правил подсчёта");
+      })
+      .finally(() => {
+        setRulesLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
   const { addNotification } = useNotifications();
 
   const [step, setStep] = useState(0);
@@ -219,6 +250,58 @@ export function AdminCreateElectionPage() {
   const [rawResp, setRawResp] = useState<unknown>(null);
 
   const candidateCount = candidates.length;
+
+  const currentRule = useMemo(
+    () => selectedRuleInfo(availableRules, tallyRule),
+    [availableRules, tallyRule]
+  );
+
+  const allowedBallotFormats = useMemo(
+    () =>
+      (currentRule?.ballot_formats ?? []).filter(
+        (f): f is "approval" | "ranking" | "score" =>
+          f === "approval" || f === "ranking" || f === "score"
+      ),
+    [currentRule]
+  );
+
+  useEffect(() => {
+    if (!currentRule) return;
+    if (!supportsBallotFormat(currentRule, ballotFormat)) {
+      const nextFormat = allowedBallotFormats[0];
+      if (nextFormat) {
+        setBallotFormat(nextFormat);
+      }
+    }
+  }, [currentRule, ballotFormat, allowedBallotFormats]);
+
+  useEffect(() => {
+    if (!currentRule) return;
+
+    if (!currentRule.requires_committee_size && committeeSize !== 1) {
+      setCommitteeSize(1);
+    }
+
+    if (!currentRule.supports_quota_type && committeeSize > 1) {
+      setQuotaType("hare");
+    }
+
+    if (!currentRule.requires_approval_max_choices && ballotFormat === "approval") {
+      setApprovalMax(1);
+    }
+
+    if (!currentRule.supports_ranking_top_k && ballotFormat === "ranking") {
+      setLimitRankingTopK(false);
+      setRankingTopKInput("1");
+    }
+
+    if (!currentRule.requires_score_range && ballotFormat === "score") {
+      setScoreMin(0);
+      setScoreMax(10);
+      setScoreStep(1);
+      setScoreAllowSkip(false);
+    }
+  }, [currentRule, ballotFormat, committeeSize]);
 
   const candidateErrors = useMemo(
     () => candidates.map((candidate) => candidateError(candidate, candidates)),
@@ -419,6 +502,29 @@ export function AdminCreateElectionPage() {
         show_aggregates: showAggregates,
         candidates: candidatePayload,
       };
+      
+      if (!currentRule?.requires_committee_size) {
+        body.committee_size = null;
+      }
+
+      if (!currentRule?.supports_quota_type) {
+        body.quota_type = null;
+      }
+
+      if (!currentRule?.requires_approval_max_choices) {
+        delete body.approval_max_choices;
+      }
+
+      if (!currentRule?.supports_ranking_top_k) {
+        body.ranking_top_k = null;
+      }
+
+      if (!currentRule?.requires_score_range) {
+        delete body.score_min;
+        delete body.score_max;
+        delete body.score_step;
+        delete body.score_allow_skip;
+      }
 
       if (ballotFormat === "approval") {
         body.approval_max_choices = approvalMax;
@@ -636,9 +742,15 @@ export function AdminCreateElectionPage() {
                   value={ballotFormat}
                   onChange={(e) => setBallotFormat(e.target.value as "approval" | "ranking" | "score")}
                 >
-                  <option value="approval">approval</option>
-                  <option value="ranking">ranking</option>
-                  <option value="score">score</option>
+                  {(["approval", "ranking", "score"] as const).map((format) => (
+                    <option
+                      key={format}
+                      value={format}
+                      disabled={!supportsBallotFormat(currentRule, format)}
+                    >
+                      {format}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -652,12 +764,17 @@ export function AdminCreateElectionPage() {
                   value={tallyRule}
                   onChange={(e) => setTallyRule(e.target.value)}
                 >
-                  {TALLY_RULES.map((rule) => (
-                    <option key={rule.value} value={rule.value}>
+                  {availableRules.map((rule) => (
+                    <option key={rule.id} value={rule.id}>
                       {rule.label}
                     </option>
                   ))}
                 </select>
+                {rulesLoading ? (
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    Загрузка списка правил…
+                  </div>
+                ) : null}
               </div>
 
               <div>
@@ -670,6 +787,7 @@ export function AdminCreateElectionPage() {
                   type="number"
                   min={1}
                   value={committeeSize}
+                  disabled={!currentRule?.requires_committee_size}
                   onChange={(e) => setCommitteeSize(Number(e.target.value))}
                 />
               </div>
@@ -682,7 +800,7 @@ export function AdminCreateElectionPage() {
                 <select
                   style={styles.input}
                   value={quotaType}
-                  disabled={committeeSize <= 1}
+                  disabled={committeeSize <= 1 || !currentRule?.supports_quota_type}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
@@ -703,7 +821,7 @@ export function AdminCreateElectionPage() {
               {ballotFormatHint(ballotFormat)}
             </div>
 
-            {ballotFormat === "approval" ? (
+            {ballotFormat === "approval" && currentRule?.requires_approval_max_choices ? (
               <div style={styles.grid2}>
                 <div>
                   <label>Максимум отметок</label>
@@ -719,7 +837,7 @@ export function AdminCreateElectionPage() {
               </div>
             ) : null}
 
-            {ballotFormat === "ranking" ? (
+            {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
               <div style={{ display: "grid", gap: 12 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
@@ -987,7 +1105,7 @@ export function AdminCreateElectionPage() {
 
               {ballotFormat === "approval" ? <div>Максимум отметок: {approvalMax}</div> : null}
 
-              {ballotFormat === "ranking" ? (
+              {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
                 <div>top-k: {limitRankingTopK ? normalizedTopK() : "не ограничен"}</div>
               ) : null}
 

@@ -226,3 +226,20 @@ export type AuditLogItem = Record<string, unknown> & {
   occurred_at?: string;
   event_type?: string;
 };
+
+export type TallyRuleInfo = {
+  id: string;
+  label: string;
+  ballot_formats: Array<"approval" | "ranking" | "score" | string>;
+  supports_election_tally: boolean;
+  supports_experiment_runs: boolean;
+  requires_committee_size: boolean;
+  supports_quota_type: boolean;
+  requires_approval_max_choices: boolean;
+  supports_ranking_top_k: boolean;
+  requires_score_range: boolean;
+};
+
+export type TallyRuleCapabilityView = TallyRuleInfo & {
+  supports_ballot_format: (format: "approval" | "ranking" | "score") => boolean;
+};

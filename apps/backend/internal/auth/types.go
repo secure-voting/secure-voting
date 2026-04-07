@@ -53,3 +53,9 @@ type acceptedInvite struct {
 	ID         string
 	ElectionID string
 }
+
+type ChangePasswordInput struct {
+	UserID          string
+	CurrentPassword string
+	NewPassword     string
+}

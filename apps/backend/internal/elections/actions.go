@@ -72,6 +72,25 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return actionValidationCode(err), nil
 		}
 
+		rules, err := s.capabilities.ListTallyRules(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		params := map[string]any{
+			"committee_size": committeeSize,
+			"ranking_top_k":  rankingTopK,
+		}
+
+		if err := validateRuleCompatibility(
+			tallyRule,
+			ballotFormat,
+			params,
+			rules,
+		); err != nil {
+			return err.Error(), nil
+		}
+
 		next = "active"
 	} else {
 		var ok bool

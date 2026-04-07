@@ -42,6 +42,10 @@ var handleTallyJobFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob)
 	return w.handleTallyJob(ctx, job)
 }
 
+var runSchedulersFn = func(w *Worker, ctx context.Context) error {
+	return w.runSchedulers(ctx)
+}
+
 func (w *Worker) Run(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -77,6 +81,15 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) tick(ctx context.Context) error {
+	now := time.Now().UTC()
+
+	if w.nextScheduleAt.IsZero() || !now.Before(w.nextScheduleAt) {
+		if err := runSchedulersFn(w, ctx); err != nil {
+			return err
+		}
+		w.nextScheduleAt = now.Add(w.scheduleInterval)
+	}
+
 	job, ok, err := claimNextJobFn(w, ctx, []string{jobKindTally, jobKindExperimentRun})
 	if err != nil {
 		return err

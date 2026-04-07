@@ -34,7 +34,7 @@ type DatasetCandidate struct {
 type ExperimentRunResult struct {
 	Kind      string         `json:"kind,omitempty"`
 	RunID     string         `json:"run_id"`
-	Status    string         `json:"status"` // "done" | "error"
+	Status    string         `json:"status"`
 	Winners   []string       `json:"winners,omitempty"`
 	Metrics   map[string]any `json:"metrics,omitempty"`
 	Timings   map[string]any `json:"timings,omitempty"`

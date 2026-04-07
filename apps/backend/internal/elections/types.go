@@ -6,14 +6,19 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"secure-voting/apps/backend/internal/computeclient"
 )
 
 type Service struct {
-	db *pgxpool.Pool
+	db           *pgxpool.Pool
+	capabilities *computeclient.Client
 }
 
-func NewService(db *pgxpool.Pool) *Service {
-	return &Service{db: db}
+func NewService(db *pgxpool.Pool, capabilities *computeclient.Client) *Service {
+	return &Service{
+		db:           db,
+		capabilities: capabilities,
+	}
 }
 
 func norm(s string) string {
@@ -375,6 +380,81 @@ func validateBallotParams(
 	default:
 		return "invalid_ballot_format"
 	}
+}
+
+var (
+	ErrInvalidTallyRule           = errors.New("invalid_tally_rule")
+	ErrIncompatibleBallotFormat   = errors.New("incompatible_ballot_format")
+	ErrInvalidCommitteeSize       = errors.New("invalid_committee_size")
+	ErrUnsupportedQuota           = errors.New("unsupported_quota")
+	ErrMissingApprovalMaxChoices  = errors.New("missing_approval_max_choices")
+	ErrUnsupportedTopK            = errors.New("unsupported_top_k")
+	ErrInvalidScoreRange          = errors.New("invalid_score_range")
+)
+
+func validateRuleCompatibility(
+	rule string,
+	format string,
+	params map[string]any,
+	rules []computeclient.TallyRuleInfo,
+) error {
+	matrix := buildRuleMatrix(rules)
+
+	info, ok := matrix.get(rule)
+	if !ok {
+		return ErrInvalidTallyRule
+	}
+
+	// ballot format
+	allowed := false
+	for _, f := range info.BallotFormats {
+		if f == format {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return ErrIncompatibleBallotFormat
+	}
+
+	// committee size
+	if info.RequiresCommitteeSize {
+		if v, ok := params["committee_size"].(int); !ok || v < 1 {
+			return ErrInvalidCommitteeSize
+		}
+	}
+
+	// quota
+	if !info.SupportsQuotaType {
+		if params["quota_type"] != nil {
+			return ErrUnsupportedQuota
+		}
+	}
+
+	// approval
+	if info.RequiresApprovalMaxChoices {
+		if params["approval_max_choices"] == nil {
+			return ErrMissingApprovalMaxChoices
+		}
+	}
+
+	// ranking
+	if !info.SupportsRankingTopK {
+		if params["ranking_top_k"] != nil {
+			return ErrUnsupportedTopK
+		}
+	}
+
+	// score
+	if info.RequiresScoreRange {
+		if params["score_min"] == nil ||
+			params["score_max"] == nil ||
+			params["score_step"] == nil {
+			return ErrInvalidScoreRange
+		}
+	}
+
+	return nil
 }
 
 type CandidateInput struct {

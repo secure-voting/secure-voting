@@ -102,6 +102,15 @@ components:
         invite_code:
           type: string
 
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+
     CandidateInput:
       type: object
       required: [name]
@@ -718,6 +727,53 @@ components:
           type: string
           format: date-time
       additionalProperties: true
+    
+    TallyRuleInfo:
+      type: object
+      required:
+        - id
+        - label
+        - ballot_formats
+        - supports_election_tally
+        - supports_experiment_runs
+        - requires_committee_size
+        - supports_quota_type
+        - requires_approval_max_choices
+        - supports_ranking_top_k
+        - requires_score_range
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        ballot_formats:
+          type: array
+          items:
+            type: string
+            enum: [approval, ranking, score]
+        supports_election_tally:
+          type: boolean
+        supports_experiment_runs:
+          type: boolean
+        requires_committee_size:
+          type: boolean
+        supports_quota_type:
+          type: boolean
+        requires_approval_max_choices:
+          type: boolean
+        supports_ranking_top_k:
+          type: boolean
+        requires_score_range:
+          type: boolean
+
+    TallyRuleListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TallyRuleInfo'
 
     JobListResponse:
       type: object
@@ -856,6 +912,38 @@ paths:
       responses:
         '200':
           description: Logout succeeded
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change current user password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Validation or business error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Unauthorized
           content:
@@ -1496,6 +1584,32 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '403':
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/capabilities/tally-rules:
+    get:
+      tags: [System]
+      summary: List supported tally rules and their capabilities
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Supported tally rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TallyRuleListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Compute capability lookup failed
           content:
             application/json:
               schema:

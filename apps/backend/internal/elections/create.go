@@ -106,6 +106,30 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		return "", code, nil
 	}
 
+	rules, err := s.capabilities.ListTallyRules(ctx)
+	if err != nil {
+		return "", "", err
+	}
+
+	params := map[string]any{
+		"committee_size":       committeeSize,
+		"quota_type":           quotaType,
+		"approval_max_choices": in.ApprovalMaxChoices,
+		"ranking_top_k":        rankingTopK,
+		"score_min":            in.ScoreMin,
+		"score_max":            in.ScoreMax,
+		"score_step":           in.ScoreStep,
+	}
+
+	if err := validateRuleCompatibility(
+		tally,
+		format,
+		params,
+		rules,
+	); err != nil {
+		return "", err.Error(), nil
+	}
+
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return "", "", err

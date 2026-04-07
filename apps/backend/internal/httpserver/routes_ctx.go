@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -8,8 +9,10 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"secure-voting/apps/backend/internal/audit"
+	"secure-voting/apps/backend/internal/capabilities"
 	asvc "secure-voting/apps/backend/internal/auth"
 	"secure-voting/apps/backend/internal/ballots"
+	"secure-voting/apps/backend/internal/computeclient"
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
 	"secure-voting/apps/backend/internal/elections"
@@ -21,6 +24,7 @@ import (
 	auh "secure-voting/apps/backend/internal/httpserver/audit"
 	ah "secure-voting/apps/backend/internal/httpserver/auth"
 	bh "secure-voting/apps/backend/internal/httpserver/ballots"
+	caph "secure-voting/apps/backend/internal/httpserver/capabilities"
 	dsh "secure-voting/apps/backend/internal/httpserver/datasets"
 	eh "secure-voting/apps/backend/internal/httpserver/elections"
 	erh "secure-voting/apps/backend/internal/httpserver/experimentruns"
@@ -37,23 +41,35 @@ type routeCtx struct {
 
 	authSvc *asvc.Service
 
-	authH      *ah.Handlers
-	electionsH *eh.Handlers
-	ballotsH   *bh.Handlers
-	resultsH   *rh.Handlers
-
-	jobsH        *jh.Handlers
-	auditH       *auh.Handlers
-	datasetsH    *dsh.Handlers
-	experimentsH *exh.Handlers
-	runsH        *erh.Handlers
+	authH         *ah.Handlers
+	electionsH    *eh.Handlers
+	ballotsH      *bh.Handlers
+	resultsH      *rh.Handlers
+	jobsH         *jh.Handlers
+	auditH        *auh.Handlers
+	datasetsH     *dsh.Handlers
+	experimentsH  *exh.Handlers
+	runsH         *erh.Handlers
+	capabilitiesH *caph.Handlers
 }
 
 func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mongo.Database) *routeCtx {
 	mux := http.NewServeMux()
 
+	ctx := context.Background()
+
+	computeClient, err := computeclient.New(ctx, computeclient.Config{
+		Addr:       cfg.ComputeGRPCAddr,
+		UseTLS:     cfg.ComputeTLS,
+		CACertPath: cfg.ComputeTLSCA,
+		ServerName: cfg.ComputeTLSServerName,
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	authSvc := asvc.NewService(db, cfg.TokenTTL)
-	electionsSvc := elections.NewService(db)
+	electionsSvc := elections.NewService(db, computeClient)
 	ballotsSvc := ballots.NewService(db, rdb, cfg.IdempotencyTTL)
 	resultsSvc := results.NewService(db)
 
@@ -62,6 +78,7 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 	datasetsSvc := datasets.NewService(mdb)
 	experimentsSvc := experiments.NewService(db)
 	runsSvc := experimentruns.NewService(db, mdb)
+	capabilitiesSvc := capabilities.NewService(computeClient)
 
 	return &routeCtx{
 		cfg: cfg,
@@ -69,16 +86,16 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 
 		authSvc: authSvc,
 
-		authH:      ah.NewHandlers(authSvc),
-		electionsH: eh.NewHandlers(electionsSvc),
-		ballotsH:   bh.NewHandlers(ballotsSvc),
-		resultsH:   rh.NewHandlers(resultsSvc),
-
-		jobsH:        jh.NewHandlers(jobsSvc),
-		auditH:       auh.NewHandlers(auditSvc),
-		datasetsH:    dsh.NewHandlers(datasetsSvc, cfg),
-		experimentsH: exh.NewHandlers(experimentsSvc),
-		runsH:        erh.NewHandlers(runsSvc),
+		authH:         ah.NewHandlers(authSvc),
+		electionsH:    eh.NewHandlers(electionsSvc),
+		ballotsH:      bh.NewHandlers(ballotsSvc),
+		resultsH:      rh.NewHandlers(resultsSvc),
+		jobsH:         jh.NewHandlers(jobsSvc),
+		auditH:        auh.NewHandlers(auditSvc),
+		datasetsH:     dsh.NewHandlers(datasetsSvc, cfg),
+		experimentsH:  exh.NewHandlers(experimentsSvc),
+		runsH:         erh.NewHandlers(runsSvc),
+		capabilitiesH: caph.NewHandlers(capabilitiesSvc),
 	}
 }
 

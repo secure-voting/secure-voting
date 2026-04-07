@@ -28,6 +28,8 @@ type fakeAuthService struct {
 	lastRegisterInvite string
 	lastRegisterRole   string
 	lastLoginInvite    string
+
+	changePasswordFn func(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
 }
 
 func (f *fakeAuthService) Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error) {
@@ -162,4 +164,11 @@ func TestLogin_InvitePassed(t *testing.T) {
 	if svc.lastLoginInvite != "XYZ" {
 		t.Fatalf("expected invite_code to be passed, got %q", svc.lastLoginInvite)
 	}
+}
+
+func (s *fakeAuthService) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error) {
+	if s.changePasswordFn != nil {
+		return s.changePasswordFn(ctx, userID, currentPassword, newPassword)
+	}
+	return "", nil
 }

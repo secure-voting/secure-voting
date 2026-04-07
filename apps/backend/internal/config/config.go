@@ -23,11 +23,12 @@ type Config struct {
 
 	MaxUploadBytes int64
 
-	KafkaBrokers       []string
-	KafkaTasksTopic    string
-	KafkaResultsTopic  string
-	KafkaGroupID       string
-	WorkerPollInterval time.Duration
+	KafkaBrokers           []string
+	KafkaTasksTopic        string
+	KafkaResultsTopic      string
+	KafkaGroupID           string
+	WorkerPollInterval     time.Duration
+	WorkerScheduleInterval time.Duration
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
@@ -131,6 +132,13 @@ func FromEnv() Config {
 		}
 	}
 
+	schedulePoll := 5 * time.Second
+	if s := os.Getenv("WORKER_SCHEDULE_INTERVAL"); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			schedulePoll = d
+		}
+	}
+
 	computeAddr := os.Getenv("COMPUTE_GRPC_ADDR")
 	if computeAddr == "" {
 		computeAddr = "rust-compute:50051"
@@ -174,11 +182,12 @@ func FromEnv() Config {
 
 		MaxUploadBytes: maxUpload,
 
-		KafkaBrokers:       brokers,
-		KafkaTasksTopic:    tasksTopic,
-		KafkaResultsTopic:  resultsTopic,
-		KafkaGroupID:       groupID,
-		WorkerPollInterval: poll,
+		KafkaBrokers:           brokers,
+		KafkaTasksTopic:        tasksTopic,
+		KafkaResultsTopic:      resultsTopic,
+		KafkaGroupID:           groupID,
+		WorkerPollInterval:     poll,
+		WorkerScheduleInterval: schedulePoll,
 
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,

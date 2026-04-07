@@ -16,6 +16,7 @@ import type {
   Me,
   MyBallotResp,
   ResultResp,
+  TallyRuleInfo,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -181,6 +182,31 @@ export const api = {
 
     async logout(token: string) {
       await request("/api/v1/auth/logout", { method: "POST", body: "{}" }, token);
+    },
+
+    async changePassword(token: string, currentPassword: string, newPassword: string) {
+      return await request<{ ok: boolean }>(
+        "/api/v1/auth/change-password",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+          }),
+        },
+        token
+      );
+    },
+  },
+
+  capabilities: {
+    async tallyRules(token: string, signal?: AbortSignal) {
+      const resp = await request<{ items: TallyRuleInfo[] }>(
+        "/api/v1/capabilities/tally-rules",
+        { method: "GET", signal },
+        token
+      );
+      return Array.isArray(resp.items) ? resp.items : [];
     },
   },
 

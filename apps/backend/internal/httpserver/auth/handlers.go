@@ -14,6 +14,7 @@ type AuthService interface {
 	Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error)
 	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
 }
 
 type Handlers struct {
@@ -144,6 +145,49 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) error {
 	_, err := h.svc.Logout(r.Context(), rawToken, actor)
 	if err != nil {
 		return apperr.Internal(err, "logout failed")
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+type changePasswordReq struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func mapChangePasswordCode(code string) error {
+	switch code {
+	case "unauthorized":
+		return apperr.Unauthorized("invalid or expired token")
+	case "invalid_current_password":
+		return apperr.Invalid(code, "current password is incorrect")
+	case "invalid_password":
+		return apperr.Invalid(code, "password must be at least 8 characters")
+	case "password_unchanged":
+		return apperr.Invalid(code, "new password must differ from current password")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
+}
+
+func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	var req changePasswordReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	code, err := h.svc.ChangePassword(r.Context(), userID, req.CurrentPassword, req.NewPassword)
+	if err != nil {
+		return apperr.Internal(err, "change password failed")
+	}
+	if code != "" {
+		return mapChangePasswordCode(code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})

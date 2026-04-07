@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { ElectionDetail, UpdateElectionRulesInput } from "../../shared/api/types";
+import type { ElectionDetail, UpdateElectionRulesInput, TallyRuleInfo } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -9,35 +9,6 @@ import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { styles } from "../../shared/ui/styles";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
-
-const TALLY_RULES = [
-  "plurality",
-  "approval",
-  "inverse_plurality",
-  "borda",
-  "black",
-  "copeland_i",
-  "copeland_ii",
-  "copeland_iii",
-  "simpson",
-  "minmax",
-  "hare",
-  "inverse_borda",
-  "nanson",
-  "coombs",
-  "practical_condorcet",
-  "threshold",
-];
-
-const TALLY_RULE_ALIASES: Record<string, string> = {
-  minimax: "minmax",
-  condorcet_practical: "practical_condorcet",
-};
-
-function normalizeTallyRule(value: string) {
-  const trimmed = value.trim();
-  return TALLY_RULE_ALIASES[trimmed] ?? trimmed;
-}
 
 function accessModeLabel(value: "open" | "invite") {
   return value === "open" ? "Открытый доступ" : "Только по приглашению";
@@ -77,6 +48,20 @@ function toRFC3339FromLocalInput(value: string) {
   return parsed.toISOString();
 }
 
+function supportsBallotFormat(
+  rule: TallyRuleInfo | undefined,
+  format: "approval" | "ranking" | "score"
+) {
+  return Boolean(rule?.ballot_formats?.includes(format));
+}
+
+function selectedRuleInfo(
+  rules: TallyRuleInfo[],
+  ruleId: string
+) {
+  return rules.find((rule) => rule.id === ruleId);
+}
+
 export function ElectionRulesPage() {
   const { id } = useParams();
   const electionId = String(id || "");
@@ -109,8 +94,11 @@ export function ElectionRulesPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [availableRules, setAvailableRules] = useState<TallyRuleInfo[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  const currentRule = selectedRuleInfo(availableRules, tallyRule);
 
   const normalizedTopK = () => {
     const candidatesCount = item?.candidates.length ?? 1;
@@ -121,7 +109,7 @@ export function ElectionRulesPage() {
   };
 
   const hydrate = (e: ElectionDetail) => {
-    setTallyRule(normalizeTallyRule(e.tally_rule));
+    setTallyRule(e.tally_rule);
     setBallotFormat((e.ballot_format as "approval" | "ranking" | "score") || "ranking");
     setCommitteeSize(e.committee_size ?? 1);
     setQuotaType((e.quota_type as "hare" | "droop") ?? "hare");
@@ -163,25 +151,63 @@ export function ElectionRulesPage() {
     }
   }, [token, electionId, setToken]);
 
+  const loadRules = useCallback(async () => {
+    if (!token) return;
+
+    setRulesLoading(true);
+    try {
+      const items = await api.capabilities.tallyRules(token);
+      const electionRules = items.filter((item) => item.supports_election_tally);
+      setAvailableRules(electionRules);
+
+      if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {
+        setTallyRule(electionRules[0].id);
+      }
+    } catch (e: any) {
+      if (e?.status === 401) setToken(null);
+      else setErr((prev) => prev || "Не удалось загрузить список правил");
+    } finally {
+      setRulesLoading(false);
+    }
+  }, [token, setToken, tallyRule]);
+
   useEffect(() => {
     load();
     return () => abortRef.current?.abort();
   }, [load]);
 
+
   useEffect(() => {
-    if (ballotFormat === "approval" && tallyRule !== "approval") {
-      setTallyRule("approval");
+    if (!currentRule) return;
+
+    if (!supportsBallotFormat(currentRule, ballotFormat)) {
+      const nextFormat = currentRule.ballot_formats.find(
+        (f): f is "approval" | "ranking" | "score" =>
+          f === "approval" || f === "ranking" || f === "score"
+      );
+      if (nextFormat) {
+        setBallotFormat(nextFormat);
+      }
     }
-  }, [ballotFormat, tallyRule]);
+
+    if (!currentRule.supports_ranking_top_k && ballotFormat === "ranking") {
+      setLimitRankingTopK(false);
+      setRankingTopKInput("1");
+    }
+  }, [currentRule, ballotFormat]);
+
+  useEffect(() => {
+    loadRules();
+  }, [loadRules]);
+
 
   const validate = (): string | null => {
     if (!item) return "Нет данных голосования";
 
     const candidatesCount = item.candidates.length;
 
-    const normalizedRule = normalizeTallyRule(tallyRule);
-    if (!normalizedRule) return "Выберите правило подсчёта";
-    if (!TALLY_RULES.includes(normalizedRule)) return "Недопустимое правило подсчёта";
+    if (!tallyRule.trim()) return "Выберите правило подсчёта";
+    if (!availableRules.some((item) => item.id === tallyRule)) return "Недопустимое правило подсчёта";
     if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
 
     if (ballotFormat === "approval") {
@@ -232,7 +258,7 @@ export function ElectionRulesPage() {
 
     try {
       const body: UpdateElectionRulesInput = {
-        tally_rule: normalizeTallyRule(tallyRule),
+        tally_rule: tallyRule,
         ballot_format: ballotFormat,
         committee_size: committeeSize,
         quota_type: committeeSize > 1 ? quotaType : null,
@@ -240,6 +266,29 @@ export function ElectionRulesPage() {
         publish_at: delayPublish ? toRFC3339FromLocalInput(publishAtLocal) : null,
         show_aggregates: showAggregates,
       };
+
+      if (!currentRule?.requires_committee_size) {
+        body.committee_size = undefined;
+      }
+
+      if (!currentRule?.supports_quota_type) {
+        body.quota_type = null;
+      }
+
+      if (!currentRule?.requires_approval_max_choices) {
+        delete body.approval_max_choices;
+      }
+
+      if (!currentRule?.supports_ranking_top_k) {
+        body.ranking_top_k = null;
+      }
+
+      if (!currentRule?.requires_score_range) {
+        delete body.score_min;
+        delete body.score_max;
+        delete body.score_step;
+        delete body.score_allow_skip;
+      }
 
       if (ballotFormat === "approval") {
         body.approval_max_choices = approvalMaxChoices;
@@ -310,9 +359,9 @@ export function ElectionRulesPage() {
               <div>
                 <label>Правило подсчёта</label>
                 <select style={styles.input} value={tallyRule} onChange={(e) => setTallyRule(e.target.value)}>
-                  {TALLY_RULES.map((rule) => (
-                    <option key={rule} value={rule}>
-                      {rule}
+                  {availableRules.map((rule) => (
+                    <option key={rule.id} value={rule.id}>
+                      {rule.label}
                     </option>
                   ))}
                 </select>
@@ -328,9 +377,15 @@ export function ElectionRulesPage() {
                   value={ballotFormat}
                   onChange={(e) => setBallotFormat(e.target.value as "approval" | "ranking" | "score")}
                 >
-                  <option value="approval">approval</option>
-                  <option value="ranking">ranking</option>
-                  <option value="score">score</option>
+                  {(["approval", "ranking", "score"] as const).map((format) => (
+                    <option
+                      key={format}
+                      value={format}
+                      disabled={!supportsBallotFormat(currentRule, format)}
+                    >
+                      {format}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -341,6 +396,7 @@ export function ElectionRulesPage() {
                   type="number"
                   min={1}
                   value={committeeSize}
+                  disabled={!currentRule?.requires_committee_size}
                   onChange={(e) => setCommitteeSize(Number(e.target.value))}
                 />
               </div>
@@ -353,7 +409,7 @@ export function ElectionRulesPage() {
                 <select
                   style={styles.input}
                   value={quotaType}
-                  disabled={committeeSize <= 1}
+                  disabled={committeeSize <= 1 || !currentRule?.supports_quota_type}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
@@ -429,7 +485,7 @@ export function ElectionRulesPage() {
 
             <hr style={styles.hr} />
 
-            {ballotFormat === "approval" ? (
+            {ballotFormat === "approval" && currentRule?.requires_approval_max_choices ? (
               <div style={styles.grid2}>
                 <div>
                   <label>Максимум отметок</label>
@@ -446,7 +502,7 @@ export function ElectionRulesPage() {
             ) : null}
 
 
-            {ballotFormat === "ranking" ? (
+            {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
               <div style={{ display: "grid", gap: 12 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input

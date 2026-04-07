@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import { useAuth } from "../../app/auth";
@@ -7,6 +7,7 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
+import type { TallyRuleInfo } from "../../shared/api/types";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -26,25 +27,6 @@ const BALLOT_FORMATS = [
   { value: "approval", label: "approval" },
   { value: "ranking", label: "ranking" },
   { value: "score", label: "score" },
-] as const;
-
-const TALLY_RULES = [
-  { value: "plurality", label: "Plurality" },
-  { value: "approval", label: "Approval voting" },
-  { value: "inverse_plurality", label: "Inverse plurality" },
-  { value: "borda", label: "Borda" },
-  { value: "black", label: "Black" },
-  { value: "copeland_i", label: "Copeland I" },
-  { value: "copeland_ii", label: "Copeland II" },
-  { value: "copeland_iii", label: "Copeland III" },
-  { value: "simpson", label: "Simpson (Maxmin)" },
-  { value: "minmax", label: "Minmax" },
-  { value: "threshold", label: "Threshold" },
-  { value: "hare", label: "Hare" },
-  { value: "inverse_borda", label: "Inverse Borda" },
-  { value: "nanson", label: "Nanson" },
-  { value: "coombs", label: "Coombs" },
-  { value: "practical_condorcet", label: "Condorcet practical" },
 ] as const;
 
 function StepHeader({
@@ -99,6 +81,20 @@ function formatHint(format: "approval" | "ranking" | "score") {
   return "Для score-эксперимента укажите диапазон значений и шаг оценки.";
 }
 
+function supportsBallotFormat(
+  rule: TallyRuleInfo | undefined,
+  format: "approval" | "ranking" | "score"
+) {
+  return Boolean(rule?.ballot_formats?.includes(format));
+}
+
+function selectedRuleInfo(
+  rules: TallyRuleInfo[],
+  ruleId: string
+) {
+  return rules.find((rule) => rule.id === ruleId);
+}
+
 export function ExperimentCreatePage() {
   const nav = useNavigate();
   const { token, setToken } = useAuth();
@@ -131,6 +127,76 @@ export function ExperimentCreatePage() {
   const [err, setErr] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [rawResp, setRawResp] = useState<unknown>(null);
+
+  const [availableRules, setAvailableRules] = useState<TallyRuleInfo[]>([]);
+  const currentRule = useMemo(
+    () => selectedRuleInfo(availableRules, tallyRule),
+    [availableRules, tallyRule]
+  );
+
+  const [rulesLoading, setRulesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setRulesLoading(true);
+
+    api.capabilities
+      .tallyRules(token, ac.signal)
+      .then((items) => {
+        const experimentRules = items.filter((item) => item.supports_experiment_runs);
+        setAvailableRules(experimentRules);
+
+        if (experimentRules.length > 0 && !experimentRules.some((item) => item.id === tallyRule)) {
+          setTallyRule(experimentRules[0].id);
+        }
+      })
+      .catch((e: any) => {
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setErr((prev) => prev || "Не удалось загрузить список правил");
+      })
+      .finally(() => {
+        setRulesLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken, tallyRule]);
+
+  useEffect(() => {
+    if (!currentRule) return;
+
+    if (!supportsBallotFormat(currentRule, ballotFormat)) {
+      const nextFormat = currentRule.ballot_formats.find(
+        (f): f is "approval" | "ranking" | "score" =>
+          f === "approval" || f === "ranking" || f === "score"
+      );
+      if (nextFormat) {
+        setBallotFormat(nextFormat);
+      }
+    }
+
+    if (!currentRule.supports_ranking_top_k && ballotFormat === "ranking") {
+      setRankingTopK(1);
+    }
+
+    if (!currentRule.requires_approval_max_choices && ballotFormat === "approval") {
+      setApprovalMax(1);
+    }
+
+    if (!currentRule.requires_score_range && ballotFormat === "score") {
+      setScoreMin(0);
+      setScoreMax(10);
+      setScoreStep(1);
+    }
+
+    if (!currentRule.supports_quota_type && committeeSize > 1) {
+      setQuotaType("hare");
+    }
+  }, [currentRule, ballotFormat, committeeSize]);
 
   const parsedAdvancedParams = useMemo(() => {
     const trimmed = paramsText.trim();
@@ -174,19 +240,19 @@ export function ExperimentCreatePage() {
       committee_size: committeeSize,
     };
 
-    if (committeeSize > 1) {
+    if (committeeSize > 1 && currentRule?.supports_quota_type) {
       params.quota_type = quotaType;
     }
 
-    if (ballotFormat === "approval") {
+    if (ballotFormat === "approval" && currentRule?.requires_approval_max_choices) {
       params.approval_max_choices = approvalMax;
     }
 
-    if (ballotFormat === "ranking") {
+    if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k) {
       params.ranking_top_k = rankingTopK;
     }
 
-    if (ballotFormat === "score") {
+    if (ballotFormat === "score" && currentRule?.requires_score_range) {
       params.score_min = scoreMin;
       params.score_max = scoreMax;
       params.score_step = scoreStep;
@@ -408,7 +474,7 @@ export function ExperimentCreatePage() {
                   onChange={(e) => setBallotFormat(e.target.value as "approval" | "ranking" | "score")}
                 >
                   {BALLOT_FORMATS.map((item) => (
-                    <option key={item.value} value={item.value}>
+                    <option key={item.value} value={item.value} disabled={!supportsBallotFormat(currentRule, item.value)}>
                       {item.label}
                     </option>
                   ))}
@@ -422,8 +488,8 @@ export function ExperimentCreatePage() {
                   value={tallyRule}
                   onChange={(e) => setTallyRule(e.target.value)}
                 >
-                  {TALLY_RULES.map((rule) => (
-                    <option key={rule.value} value={rule.value}>
+                  {availableRules.map((rule) => (
+                    <option key={rule.id} value={rule.id}>
                       {rule.label}
                     </option>
                   ))}
@@ -468,6 +534,7 @@ export function ExperimentCreatePage() {
                 <select
                   style={styles.input}
                   value={quotaType}
+                  disabled={committeeSize <= 1 || !currentRule?.supports_quota_type}
                   onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
                 >
                   <option value="hare">hare</option>
@@ -497,7 +564,7 @@ export function ExperimentCreatePage() {
               {formatHint(ballotFormat)}
             </div>
 
-            {ballotFormat === "approval" ? (
+            {ballotFormat === "approval" && currentRule?.requires_approval_max_choices ? (
               <div style={styles.grid2}>
                 <div>
                   <label>Максимум отметок</label>
@@ -513,7 +580,7 @@ export function ExperimentCreatePage() {
               </div>
             ) : null}
 
-            {ballotFormat === "ranking" ? (
+            {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
               <div style={styles.grid2}>
                 <div>
                   <label>top-k</label>

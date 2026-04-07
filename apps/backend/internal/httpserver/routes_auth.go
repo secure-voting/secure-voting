@@ -6,4 +6,6 @@ func registerAuthRoutes(r *routeCtx) {
 
 	r.mux.Handle("GET /api/v1/auth/me", r.RequireAuth(r.authH.Me))
 	r.mux.Handle("POST /api/v1/auth/logout", r.RequireAuth(r.authH.Logout))
+
+	r.mux.Handle("POST /api/v1/auth/change-password", r.RequireAuth(r.authH.ChangePassword))
 }

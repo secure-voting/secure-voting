@@ -8,6 +8,7 @@ package pb
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -19,7 +20,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Compute_Run_FullMethodName = "/securevoting.compute.v1.Compute/Run"
+	Compute_Run_FullMethodName            = "/securevoting.compute.v1.Compute/Run"
+	Compute_ListTallyRules_FullMethodName = "/securevoting.compute.v1.Compute/ListTallyRules"
 )
 
 // ComputeClient is the client API for Compute service.
@@ -27,6 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ComputeClient interface {
 	Run(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[RunChunk, RunResult], error)
+	ListTallyRules(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListTallyRulesResponse, error)
 }
 
 type computeClient struct {
@@ -50,11 +53,22 @@ func (c *computeClient) Run(ctx context.Context, opts ...grpc.CallOption) (grpc.
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Compute_RunClient = grpc.ClientStreamingClient[RunChunk, RunResult]
 
+func (c *computeClient) ListTallyRules(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ListTallyRulesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTallyRulesResponse)
+	err := c.cc.Invoke(ctx, Compute_ListTallyRules_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ComputeServer is the server API for Compute service.
 // All implementations must embed UnimplementedComputeServer
 // for forward compatibility.
 type ComputeServer interface {
 	Run(grpc.ClientStreamingServer[RunChunk, RunResult]) error
+	ListTallyRules(context.Context, *empty.Empty) (*ListTallyRulesResponse, error)
 	mustEmbedUnimplementedComputeServer()
 }
 
@@ -67,6 +81,9 @@ type UnimplementedComputeServer struct{}
 
 func (UnimplementedComputeServer) Run(grpc.ClientStreamingServer[RunChunk, RunResult]) error {
 	return status.Error(codes.Unimplemented, "method Run not implemented")
+}
+func (UnimplementedComputeServer) ListTallyRules(context.Context, *empty.Empty) (*ListTallyRulesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListTallyRules not implemented")
 }
 func (UnimplementedComputeServer) mustEmbedUnimplementedComputeServer() {}
 func (UnimplementedComputeServer) testEmbeddedByValue()                 {}
@@ -96,13 +113,36 @@ func _Compute_Run_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Compute_RunServer = grpc.ClientStreamingServer[RunChunk, RunResult]
 
+func _Compute_ListTallyRules_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(empty.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ComputeServer).ListTallyRules(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Compute_ListTallyRules_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ComputeServer).ListTallyRules(ctx, req.(*empty.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Compute_ServiceDesc is the grpc.ServiceDesc for Compute service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var Compute_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "securevoting.compute.v1.Compute",
 	HandlerType: (*ComputeServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListTallyRules",
+			Handler:    _Compute_ListTallyRules_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "Run",
