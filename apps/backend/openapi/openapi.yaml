@@ -82,12 +82,6 @@ components:
           type: string
         password:
           type: string
-        role:
-          type: string
-          description: >
-            Public registration is intended for voter accounts.
-            This field is accepted by the backend handler but should not be used
-            to self-assign privileged roles.
         invite_code:
           type: string
 
@@ -142,7 +136,7 @@ components:
           items:
             $ref: '#/components/schemas/CandidateInput'
     
-        InviteImportItem:
+    InviteImportItem:
       type: object
       required: [email]
       properties:
@@ -248,7 +242,17 @@ components:
 
     ElectionSummary:
       type: object
-      required: [id, title, status, access_mode, start_at, end_at]
+      required:
+        - id
+        - title
+        - status
+        - access_mode
+        - start_at
+        - end_at
+        - organizer_email
+        - ballot_format
+        - tally_rule
+        - candidate_count
       properties:
         id:
           type: string
@@ -270,6 +274,15 @@ components:
         published_at:
           type: string
           format: date-time
+        organizer_email:
+          type: string
+        ballot_format:
+          type: string
+          enum: [approval, ranking, score]
+        tally_rule:
+          type: string
+        candidate_count:
+          type: integer
 
     ElectionListResponse:
       type: object
@@ -294,6 +307,9 @@ components:
         - show_aggregates
         - score_allow_skip
         - candidates
+        - created_by
+        - created_at
+        - organizer_email
       properties:
         id:
           type: string
@@ -363,6 +379,8 @@ components:
         created_at:
           type: string
           format: date-time
+        organizer_email:
+          type: string
         candidates:
           type: array
           items:
@@ -411,7 +429,14 @@ components:
 
     InviteCreated:
       type: object
-      required: [invite_id, email, invite_code, status, created_at]
+      required:
+        - invite_id
+        - email
+        - status
+        - created_at
+        - registration_required
+        - registration_email_sent
+        - invite_email_sent
       properties:
         invite_id:
           type: string
@@ -420,11 +445,18 @@ components:
           type: string
         invite_code:
           type: string
+          description: Present only when an invite code was created for an already registered email.
         status:
           type: string
         created_at:
           type: string
           format: date-time
+        registration_required:
+          type: boolean
+        registration_email_sent:
+          type: boolean
+        invite_email_sent:
+          type: boolean
 
     Invite:
       type: object
@@ -463,15 +495,11 @@ components:
         election_id:
           type: string
           format: uuid
-        title:
-          type: string
         ballot_format:
           type: string
           enum: [approval, ranking, score]
         tally_rule:
           type: string
-        committee_size:
-          type: integer
         approval_max_choices:
           type: integer
         ranking_top_k:
@@ -641,6 +669,14 @@ components:
           type: integer
         score_step:
           type: integer
+        generation_model:
+          type: string
+          enum: [uniform, consensus, polarized]
+          description: >
+            Synthetic ballot generation model.
+            uniform = independent random generation,
+            consensus = ballots concentrated around one common preference order,
+            polarized = ballots split into opposing preference blocs.
 
     DatasetCreateResponse:
       type: object

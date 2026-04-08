@@ -68,48 +68,55 @@ export function ElectionsPage() {
       {!loading && items.length === 0 ? <div style={{ marginTop: 10, ...styles.muted }}>Нет голосований</div> : null}
 
       <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-        {items.map((e) => (
-          <div key={e.id} style={{ ...styles.card, padding: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
-              <div>
-                <div style={{ fontWeight: 700 }}>{e.title}</div>
-                <div style={styles.muted}>{e.description || ""}</div>
-              </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <Badge text={e.status} />
-                <Badge text={e.access_mode} />
-              </div>
-            </div>
+                {items.map((e) => (
+                  <div key={e.id} style={{ ...styles.card, padding: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                      <div>
+                        <div style={{ fontWeight: 700 }}>{e.title}</div>
+                        <div style={styles.muted}>{e.description || ""}</div>
+                      </div>
+                    </div>
 
-            <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", ...styles.muted, fontSize: 12 }}>
-              <span>start: {e.start_at}</span>
-              <span>end: {e.end_at}</span>
-              {e.published_at ? <span>published: {e.published_at}</span> : null}
-            </div>
+                    <div style={{ marginTop: 8, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <Badge text={e.status} />
+                      <Badge text={e.access_mode} />
+                      {e.ballot_format ? <Badge text={`format: ${e.ballot_format}`} /> : null}
+                      {e.tally_rule ? <Badge text={`rule: ${e.tally_rule}`} /> : null}
+                      {typeof e.candidate_count === "number" ? (
+                        <Badge text={`candidates: ${e.candidate_count}`} />
+                      ) : null}
+                    </div>
 
-            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link to={`/elections/${e.id}`} style={{ textDecoration: "none" }}>
-                <button style={styles.btnPrimary}>Открыть</button>
-              </Link>
+                    <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", ...styles.muted, fontSize: 12 }}>
+                      <span>organizer: {e.organizer_email ?? "—"}</span>
+                      <span>start: {e.start_at}</span>
+                      <span>end: {e.end_at}</span>
+                      {e.published_at ? <span>published: {e.published_at}</span> : null}
+                    </div>
 
-              {isVoter ? (
-                <Link to={`/elections/${e.id}/vote`} style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Голосовать</button>
-                </Link>
-              ) : null}
+                    <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Link to={`/elections/${e.id}`} style={{ textDecoration: "none" }}>
+                        <button style={styles.btnPrimary}>Открыть</button>
+                      </Link>
 
-              <Link to={`/elections/${e.id}/results`} style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Результаты</button>
-              </Link>
+                      {isVoter ? (
+                        <Link to={`/elections/${e.id}/vote`} style={{ textDecoration: "none" }}>
+                          <button style={styles.btn}>Голосовать</button>
+                        </Link>
+                      ) : null}
 
-              {isAdmin ? (
-                <Link to={`/admin/elections/${e.id}/rules`} style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Настройки</button>
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        ))}
+                      <Link to={`/elections/${e.id}/results`} style={{ textDecoration: "none" }}>
+                        <button style={styles.btn}>Результаты</button>
+                      </Link>
+
+                      {isAdmin ? (
+                        <Link to={`/admin/elections/${e.id}/rules`} style={{ textDecoration: "none" }}>
+                          <button style={styles.btn}>Настройки</button>
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
       </div>
     </div>
   );

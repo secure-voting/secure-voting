@@ -59,6 +59,10 @@ export type ElectionSummary = {
   start_at: string;
   end_at: string;
   published_at?: string | null;
+  organizer_email?: string | null;
+  ballot_format?: "approval" | "ranking" | "score" | string;
+  tally_rule?: string;
+  candidate_count?: number | null;
 };
 
 export type ElectionDetail = {
@@ -98,6 +102,10 @@ export type ElectionDetail = {
   invites_revoked_count?: number | null;
   invites_failed_count?: number | null;
   invites_registration_required_count?: number | null;
+
+  created_by?: string | null;
+  created_at?: string | null;
+  organizer_email?: string | null;
 
   candidates: Candidate[];
 };
@@ -208,6 +216,7 @@ export type DatasetGenerateReq = {
   }>;
   voters: number;
   seed?: number;
+  generation_model?: "uniform" | "consensus" | "polarized" | string;
 
   approval_max_choices?: number;
   ranking_top_k?: number;

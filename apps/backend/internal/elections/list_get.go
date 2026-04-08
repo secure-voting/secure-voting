@@ -16,26 +16,60 @@ func (s *Service) ListForUser(ctx context.Context, userID, email, role string) (
 
 	if role == "admin" {
 		rows, err = s.db.Query(ctx, `
-			SELECT id::text, title, description, status, access_mode, start_at, end_at, published_at
-			FROM elections
-			WHERE created_by = $1::uuid
-			ORDER BY created_at DESC
+			SELECT
+				e.id::text,
+				e.title,
+				e.description,
+				e.status,
+				e.access_mode,
+				e.start_at,
+				e.end_at,
+				e.published_at,
+				u.email,
+				e.ballot_format,
+				e.tally_rule,
+				(
+					SELECT count(*)::int
+					FROM candidates c
+					WHERE c.election_id = e.id
+				) AS candidate_count
+			FROM elections e
+			JOIN users u ON u.id = e.created_by
+			WHERE e.created_by = $1::uuid
+			ORDER BY e.created_at DESC
 		`, userID)
 	} else {
 		rows, err = s.db.Query(ctx, `
-			SELECT e.id::text, e.title, e.description, e.status, e.access_mode, e.start_at, e.end_at, e.published_at
+			SELECT
+				e.id::text,
+				e.title,
+				e.description,
+				e.status,
+				e.access_mode,
+				e.start_at,
+				e.end_at,
+				e.published_at,
+				u.email,
+				e.ballot_format,
+				e.tally_rule,
+				(
+					SELECT count(*)::int
+					FROM candidates c
+					WHERE c.election_id = e.id
+				) AS candidate_count
 			FROM elections e
+			JOIN users u ON u.id = e.created_by
 			WHERE e.status IN ('scheduled','active','paused','closed','results_ready','published')
-			AND (
+			  AND (
 				e.access_mode = 'open'
 				OR EXISTS (
 					SELECT 1
 					FROM election_invites i
 					WHERE i.election_id = e.id
-					AND lower(i.email) = lower($1)
-					AND i.status = 'accepted'
+					  AND lower(i.email) = lower($1)
+					  AND i.status = 'accepted'
 				)
-			)
+			  )
 			ORDER BY e.created_at DESC
 		`, email)
 	}
@@ -49,17 +83,38 @@ func (s *Service) ListForUser(ctx context.Context, userID, email, role string) (
 		var e ElectionSummary
 		var startAt, endAt time.Time
 		var publishedAt *time.Time
-		if err := rows.Scan(&e.ID, &e.Title, &e.Description, &e.Status, &e.AccessMode, &startAt, &endAt, &publishedAt); err != nil {
+
+		if err := rows.Scan(
+			&e.ID,
+			&e.Title,
+			&e.Description,
+			&e.Status,
+			&e.AccessMode,
+			&startAt,
+			&endAt,
+			&publishedAt,
+			&e.OrganizerEmail,
+			&e.BallotFormat,
+			&e.TallyRule,
+			&e.CandidateCount,
+		); err != nil {
 			return nil, err
 		}
+
 		e.StartAt = startAt.UTC().Format(time.RFC3339)
 		e.EndAt = endAt.UTC().Format(time.RFC3339)
 		if publishedAt != nil {
 			sv := publishedAt.UTC().Format(time.RFC3339)
 			e.PublishedAt = &sv
 		}
+
 		out = append(out, e)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return out, nil
 }
 
@@ -80,6 +135,7 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 	d.ID = electionID
 
 	var createdBy string
+	var organizerEmail string
 	var startAt, endAt time.Time
 	var createdAt time.Time
 	var publishAt, publishedAt *time.Time
@@ -106,8 +162,10 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 			e.score_step,
 			e.score_allow_skip,
 			e.created_by::text,
-			e.created_at
+			e.created_at,
+			u.email
 		FROM elections e
+		JOIN users u ON u.id = e.created_by
 		WHERE e.id = $1::uuid
 	`, electionID).Scan(
 		&d.Title,
@@ -131,6 +189,7 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 		&d.ScoreAllowSkip,
 		&createdBy,
 		&createdAt,
+		&organizerEmail,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -154,6 +213,10 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 		v := publishedAt.UTC().Format(time.RFC3339)
 		d.PublishedAt = &v
 	}
+
+	d.CreatedBy = createdBy
+	d.CreatedAt = createdAt.UTC().Format(time.RFC3339)
+	d.OrganizerEmail = organizerEmail
 
 	if role == "admin" && createdBy == userID {
 		var submittedBallotsCount int

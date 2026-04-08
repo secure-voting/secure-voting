@@ -39,6 +39,8 @@ type GenerateReq struct {
 	Voters      int         `json:"voters"`
 	Seed        *int64      `json:"seed,omitempty"`
 
+	GenerationModel string `json:"generation_model,omitempty"`
+
 	ApprovalMaxChoices *int `json:"approval_max_choices,omitempty"`
 	RankingTopK        *int `json:"ranking_top_k,omitempty"`
 	ScoreMin           *int `json:"score_min,omitempty"`

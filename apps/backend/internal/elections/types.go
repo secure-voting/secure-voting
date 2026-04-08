@@ -514,14 +514,18 @@ type CreateElectionInput struct {
 }
 
 type ElectionSummary struct {
-	ID          string  `json:"id"`
-	Title       string  `json:"title"`
-	Description *string `json:"description,omitempty"`
-	Status      string  `json:"status"`
-	AccessMode  string  `json:"access_mode"`
-	StartAt     string  `json:"start_at"`
-	EndAt       string  `json:"end_at"`
-	PublishedAt *string `json:"published_at,omitempty"`
+	ID            string  `json:"id"`
+	Title         string  `json:"title"`
+	Description   *string `json:"description,omitempty"`
+	Status        string  `json:"status"`
+	AccessMode    string  `json:"access_mode"`
+	StartAt       string  `json:"start_at"`
+	EndAt         string  `json:"end_at"`
+	PublishedAt   *string `json:"published_at,omitempty"`
+	OrganizerEmail string `json:"organizer_email"`
+	BallotFormat  string  `json:"ballot_format"`
+	TallyRule     string  `json:"tally_rule"`
+	CandidateCount int    `json:"candidate_count"`
 }
 
 type Candidate struct {
@@ -623,6 +627,10 @@ type ElectionDetail struct {
 	InvitesFailedCount   *int `json:"invites_failed_count,omitempty"`
 
 	InvitesRegistrationRequiredCount *int `json:"invites_registration_required_count,omitempty"`
+
+	CreatedBy      string `json:"created_by"`
+	CreatedAt      string `json:"created_at"`
+	OrganizerEmail string `json:"organizer_email"`
 
 	Candidates []Candidate `json:"candidates"`
 }

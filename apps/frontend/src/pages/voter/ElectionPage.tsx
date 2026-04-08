@@ -474,6 +474,8 @@ export function ElectionPage() {
             <div style={{ marginTop: 12 }}>
               <SummaryGrid
                 items={[
+                  { label: "Organizer", value: item.organizer_email ?? item.created_by ?? "—" },
+                  { label: "Created at", value: item.created_at ?? "—" },
                   { label: "Start at", value: item.start_at },
                   { label: "End at", value: item.end_at },
                   { label: "Publish at", value: item.publish_at ?? "—" },
@@ -482,6 +484,36 @@ export function ElectionPage() {
                   { label: "Quota type", value: item.quota_type ?? "—" },
                   { label: "Show aggregates", value: item.show_aggregates ? "yes" : "no" },
                   { label: "Candidates", value: String(item.candidates.length) },
+                  {
+                    label: "Approval max choices",
+                    value: item.ballot_format === "approval"
+                      ? String(item.approval_max_choices ?? "—")
+                      : "—",
+                  },
+                  {
+                    label: "Ranking top-k",
+                    value: item.ballot_format === "ranking"
+                      ? String(item.ranking_top_k ?? "—")
+                      : "—",
+                  },
+                  {
+                    label: "Score range",
+                    value: item.ballot_format === "score"
+                      ? `${item.score_min ?? "—"}..${item.score_max ?? "—"}`
+                      : "—",
+                  },
+                  {
+                    label: "Score step",
+                    value: item.ballot_format === "score"
+                      ? String(item.score_step ?? "—")
+                      : "—",
+                  },
+                  {
+                    label: "Allow skip",
+                    value: item.ballot_format === "score"
+                      ? (item.score_allow_skip ? "yes" : "no")
+                      : "—",
+                  },
                   { label: "Submitted ballots", value: String(item.submitted_ballots_count ?? "—") },
                   { label: "Invites total", value: item.access_mode === "invite" ? String(item.invites_total_count ?? "—") : "—" },
                   { label: "Invites accepted", value: item.access_mode === "invite" ? String(item.invites_accepted_count ?? "—") : "—" },

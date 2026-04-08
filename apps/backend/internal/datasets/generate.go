@@ -11,6 +11,93 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+func normalizeGenerationModel(v string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "", "uniform":
+		return "uniform", true
+	case "consensus":
+		return "consensus", true
+	case "polarized":
+		return "polarized", true
+	default:
+		return "", false
+	}
+}
+
+func reverseStrings(items []string) []string {
+	out := append([]string(nil), items...)
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out
+}
+
+func noisyOrder(rng *lcg, base []string, swaps int) []string {
+	out := append([]string(nil), base...)
+	if len(out) < 2 {
+		return out
+	}
+	if swaps < 1 {
+		swaps = 1
+	}
+	for i := 0; i < swaps; i++ {
+		j := int(rng.next() % uint64(len(out)-1))
+		out[j], out[j+1] = out[j+1], out[j]
+	}
+	return out
+}
+
+func buildPreferenceOrder(rng *lcg, candidateIDs []string, model string, consensusOrder []string, oppositeOrder []string) []string {
+	switch model {
+	case "uniform":
+		return shuffle(rng, candidateIDs)
+	case "consensus":
+		return noisyOrder(rng, consensusOrder, 1+int(rng.next()%3))
+	case "polarized":
+		if rng.next()%2 == 0 {
+			return noisyOrder(rng, consensusOrder, 1+int(rng.next()%2))
+		}
+		return noisyOrder(rng, oppositeOrder, 1+int(rng.next()%2))
+	default:
+		return shuffle(rng, candidateIDs)
+	}
+}
+
+func scoreLevels(scoreMin, scoreMax, scoreStep int) []int {
+	if scoreStep <= 0 || scoreMax < scoreMin {
+		return nil
+	}
+
+	out := make([]int, 0, ((scoreMax-scoreMin)/scoreStep)+1)
+	for v := scoreMin; v <= scoreMax; v += scoreStep {
+		out = append(out, v)
+	}
+	return out
+}
+
+func scoresFromOrder(order []string, levels []int) map[string]int {
+	out := make(map[string]int, len(order))
+	if len(order) == 0 || len(levels) == 0 {
+		return out
+	}
+
+	if len(order) == 1 {
+		out[order[0]] = levels[len(levels)-1]
+		return out
+	}
+
+	maxLevelIdx := len(levels) - 1
+	for idx, id := range order {
+		levelIdx := maxLevelIdx - (idx*maxLevelIdx)/(len(order)-1)
+		if levelIdx < 0 {
+			levelIdx = 0
+		}
+		out[id] = levels[levelIdx]
+	}
+
+	return out
+}
+
 func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -20,6 +107,11 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	format := normalizeFormat(req.Format)
 	if !isValidFormat(format) {
 		return "", "invalid_format", nil
+	}
+
+	generationModel, ok := normalizeGenerationModel(req.GenerationModel)
+	if !ok {
+		return "", "invalid_generation_model", nil
 	}
 
 	if req.Voters <= 0 {
@@ -39,7 +131,9 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		cids = append(cids, id)
 	}
 
-	params := map[string]any{}
+	params := map[string]any{
+		"generation_model": generationModel,
+	}
 	switch format {
 	case "approval":
 		if req.ApprovalMaxChoices != nil {
@@ -95,14 +189,19 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 
 	rng := newLCG(uint64(*seed))
 
+	baseOrder := shuffle(rng, cids)
+	oppositeOrder := reverseStrings(baseOrder)
+
 	ballots := make([]BallotDoc, 0, req.Voters)
 
 	var scoreMin, scoreMax, scoreStep, scoreSteps int
+	var levels []int
 	if format == "score" {
 		scoreMin = params["score_min"].(int)
 		scoreMax = params["score_max"].(int)
 		scoreStep = params["score_step"].(int)
 		scoreSteps = ((scoreMax - scoreMin) / scoreStep) + 1
+		levels = scoreLevels(scoreMin, scoreMax, scoreStep)
 	}
 
 	for i := 0; i < req.Voters; i++ {
@@ -123,22 +222,35 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 			if q < 1 {
 				q = 1
 			}
+
 			k := 1 + int(rng.next()%uint64(q))
-			b.Approval = pickSubset(rng, cids, k)
+
+			if generationModel == "uniform" {
+				b.Approval = pickSubset(rng, cids, k)
+			} else {
+				order := buildPreferenceOrder(rng, cids, generationModel, baseOrder, oppositeOrder)
+				b.Approval = append([]string(nil), order[:k]...)
+			}
 
 		case "ranking":
 			top := len(cids)
 			if req.RankingTopK != nil && *req.RankingTopK > 0 && *req.RankingTopK < top {
 				top = *req.RankingTopK
 			}
-			sh := shuffle(rng, cids)
-			b.Ranking = sh[:top]
+
+			order := buildPreferenceOrder(rng, cids, generationModel, baseOrder, oppositeOrder)
+			b.Ranking = append([]string(nil), order[:top]...)
 
 		case "score":
-			b.Scores = map[string]int{}
-			for _, id := range cids {
-				v := int(rng.next() % uint64(scoreSteps))
-				b.Scores[id] = scoreMin + v*scoreStep
+			if generationModel == "uniform" {
+				b.Scores = map[string]int{}
+				for _, id := range cids {
+					v := int(rng.next() % uint64(scoreSteps))
+					b.Scores[id] = scoreMin + v*scoreStep
+				}
+			} else {
+				order := buildPreferenceOrder(rng, cids, generationModel, baseOrder, oppositeOrder)
+				b.Scores = scoresFromOrder(order, levels)
 			}
 		}
 

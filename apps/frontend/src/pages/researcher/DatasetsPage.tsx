@@ -22,6 +22,12 @@ const RANKING_EXPERIMENT_RULES = [
   { value: "coombs", label: "Coombs" },
 ] as const;
 
+const GENERATION_MODELS = [
+  { value: "uniform", label: "uniform" },
+  { value: "consensus", label: "consensus" },
+  { value: "polarized", label: "polarized" },
+] as const;
+
 type CreatedSyntheticRun = {
   rule: string;
   experimentId: string;
@@ -85,6 +91,7 @@ export function DatasetsPage() {
   const [genName, setGenName] = useState("Synthetic dataset");
   const [genDescription, setGenDescription] = useState("");
   const [genFormat, setGenFormat] = useState<"approval" | "ranking" | "score">("ranking");
+  const [genModel, setGenModel] = useState<"uniform" | "consensus" | "polarized">("uniform");
   const [genVoters, setGenVoters] = useState(100);
   const [genSeed, setGenSeed] = useState("");
   const [genCandidatesText, setGenCandidatesText] = useState("c1,Alice\nc2,Bob\nc3,Carol");
@@ -292,6 +299,7 @@ export function DatasetsPage() {
         description: genDescription.trim(),
         format: genFormat,
         voters: genVoters,
+        generation_model: genModel,
         candidates,
       };
 
@@ -540,6 +548,29 @@ export function DatasetsPage() {
             <option value="ranking">ranking</option>
             <option value="score">score</option>
           </select>
+
+          <div style={{ height: 10 }} />
+
+          <label>Generation model</label>
+          <select
+            style={styles.input}
+            value={genModel}
+            onChange={(e) => setGenModel(e.target.value as "uniform" | "consensus" | "polarized")}
+          >
+            {GENERATION_MODELS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+
+          <div style={{ marginTop: 8, ...styles.muted }}>
+            {genModel === "uniform"
+              ? "Независимая случайная генерация предпочтений."
+              : genModel === "consensus"
+              ? "Предпочтения концентрируются вокруг общего порядка."
+              : "Предпочтения делятся на противоположные группы."}
+          </div>
 
           <div style={{ height: 10 }} />
 

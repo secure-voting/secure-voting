@@ -67,6 +67,65 @@ function numericItems(value: unknown): Array<{ label: string; value: number }> {
     }));
 }
 
+function numberFromRecordByKeys(value: unknown, keys: string[]): number | null {
+  if (!isObject(value)) return null;
+
+  const wanted = new Set(keys.map((key) => key.toLowerCase()));
+  for (const [key, raw] of Object.entries(value)) {
+    if (!wanted.has(key.toLowerCase())) continue;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw;
+    }
+  }
+
+  return null;
+}
+
+function canonicalIndicators(result: unknown) {
+  const rec = isObject(result) ? result : null;
+  const metrics = rec && isObject(rec.metrics) ? rec.metrics : null;
+  const timings = rec && isObject(rec.timings) ? rec.timings : null;
+
+  const timeSecondsDirect =
+    numberFromRecordByKeys(timings, ["total_seconds", "duration_seconds", "elapsed_seconds", "time_seconds"]) ??
+    numberFromRecordByKeys(metrics, ["total_seconds", "duration_seconds", "elapsed_seconds", "time_seconds"]);
+
+  const timeMilliseconds =
+    numberFromRecordByKeys(timings, ["total_ms", "duration_ms", "elapsed_ms", "time_ms"]) ??
+    numberFromRecordByKeys(metrics, ["total_ms", "duration_ms", "elapsed_ms", "time_ms"]);
+
+  const memoryBytesDirect =
+    numberFromRecordByKeys(metrics, ["peak_memory_bytes", "max_memory_bytes", "memory_bytes", "ram_bytes"]);
+
+  const memoryMb =
+    numberFromRecordByKeys(metrics, ["peak_memory_mb", "max_memory_mb", "memory_mb", "ram_mb"]);
+
+  const speedPerSecond =
+    numberFromRecordByKeys(metrics, ["throughput_ops_per_sec", "ops_per_sec", "ballots_per_sec", "speed_per_sec", "throughput"]);
+
+  return {
+    timeSeconds: timeSecondsDirect ?? (timeMilliseconds != null ? timeMilliseconds / 1000 : null),
+    memoryBytes: memoryBytesDirect ?? (memoryMb != null ? memoryMb * 1024 * 1024 : null),
+    speedPerSecond,
+  };
+}
+
+function formatSeconds(value: number | null) {
+  return value == null ? "—" : `${value.toFixed(3)} s`;
+}
+
+function formatBytes(value: number | null) {
+  if (value == null) return "—";
+  if (value >= 1024 * 1024 * 1024) return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GiB`;
+  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(2)} MiB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(2)} KiB`;
+  return `${value.toFixed(0)} B`;
+}
+
+function formatSpeed(value: number | null) {
+  return value == null ? "—" : `${value.toFixed(3)} /s`;
+}
+
 function winnerList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => prettyValue(item));
   if (isObject(value)) {
@@ -99,6 +158,24 @@ function runDurationSeconds(item: ExperimentRunItem): number | null {
 function resultSummaryCsvRows(result: unknown) {
   const rec = isObject(result) ? result : null;
   const rows: Array<Record<string, unknown>> = [];
+
+  const canonical = canonicalIndicators(result);
+
+  rows.push({
+    section: "summary",
+    key: "time_seconds",
+    value: canonical.timeSeconds != null ? canonical.timeSeconds : "",
+  });
+  rows.push({
+    section: "summary",
+    key: "memory_bytes",
+    value: canonical.memoryBytes != null ? canonical.memoryBytes : "",
+  });
+  rows.push({
+    section: "summary",
+    key: "speed_per_second",
+    value: canonical.speedPerSecond != null ? canonical.speedPerSecond : "",
+  });
 
   const winners = winnerList(rec?.winners);
   winners.forEach((winner, index) => {
@@ -150,6 +227,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   const metrics = isObject(resultRec?.metrics) ? Object.entries(resultRec.metrics) : [];
   const timings = isObject(resultRec?.timings) ? Object.entries(resultRec.timings) : [];
   const artifacts = isObject(resultRec?.artifacts) ? Object.entries(resultRec.artifacts) : [];
+  const canonical = canonicalIndicators(result);
 
   const lines: string[] = [];
 
@@ -165,6 +243,11 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   lines.push(`- finished_at: ${prettyValue(runRec?.finished_at)}`);
   lines.push("");
 
+  lines.push("Canonical indicators:");
+  lines.push(`- time_seconds: ${canonical.timeSeconds != null ? canonical.timeSeconds.toFixed(3) : "—"}`);
+  lines.push(`- memory_bytes: ${canonical.memoryBytes != null ? canonical.memoryBytes.toFixed(0) : "—"}`);
+  lines.push(`- speed_per_second: ${canonical.speedPerSecond != null ? canonical.speedPerSecond.toFixed(3) : "—"}`);
+  lines.push("");
   lines.push("Winners:");
   if (winners.length > 0) {
     winners.forEach((winner, index) => lines.push(`${index + 1}. ${winner}`));
@@ -445,6 +528,7 @@ export function ExperimentRunsPage() {
   const timingsSummary = useMemo(() => summaryItems(resultRecord?.timings), [resultRecord]);
   const artifactsSummary = useMemo(() => summaryItems(resultRecord?.artifacts), [resultRecord]);
   const winners = useMemo(() => winnerList(resultRecord?.winners), [resultRecord]);
+  const canonical = useMemo(() => canonicalIndicators(selectedResult), [selectedResult]);
 
   const metricChartItems = useMemo(() => numericItems(resultRecord?.metrics), [resultRecord]);
   const timingsChartItems = useMemo(() => numericItems(resultRecord?.timings), [resultRecord]);
@@ -726,6 +810,16 @@ export function ExperimentRunsPage() {
             <div>
               <div style={{ fontWeight: 700 }}>Результат вычисления</div>
               <div style={styles.muted}>Данные, возвращённые сервисом результата запуска</div>
+            </div>
+            <div>
+              <h4 style={{ marginBottom: 8 }}>Ключевые показатели</h4>
+              <SummaryGrid
+                items={[
+                  { label: "Time", value: formatSeconds(canonical.timeSeconds) },
+                  { label: "Memory", value: formatBytes(canonical.memoryBytes) },
+                  { label: "Speed", value: formatSpeed(canonical.speedPerSecond) },
+                ]}
+              />
             </div>
 
             <div>

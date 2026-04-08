@@ -286,7 +286,7 @@ export function VotePage() {
 
       if (e?.code === "already_submitted") {
         setErr("Голос уже отправлен");
-      } else if (e?.code === "not_active") {
+      } else if (e?.code === "election_not_active" || e?.code === "not_active") {
         setErr("Голосование сейчас недоступно");
       } else if (e?.code === "idempotency_in_progress") {
         setErr("Запрос уже обрабатывается, попробуйте ещё раз");
@@ -645,8 +645,13 @@ export function VotePage() {
             </button>
 
             {!canSubmit ? (
-              <div style={{ marginTop: 8, ...styles.muted }}>
-                Повторная отправка для данного пользователя недоступна
+              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                <div style={{ color: "#15803d", fontWeight: 600 }}>
+                  Голос учтён
+                </div>
+                <div style={styles.muted}>
+                  Повторная отправка для данного пользователя недоступна
+                </div>
               </div>
             ) : null}
 

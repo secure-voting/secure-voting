@@ -28,7 +28,6 @@ func NewHandlers(svc AuthService) *Handlers {
 type registerReq struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
-	Role       string `json:"role,omitempty"`
 	InviteCode string `json:"invite_code,omitempty"`
 }
 
@@ -59,7 +58,7 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) error {
 		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
-	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password, req.Role, req.InviteCode)
+	res, code, err := h.svc.Register(r.Context(), req.Email, req.Password, "", req.InviteCode)
 	if err != nil {
 		return apperr.Internal(err, "register failed")
 	}
