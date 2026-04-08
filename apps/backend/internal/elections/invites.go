@@ -60,6 +60,20 @@ func (s *Service) CreateInvite(ctx context.Context, electionID, adminUserID, ema
 	}
 
 	if !registered {
+		_ = insertAudit(ctx, tx, &adminUserID, "invite_registration_required", map[string]any{
+			"target_type": "election",
+			"target_id":   electionID,
+			"after": map[string]any{
+				"election_id":           electionID,
+				"email":                 email,
+				"registration_required": true,
+			},
+		})
+
+		if err := tx.Commit(ctx); err != nil {
+			return InviteCreated{}, "", err
+		}
+
 		return InviteCreated{}, "registration_required", nil
 	}
 

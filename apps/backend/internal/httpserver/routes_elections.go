@@ -11,4 +11,7 @@ func registerElectionRoutes(r *routeCtx) {
 
 	r.mux.Handle("POST /api/v1/elections/{id}/invites", r.RequireRole("admin", r.electionsH.CreateInvite))
 	r.mux.Handle("GET /api/v1/elections/{id}/invites", r.RequireRole("admin", r.electionsH.ListInvites))
+
+	r.mux.Handle("POST /api/v1/elections/candidates/import", r.RequireRole("admin", r.electionsH.ImportCandidates))
+	r.mux.Handle("POST /api/v1/elections/{id}/invites/import", r.RequireRole("admin", r.electionsH.ImportInvites))
 }

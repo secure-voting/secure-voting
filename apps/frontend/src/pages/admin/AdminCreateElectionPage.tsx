@@ -218,6 +218,9 @@ export function AdminCreateElectionPage() {
     { name: "", description: "" },
   ]);
 
+  const [importingCandidates, setImportingCandidates] = useState(false);
+  const [importedCandidatesFileName, setImportedCandidatesFileName] = useState("");
+
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
   const [tallyRule, setTallyRule] = useState("plurality");
 
@@ -354,6 +357,42 @@ export function AdminCreateElectionPage() {
       const next = prev.filter((_, i) => i !== index);
       return next.length >= 2 ? next : prev;
     });
+  };
+
+  const handleCandidatesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = "";
+
+    if (!file || !token) return;
+
+    setImportingCandidates(true);
+    setErr(null);
+
+    try {
+      const imported = await api.elections.importCandidates(token, file);
+
+      if (imported.length < 2) {
+        setErr("Файл должен содержать не менее двух кандидатов");
+        return;
+      }
+
+      setCandidates(imported);
+      setImportedCandidatesFileName(file.name);
+
+      addNotification({
+        kind: "success",
+        title: "Кандидаты импортированы",
+        message: `Загружено кандидатов: ${imported.length}`,
+      });
+    } catch (err: any) {
+      if (err?.status === 401) {
+        setToken(null);
+        return;
+      }
+      setErr(err?.message || "Не удалось импортировать кандидатов");
+    } finally {
+      setImportingCandidates(false);
+    }
   };
 
   const validateStep = (targetStep: number) => {
@@ -662,6 +701,36 @@ export function AdminCreateElectionPage() {
           <div style={{ display: "grid", gap: 12 }}>
             <div style={styles.muted}>
               Добавьте не менее двух кандидатов. Для каждого можно указать краткое описание.
+            </div>
+
+            <div style={{ ...styles.card, background: "#f9fafb" }}>
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                Импорт кандидатов из файла
+              </div>
+
+              <div style={{ ...styles.muted, marginBottom: 12 }}>
+                Поддерживаются CSV и JSON. CSV: колонки name и description.
+                JSON: массив строк или массив объектов с полями name и description.
+              </div>
+
+              <input
+                type="file"
+                accept=".csv,.json,application/json,text/csv"
+                onChange={handleCandidatesFileChange}
+                disabled={importingCandidates || loading}
+              />
+
+              {importingCandidates ? (
+                <div style={{ marginTop: 8, fontSize: 13, color: "#667085" }}>
+                  Импорт кандидатов...
+                </div>
+              ) : null}
+
+              {importedCandidatesFileName ? (
+                <div style={{ marginTop: 8, fontSize: 13, color: "#667085" }}>
+                  Последний импорт: {importedCandidatesFileName}
+                </div>
+              ) : null}
             </div>
 
             <div style={{ display: "grid", gap: 16 }}>

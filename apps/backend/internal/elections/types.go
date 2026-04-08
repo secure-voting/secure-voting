@@ -14,6 +14,22 @@ type Service struct {
 	capabilities *computeclient.Client
 }
 
+type InviteImportItem struct {
+	Email    string  `json:"email"`
+	InviteID *string `json:"invite_id,omitempty"`
+	Status   *string `json:"status,omitempty"`
+	Code     *string `json:"code,omitempty"`
+}
+
+type InviteImportResult struct {
+	Total                int                `json:"total"`
+	Parsed               int                `json:"parsed"`
+	Created              []InviteImportItem `json:"created"`
+	RegistrationRequired []InviteImportItem `json:"registration_required"`
+	Skipped              []InviteImportItem `json:"skipped"`
+	Failed               []InviteImportItem `json:"failed"`
+}
+
 func NewService(db *pgxpool.Pool, capabilities *computeclient.Client) *Service {
 	return &Service{
 		db:           db,
@@ -597,6 +613,16 @@ type ElectionDetail struct {
 	ScoreMax           *int `json:"score_max,omitempty"`
 	ScoreStep          *int `json:"score_step,omitempty"`
 	ScoreAllowSkip     bool `json:"score_allow_skip"`
+
+	SubmittedBallotsCount *int `json:"submitted_ballots_count,omitempty"`
+
+	InvitesTotalCount    *int `json:"invites_total_count,omitempty"`
+	InvitesAcceptedCount *int `json:"invites_accepted_count,omitempty"`
+	InvitesPendingCount  *int `json:"invites_pending_count,omitempty"`
+	InvitesRevokedCount  *int `json:"invites_revoked_count,omitempty"`
+	InvitesFailedCount   *int `json:"invites_failed_count,omitempty"`
+
+	InvitesRegistrationRequiredCount *int `json:"invites_registration_required_count,omitempty"`
 
 	Candidates []Candidate `json:"candidates"`
 }

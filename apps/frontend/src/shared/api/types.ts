@@ -29,6 +29,27 @@ export type CandidatePayload = {
   };
 };
 
+export type ImportedCandidate = {
+  name: string;
+  meta?: Record<string, unknown> | null;
+};
+
+export type InviteImportItem = {
+  email: string;
+  invite_id?: string;
+  status?: string;
+  code?: string;
+};
+
+export type InviteImportResponse = {
+  total: number;
+  parsed: number;
+  created: InviteImportItem[];
+  registration_required: InviteImportItem[];
+  skipped: InviteImportItem[];
+  failed: InviteImportItem[];
+};
+
 export type ElectionSummary = {
   id: string;
   title: string;
@@ -68,6 +89,15 @@ export type ElectionDetail = {
   score_max?: number | null;
   score_step?: number | null;
   score_allow_skip: boolean;
+
+  submitted_ballots_count?: number | null;
+
+  invites_total_count?: number | null;
+  invites_accepted_count?: number | null;
+  invites_pending_count?: number | null;
+  invites_revoked_count?: number | null;
+  invites_failed_count?: number | null;
+  invites_registration_required_count?: number | null;
 
   candidates: Candidate[];
 };

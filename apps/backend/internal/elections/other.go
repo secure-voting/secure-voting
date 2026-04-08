@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-
+	
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -144,4 +144,9 @@ func insertAudit(ctx context.Context, tx any, actorUserID *string, eventType str
 	default:
 		return nil
 	}
+}
+
+func (s *Service) ImportCandidates(ctx context.Context, filename string, content []byte) ([]CandidateNormalized, string, error) {
+	_ = ctx
+	return importCandidates(filename, content)
 }

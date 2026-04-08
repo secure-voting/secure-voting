@@ -33,6 +33,7 @@ type fakeSvc struct {
 	actionFn      func(ctx context.Context, electionID, adminUserID, action string) (string, error)
 	createInvFn   func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error)
 	listInvFn     func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error)
+	importCandidatesFn func(ctx context.Context, filename string, content []byte) ([]elections.CandidateNormalized, string, error)
 }
 
 func (f fakeSvc) Create(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error) {
@@ -698,4 +699,15 @@ func TestListInvites_EmptySlice_ReturnsItemsArray(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Fatalf("expected empty items, got len=%d", len(resp.Items))
 	}
+}
+
+func (s fakeSvc) ImportCandidates(ctx context.Context, filename string, content []byte) ([]elections.CandidateNormalized, string, error) {
+	if s.importCandidatesFn != nil {
+		return s.importCandidatesFn(ctx, filename, content)
+	}
+	return nil, "", nil
+}
+
+func (s fakeSvc) ImportInvites(ctx context.Context, electionID, adminUserID, filename string, content []byte) (elections.InviteImportResult, string, error) {
+	return elections.InviteImportResult{}, "", nil
 }

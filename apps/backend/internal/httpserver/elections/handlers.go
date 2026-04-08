@@ -2,6 +2,7 @@ package elections
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 
@@ -20,6 +21,8 @@ type Service interface {
 	Action(ctx context.Context, electionID, adminUserID, action string) (string, error)
 	CreateInvite(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error)
 	ListInvites(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error)
+	ImportCandidates(ctx context.Context, filename string, content []byte) ([]elections.CandidateNormalized, string, error)
+	ImportInvites(ctx context.Context, electionID, adminUserID, filename string, content []byte) (elections.InviteImportResult, string, error)
 }
 
 type Handlers struct {
@@ -214,5 +217,117 @@ func (h *Handlers) ListInvites(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	return nil
+}
+
+const maxCandidatesImportFileBytes int64 = 1 << 20
+
+func (h *Handlers) ImportCandidates(w http.ResponseWriter, r *http.Request) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxCandidatesImportFileBytes+64*1024)
+
+	if err := r.ParseMultipartForm(maxCandidatesImportFileBytes); err != nil {
+		if _, ok := err.(*http.MaxBytesError); ok {
+			httputil.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": map[string]any{
+					"code":    "payload_too_large",
+					"message": "uploaded file is too large",
+				},
+			})
+			return nil
+		}
+		return apperr.Invalid("invalid_multipart_form", "invalid multipart form")
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return apperr.Invalid("invalid_file", "file is required")
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		if _, ok := err.(*http.MaxBytesError); ok {
+			httputil.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": map[string]any{
+					"code":    "payload_too_large",
+					"message": "uploaded file is too large",
+				},
+			})
+			return nil
+		}
+		return apperr.Invalid("invalid_file", "failed to read uploaded file")
+	}
+
+	items, code, err := h.svc.ImportCandidates(r.Context(), header.Filename, content)
+	if err != nil {
+		return apperr.Internal(err, "import candidates failed")
+	}
+	if code != "" {
+		return apperr.Invalid(code, code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"items": items,
+	})
+	return nil
+}
+
+const maxInvitesImportFileBytes int64 = 1 << 20
+
+func (h *Handlers) ImportInvites(w http.ResponseWriter, r *http.Request) error {
+	eid := strings.TrimSpace(r.PathValue("id"))
+	uid, _ := middleware.UserIDFromContext(r.Context())
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxInvitesImportFileBytes+64*1024)
+
+	if err := r.ParseMultipartForm(maxInvitesImportFileBytes); err != nil {
+		if _, ok := err.(*http.MaxBytesError); ok {
+			httputil.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": map[string]any{
+					"code":    "payload_too_large",
+					"message": "uploaded file is too large",
+				},
+			})
+			return nil
+		}
+		return apperr.Invalid("invalid_multipart_form", "invalid multipart form")
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return apperr.Invalid("invalid_file", "file is required")
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		if _, ok := err.(*http.MaxBytesError); ok {
+			httputil.WriteJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
+				"error": map[string]any{
+					"code":    "payload_too_large",
+					"message": "uploaded file is too large",
+				},
+			})
+			return nil
+		}
+		return apperr.Invalid("invalid_file", "failed to read uploaded file")
+	}
+
+	result, code, err := h.svc.ImportInvites(r.Context(), eid, uid, header.Filename, content)
+	if err != nil {
+		return apperr.Internal(err, "import invites failed")
+	}
+	if code != "" {
+		switch code {
+		case "not_found":
+			return apperr.NotFound("election not found")
+		case "not_invite_mode":
+			return apperr.Conflict(code, "election is not in invite mode")
+		default:
+			return apperr.Invalid(code, code)
+		}
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, result)
 	return nil
 }

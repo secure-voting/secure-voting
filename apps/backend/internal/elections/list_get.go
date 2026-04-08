@@ -155,6 +155,71 @@ func (s *Service) Get(ctx context.Context, electionID, userID, email, role strin
 		d.PublishedAt = &v
 	}
 
+	if role == "admin" && createdBy == userID {
+		var submittedBallotsCount int
+		if err := s.db.QueryRow(ctx, `
+			SELECT count(*)
+			FROM ballots
+			WHERE election_id = $1::uuid
+			  AND status = 'accepted'
+		`, electionID).Scan(&submittedBallotsCount); err != nil {
+			return ElectionDetail{}, "", err
+		}
+		d.SubmittedBallotsCount = &submittedBallotsCount
+
+		if d.AccessMode == "invite" {
+			var invitesTotalCount int
+			var invitesAcceptedCount int
+			var invitesPendingCount int
+			var invitesRevokedCount int
+			var invitesFailedCount int
+
+			if err := s.db.QueryRow(ctx, `
+				SELECT
+					count(*) AS total_count,
+					count(*) FILTER (WHERE status = 'accepted') AS accepted_count,
+					count(*) FILTER (WHERE status IN ('created', 'sent')) AS pending_count,
+					count(*) FILTER (WHERE status = 'revoked') AS revoked_count,
+					count(*) FILTER (WHERE status = 'failed') AS failed_count
+				FROM election_invites
+				WHERE election_id = $1::uuid
+			`, electionID).Scan(
+				&invitesTotalCount,
+				&invitesAcceptedCount,
+				&invitesPendingCount,
+				&invitesRevokedCount,
+				&invitesFailedCount,
+			); err != nil {
+				return ElectionDetail{}, "", err
+			}
+
+			d.InvitesTotalCount = &invitesTotalCount
+			d.InvitesAcceptedCount = &invitesAcceptedCount
+			d.InvitesPendingCount = &invitesPendingCount
+			d.InvitesRevokedCount = &invitesRevokedCount
+			d.InvitesFailedCount = &invitesFailedCount
+
+			var invitesRegistrationRequiredCount int
+			if err := s.db.QueryRow(ctx, `
+				SELECT count(DISTINCT lower(a.details #>> '{after,email}'))
+				FROM audit_log a
+				WHERE a.event_type = 'invite_registration_required'
+				  AND a.details->>'target_type' = 'election'
+				  AND a.details->>'target_id' = $1
+				  AND NOT EXISTS (
+					SELECT 1
+					FROM election_invites i
+					WHERE i.election_id = $1::uuid
+					  AND lower(i.email) = lower(a.details #>> '{after,email}')
+				  )
+			`, electionID).Scan(&invitesRegistrationRequiredCount); err != nil {
+				return ElectionDetail{}, "", err
+			}
+
+			d.InvitesRegistrationRequiredCount = &invitesRegistrationRequiredCount
+		}
+	}
+
 	rows, err := s.db.Query(ctx, `
 		SELECT id::text, name, meta
 		FROM candidates

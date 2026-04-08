@@ -132,6 +132,54 @@ components:
         meta:
           type: object
           additionalProperties: true
+    
+    CandidateImportResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateInput'
+    
+        InviteImportItem:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+        invite_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        code:
+          type: string
+
+    InviteImportResponse:
+      type: object
+      required: [total, parsed, created, registration_required, skipped, failed]
+      properties:
+        total:
+          type: integer
+        parsed:
+          type: integer
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteImportItem'
+        registration_required:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteImportItem'
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteImportItem'
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/InviteImportItem'
 
     ElectionCreateRequest:
       type: object
@@ -295,6 +343,20 @@ components:
           type: integer
         score_allow_skip:
           type: boolean
+        submitted_ballots_count:
+          type: integer
+        invites_total_count:
+          type: integer
+        invites_accepted_count:
+          type: integer
+        invites_pending_count:
+          type: integer
+        invites_revoked_count:
+          type: integer
+        invites_failed_count:
+          type: integer
+        invites_registration_required_count:
+          type: integer
         created_by:
           type: string
           format: uuid
@@ -1427,6 +1489,122 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/elections/candidates/import:
+    post:
+      tags: [Elections]
+      summary: Import election candidates from uploaded CSV or JSON file
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Parsed and normalized candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateImportResponse'
+        '400':
+          description: Invalid multipart form, unsupported format, or invalid candidates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: Uploaded file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/elections/{id}/invites/import:
+    post:
+      tags: [Elections]
+      summary: Import invites from uploaded CSV or JSON file
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Invite import report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteImportResponse'
+        '400':
+          description: Invalid multipart form, unsupported format, or invalid file contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Election is not in invite mode
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '413':
+          description: Uploaded file is too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:

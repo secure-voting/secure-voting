@@ -17,6 +17,9 @@ import type {
   MyBallotResp,
   ResultResp,
   TallyRuleInfo,
+  CandidateDraft,
+  ImportedCandidate,
+  InviteImportResponse,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -279,6 +282,79 @@ export const api = {
         },
         token
       );
+    },
+
+    async importCandidates(token: string, file: File) {
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch("/api/v1/elections/candidates/import", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: form,
+      });
+
+      const text = await res.text();
+      const data = safeJsonParse(text);
+
+      if (!res.ok) {
+        if (isAPIErrorResponse(data)) {
+          throw new ApiError(res.status, data.error.code, data.error.message, data);
+        }
+        throw new ApiError(res.status, "http_error", `HTTP ${res.status}`, data);
+      }
+
+      const items = Array.isArray((data as { items?: ImportedCandidate[] } | null)?.items)
+        ? ((data as { items?: ImportedCandidate[] }).items ?? [])
+        : [];
+
+      return items
+        .map((item): CandidateDraft => {
+          const meta = item?.meta && typeof item.meta === "object" ? item.meta : null;
+          const description =
+            meta && typeof meta.description === "string" ? meta.description : "";
+
+          return {
+            name: typeof item?.name === "string" ? item.name : "",
+            description,
+          };
+        })
+        .filter((item) => item.name.trim() !== "");
+    },
+
+    async importInvites(token: string, id: string, file: File) {
+      const form = new FormData();
+      form.append("file", file);
+
+      const res = await fetch(`/api/v1/elections/${id}/invites/import`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: form,
+      });
+
+      const text = await res.text();
+      const data = safeJsonParse(text);
+
+      if (!res.ok) {
+        if (isAPIErrorResponse(data)) {
+          throw new ApiError(res.status, data.error.code, data.error.message, data);
+        }
+        throw new ApiError(res.status, "http_error", `HTTP ${res.status}`, data);
+      }
+
+      const parsed = (data ?? {}) as Partial<InviteImportResponse>;
+      return {
+        total: typeof parsed.total === "number" ? parsed.total : 0,
+        parsed: typeof parsed.parsed === "number" ? parsed.parsed : 0,
+        created: Array.isArray(parsed.created) ? parsed.created : [],
+        registration_required: Array.isArray(parsed.registration_required) ? parsed.registration_required : [],
+        skipped: Array.isArray(parsed.skipped) ? parsed.skipped : [],
+        failed: Array.isArray(parsed.failed) ? parsed.failed : [],
+      } satisfies InviteImportResponse;
     },
   },
 

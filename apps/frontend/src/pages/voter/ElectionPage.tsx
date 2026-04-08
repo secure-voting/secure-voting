@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type {
+  AuditLogItem,
   ElectionDetail,
   Invite,
   InviteCreated,
+  InviteImportResponse,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
@@ -50,6 +52,72 @@ type BulkSummary = {
   failed: Array<{ email: string; reason: string }>;
 };
 
+function auditDetails(value: AuditLogItem): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = (value as Record<string, unknown>).details;
+  if (!raw || typeof raw !== "object") return null;
+  return raw as Record<string, unknown>;
+}
+
+function isElectionAuditItem(item: AuditLogItem, electionId: string) {
+  const details = auditDetails(item);
+  if (!details) return false;
+
+  const targetType = typeof details.target_type === "string" ? details.target_type : "";
+  const targetID = typeof details.target_id === "string" ? details.target_id : "";
+
+  if (targetType === "election" && targetID === electionId) return true;
+
+  const after = details.after && typeof details.after === "object"
+    ? (details.after as Record<string, unknown>)
+    : null;
+
+  const electionID =
+    after && typeof after.election_id === "string"
+      ? after.election_id
+      : "";
+
+  return electionID === electionId;
+}
+
+function auditItemLabel(item: AuditLogItem) {
+  const eventType =
+    typeof item?.event_type === "string" ? item.event_type : "event";
+
+  const labels: Record<string, string> = {
+    election_created: "Голосование создано",
+    election_scheduled: "Голосование запланировано",
+    election_opened: "Голосование открыто",
+    election_paused: "Голосование приостановлено",
+    election_resumed: "Голосование возобновлено",
+    election_closed: "Голосование завершено",
+    election_published: "Результаты опубликованы",
+    invite_created: "Создано приглашение",
+    invite_registration_required: "Требуется регистрация для приглашения",
+  };
+
+  return labels[eventType] || eventType;
+}
+
+function auditItemDescription(item: AuditLogItem) {
+  const details = auditDetails(item);
+  if (!details) return "";
+
+  const after = details.after && typeof details.after === "object"
+    ? (details.after as Record<string, unknown>)
+    : null;
+
+  const email = after && typeof after.email === "string" ? after.email : "";
+  const status = after && typeof after.status === "string" ? after.status : "";
+
+  if (email && status) return `${email} · ${status}`;
+  if (email) return email;
+  if (status) return status;
+
+  return "";
+}
+
+
 export function ElectionPage() {
   const { id } = useParams();
   const electionId = String(id || "");
@@ -64,6 +132,9 @@ export function ElectionPage() {
   const [lastInviteCode, setLastInviteCode] = useState<string | null>(null);
 
   const [bulkSummary, setBulkSummary] = useState<BulkSummary | null>(null);
+  const [recentAuditItems, setRecentAuditItems] = useState<AuditLogItem[]>([]);
+
+  const [lastImportedInvitesFileName, setLastImportedInvitesFileName] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
@@ -102,6 +173,26 @@ export function ElectionPage() {
       } else {
         setInvites([]);
       }
+
+      try {
+        const auditItems = await api.audit.list(
+          token,
+          { limit: 100 },
+          ac.signal
+        );
+
+        setRecentAuditItems(
+          auditItems
+            .filter((entry) => isElectionAuditItem(entry, electionId))
+            .slice(0, 10)
+        );
+      } catch (e: any) {
+        if (e?.status === 401) {
+          setToken(null);
+        } else {
+          setRecentAuditItems([]);
+        }
+      }
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (e?.status === 401) {
@@ -111,6 +202,7 @@ export function ElectionPage() {
       }
       setItem(null);
       setInvites([]);
+      setRecentAuditItems([]);
     } finally {
       setLoading(false);
     }
@@ -264,6 +356,54 @@ export function ElectionPage() {
     }
   };
 
+
+  const handleImportInvitesFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = "";
+
+    if (!file || !token) return;
+
+    setInviteLoading(true);
+    setErr(null);
+    setLastInviteCode(null);
+
+    try {
+      const result: InviteImportResponse = await api.elections.importInvites(token, electionId, file);
+      setLastImportedInvitesFileName(file.name);
+
+      const invalidFailedCount = result.failed.filter((item) => item.code === "invalid_email").length;
+
+      setBulkSummary({
+        total: result.total,
+        valid: Math.max(0, result.parsed - invalidFailedCount),
+        inviteCreated: result.created.map((item) => item.email),
+        registrationRequired: result.registration_required.map((item) => item.email),
+        skipped: result.skipped.map((item) => item.email),
+        failed: result.failed.map((item) => ({
+          email: item.email,
+          reason: item.code || "import_failed",
+        })),
+      });
+
+      addNotification({
+        kind: result.failed.length === 0 ? "success" : "info",
+        title: "Импорт приглашений завершён",
+        message: `создано: ${result.created.length}, нужна регистрация: ${result.registration_required.length}, пропущено: ${result.skipped.length}, ошибок: ${result.failed.length}`,
+      });
+
+      await load();
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+      } else {
+        setErr(e?.message || "Не удалось импортировать приглашения");
+      }
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+
   const inviteCounters = useMemo(() => {
     const counters: Record<string, number> = {};
     for (const invite of invites) {
@@ -342,6 +482,13 @@ export function ElectionPage() {
                   { label: "Quota type", value: item.quota_type ?? "—" },
                   { label: "Show aggregates", value: item.show_aggregates ? "yes" : "no" },
                   { label: "Candidates", value: String(item.candidates.length) },
+                  { label: "Submitted ballots", value: String(item.submitted_ballots_count ?? "—") },
+                  { label: "Invites total", value: item.access_mode === "invite" ? String(item.invites_total_count ?? "—") : "—" },
+                  { label: "Invites accepted", value: item.access_mode === "invite" ? String(item.invites_accepted_count ?? "—") : "—" },
+                  { label: "Invites pending", value: item.access_mode === "invite" ? String(item.invites_pending_count ?? "—") : "—" },
+                  { label: "Invites revoked", value: item.access_mode === "invite" ? String(item.invites_revoked_count ?? "—") : "—" },
+                  { label: "Invites failed", value: item.access_mode === "invite" ? String(item.invites_failed_count ?? "—") : "—" },
+                  { label: "Registration required", value: item.access_mode === "invite" ? String(item.invites_registration_required_count ?? "—") : "—" },
                 ]}
               />
             </div>
@@ -408,6 +555,45 @@ export function ElectionPage() {
                 </div>
               </>
             ) : null}
+            <hr style={styles.hr} />
+
+            <h3 style={{ marginTop: 0 }}>Последние действия</h3>
+
+            {recentAuditItems.length === 0 ? (
+              <div style={styles.muted}>События по этому голосованию пока отсутствуют</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {recentAuditItems.map((entry) => (
+                  <div key={`${entry.id ?? entry.occurred_at}-${entry.event_type}`} style={{ ...styles.card, padding: 10 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        alignItems: "baseline",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 700 }}>
+                          {auditItemLabel(entry)}
+                        </div>
+                        {auditItemDescription(entry) ? (
+                          <div style={{ ...styles.muted, marginTop: 4 }}>
+                            {auditItemDescription(entry)}
+                          </div>
+                        ) : null}
+                      </div>
+                      <Badge text={typeof entry.event_type === "string" ? entry.event_type : "event"} />
+                    </div>
+
+                    <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
+                      {entry.occurred_at || "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : null}
       </div>
@@ -440,6 +626,9 @@ export function ElectionPage() {
               {Object.entries(inviteCounters).map(([status, count]) => (
                 <Badge key={status} text={`${status}: ${count}`} />
               ))}
+              {typeof item?.invites_registration_required_count === "number" ? (
+                <Badge text={`registration_required: ${item.invites_registration_required_count}`} />
+              ) : null}
             </div>
 
             <div style={styles.grid2}>
@@ -493,6 +682,30 @@ export function ElectionPage() {
                   Можно разделять email новой строкой, запятой или точкой с запятой.
                 </div>
 
+                <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>
+                    Импорт email из файла
+                  </div>
+
+                  <div style={{ ...styles.muted, marginBottom: 12 }}>
+                    Поддерживаются CSV и JSON. CSV: колонка email.
+                    JSON: массив строк, объект с items или массив объектов с полем email.
+                  </div>
+
+                  <input
+                    type="file"
+                    accept=".csv,.json,application/json,text/csv"
+                    onChange={handleImportInvitesFileChange}
+                    disabled={inviteLoading}
+                  />
+
+                  {lastImportedInvitesFileName ? (
+                    <div style={{ marginTop: 8, fontSize: 13, color: "#667085" }}>
+                      Последний импорт: {lastImportedInvitesFileName}
+                    </div>
+                  ) : null}
+                </div>
+
                 <div style={{ height: 12 }} />
 
                 <button
@@ -515,6 +728,7 @@ export function ElectionPage() {
                     { label: "Registration required", value: String(bulkSummary.registrationRequired.length) },
                     { label: "Skipped", value: String(bulkSummary.skipped.length) },
                     { label: "Failed", value: String(bulkSummary.failed.length) },
+
                   ]}
                 />
 
