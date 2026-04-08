@@ -5,6 +5,18 @@ export type APIErrorResponse = {
   };
 };
 
+export type SystemComponentStatus = {
+  ok: boolean;
+  status: string;
+  details?: Record<string, unknown>;
+};
+
+export type SystemStatusResponse = {
+  backend: SystemComponentStatus;
+  compute: SystemComponentStatus;
+  checked_at: string;
+};
+
 export type Me = {
   id?: string;
   email?: string;

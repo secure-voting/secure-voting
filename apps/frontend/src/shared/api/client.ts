@@ -20,6 +20,7 @@ import type {
   CandidateDraft,
   ImportedCandidate,
   InviteImportResponse,
+  SystemStatusResponse,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -197,6 +198,16 @@ export const api = {
             new_password: newPassword,
           }),
         },
+        token
+      );
+    },
+  },
+
+  system: {
+    async status(token: string, signal?: AbortSignal) {
+      return await request<SystemStatusResponse>(
+        "/api/v1/system/status",
+        { method: "GET", signal },
         token
       );
     },

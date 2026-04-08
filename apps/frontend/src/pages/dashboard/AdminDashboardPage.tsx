@@ -133,7 +133,7 @@ export function AdminDashboardPage() {
                   </div>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Link to={`/elections/${item.id}`} style={{ textDecoration: "none" }}>
+                    <Link to={`/admin/elections/${item.id}`} style={{ textDecoration: "none" }}>
                       <button style={styles.btn}>Карточка</button>
                     </Link>
                     <Link to={`/admin/elections/${item.id}/rules`} style={{ textDecoration: "none" }}>

@@ -65,7 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </>
               ) : null}
 
-              {(isAdmin || isResearcher) ? (
+              {isAdmin ? (
                 <Link to="/monitor/jobs" style={{ textDecoration: "none" }}>
                   <button style={styles.btn}>Задачи</button>
                 </Link>

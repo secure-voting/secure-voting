@@ -6,7 +6,6 @@ import { I18nProvider } from "./i18n";
 import { AppLayout } from "./layout/AppLayout";
 import { RequireAuth } from "./routing/RequireAuth";
 import { RequireRole } from "./routing/RequireRole";
-import { RequireAnyRole } from "./routing/RequireAnyRole";
 
 import { LoginPage } from "../pages/auth/LoginPage";
 import { ElectionsPage } from "../pages/voter/ElectionsPage";
@@ -14,6 +13,7 @@ import { ElectionPage } from "../pages/voter/ElectionPage";
 import { VotePage } from "../pages/voter/VotePage";
 import { ResultsPage } from "../pages/voter/ResultsPage";
 import { AdminCreateElectionPage } from "../pages/admin/AdminCreateElectionPage";
+import { AdminElectionPage } from "../pages/admin/AdminElectionPage";
 import { ElectionRulesPage } from "../pages/admin/ElectionRulesPage";
 import { DatasetsPage } from "../pages/researcher/DatasetsPage";
 import { ExperimentsPage } from "../pages/researcher/ExperimentsPage";
@@ -55,7 +55,9 @@ export default function App() {
                 path="/dashboard/voter"
                 element={
                   <RequireAuth>
-                    <VoterDashboardPage />
+                    <RequireRole role="voter">
+                      <VoterDashboardPage />
+                    </RequireRole>
                   </RequireAuth>
                 }
               />
@@ -126,6 +128,16 @@ export default function App() {
                 }
               />
               <Route
+                path="/admin/elections/:id"
+                element={
+                  <RequireAuth>
+                    <RequireRole role="admin">
+                      <AdminElectionPage />
+                    </RequireRole>
+                  </RequireAuth>
+                }
+              />
+              <Route
                 path="/admin/elections/:id/rules"
                 element={
                   <RequireAuth>
@@ -150,9 +162,9 @@ export default function App() {
                 path="/research/experiments"
                 element={
                   <RequireAuth>
-                    <RequireAnyRole roles={["admin", "researcher"]}>
+                    <RequireRole role="researcher">
                       <ExperimentsPage />
-                    </RequireAnyRole>
+                    </RequireRole>
                   </RequireAuth>
                 }
               />
@@ -170,9 +182,9 @@ export default function App() {
                 path="/research/runs"
                 element={
                   <RequireAuth>
-                    <RequireAnyRole roles={["admin", "researcher"]}>
+                    <RequireRole role="researcher">
                       <ExperimentRunsPage />
-                    </RequireAnyRole>
+                    </RequireRole>
                   </RequireAuth>
                 }
               />
@@ -181,9 +193,9 @@ export default function App() {
                 path="/monitor/jobs"
                 element={
                   <RequireAuth>
-                    <RequireAnyRole roles={["admin", "researcher"]}>
+                    <RequireRole role="admin">
                       <JobsPage />
-                    </RequireAnyRole>
+                    </RequireRole>
                   </RequireAuth>
                 }
               />
@@ -191,9 +203,9 @@ export default function App() {
                 path="/monitor/audit"
                 element={
                   <RequireAuth>
-                    <RequireAnyRole roles={["admin", "researcher", "voter"]}>
+                    <RequireRole role="admin">
                       <AuditLogPage />
-                    </RequireAnyRole>
+                    </RequireRole>
                   </RequireAuth>
                 }
               />

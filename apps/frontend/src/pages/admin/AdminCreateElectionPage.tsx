@@ -1211,7 +1211,7 @@ export function AdminCreateElectionPage() {
                 <div style={{ marginTop: 6 }}>ID: {createdID}</div>
 
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={styles.btnPrimary} onClick={() => nav(`/elections/${createdID}`)}>
+                  <button style={styles.btnPrimary} onClick={() => nav(`/admin/elections/${createdID}`)}>
                     Открыть карточку
                   </button>
                   <button style={styles.btn} onClick={() => nav("/elections")}>

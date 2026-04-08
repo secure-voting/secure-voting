@@ -344,7 +344,7 @@ export function ElectionRulesPage() {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
           <h2 style={{ margin: 0 }}>Настройка правил голосования</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Link to={`/elections/${electionId}`} style={{ textDecoration: "none" }}>
+            <Link to={`/admin/elections/${electionId}`} style={{ textDecoration: "none" }}>
               <button style={styles.btn}>К карточке</button>
             </Link>
             <button style={styles.btn} onClick={load} disabled={loading || saving}>
