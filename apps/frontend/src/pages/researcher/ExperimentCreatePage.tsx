@@ -280,29 +280,44 @@ export function ExperimentCreatePage() {
 
   const validateStep = (targetStep: number) => {
     if (targetStep >= 0) {
+      if (rulesLoading && availableRules.length === 0) {
+        return "Список правил еще загружается";
+      }
+      if (availableRules.length === 0) {
+        return "Нет доступных правил для экспериментальных запусков";
+      }
       if (!type.trim()) return "Выберите тип эксперимента";
       if (!tallyRule.trim()) return "Выберите правило подсчёта";
+      if (!currentRule) return "Выберите допустимое правило подсчёта";
+      if (!currentRule.supports_experiment_runs) {
+        return "Выбранное правило недоступно для экспериментальных запусков";
+      }
+      if (!supportsBallotFormat(currentRule, ballotFormat)) {
+        return "Выбранное правило не поддерживает этот формат бюллетеня";
+      }
       if (candidates < 2) return "Количество кандидатов должно быть не меньше 2";
       if (voters < 1) return "Количество избирателей должно быть не меньше 1";
-      if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
+      if (currentRule.requires_committee_size && committeeSize < 1) {
+        return "Размер комитета должен быть не меньше 1";
+      }
     }
 
     if (targetStep >= 1) {
-      if (ballotFormat === "approval") {
+      if (ballotFormat === "approval" && currentRule?.requires_approval_max_choices) {
         if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
         if (approvalMax > candidates) {
           return "approval_max_choices не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "ranking") {
+      if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k) {
         if (rankingTopK < 1) return "ranking_top_k должен быть не меньше 1";
         if (rankingTopK > candidates) {
           return "ranking_top_k не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "score") {
+      if (ballotFormat === "score" && currentRule?.requires_score_range) {
         if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
         if (scoreMin > scoreMax) {
           return "Нижняя граница оценки не может быть больше верхней";

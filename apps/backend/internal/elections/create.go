@@ -111,6 +111,10 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		return "", "", err
 	}
 
+	if !validateKnownTallyRule(tally, rules) {
+		return "", "invalid_tally_rule", nil
+	}
+
 	params := map[string]any{
 		"committee_size":       committeeSize,
 		"quota_type":           quotaType,

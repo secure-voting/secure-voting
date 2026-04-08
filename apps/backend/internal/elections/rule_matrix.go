@@ -7,12 +7,16 @@ type ruleMatrix map[string]computeclient.TallyRuleInfo
 func buildRuleMatrix(rules []computeclient.TallyRuleInfo) ruleMatrix {
 	m := make(ruleMatrix, len(rules))
 	for _, r := range rules {
-		m[r.ID] = r
+		id := normalizeRuleName(r.ID)
+		if id == "" {
+			continue
+		}
+		m[id] = r
 	}
 	return m
 }
 
 func (m ruleMatrix) get(rule string) (computeclient.TallyRuleInfo, bool) {
-	r, ok := m[rule]
+	r, ok := m[normalizeRuleName(rule)]
 	return r, ok
 }

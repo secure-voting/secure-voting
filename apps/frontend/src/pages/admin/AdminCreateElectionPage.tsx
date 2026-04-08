@@ -396,7 +396,6 @@ export function AdminCreateElectionPage() {
   };
 
   const validateStep = (targetStep: number) => {
-    
     if (targetStep >= 0) {
       if (!title.trim()) return "Введите название голосования";
       if (!startAtRFC3339) return "Укажите корректную дату и время начала";
@@ -441,17 +440,34 @@ export function AdminCreateElectionPage() {
     }
 
     if (targetStep >= 2) {
-      if (!tallyRule.trim()) return "Выберите правило подсчёта";
-      if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
+      if (rulesLoading && availableRules.length === 0) {
+        return "Список правил подсчёта еще загружается";
+      }
+      if (availableRules.length === 0) {
+        return "Нет доступных правил подсчёта";
+      }
+      if (!currentRule) {
+        return "Выберите допустимое правило подсчёта";
+      }
+      if (!currentRule.supports_election_tally) {
+        return "Выбранное правило недоступно для подсчёта голосования";
+      }
+      if (!supportsBallotFormat(currentRule, ballotFormat)) {
+        return "Выбранное правило не поддерживает этот формат бюллетеня";
+      }
 
-      if (ballotFormat === "approval") {
+      if (currentRule.requires_committee_size && committeeSize < 1) {
+        return "Размер комитета должен быть не меньше 1";
+      }
+
+      if (ballotFormat === "approval" && currentRule.requires_approval_max_choices) {
         if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
         if (approvalMax > candidateCount) {
           return "approval_max_choices не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "ranking" && limitRankingTopK) {
+      if (ballotFormat === "ranking" && currentRule.supports_ranking_top_k && limitRankingTopK) {
         const topK = normalizedTopK();
         if (topK < 1) return "ranking_top_k должен быть не меньше 1";
         if (topK > candidateCount) {
@@ -459,7 +475,7 @@ export function AdminCreateElectionPage() {
         }
       }
 
-      if (ballotFormat === "score") {
+      if (ballotFormat === "score" && currentRule.requires_score_range) {
         if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
         if (scoreMin > scoreMax) return "Нижняя граница оценки не может быть больше верхней";
         if ((scoreMax - scoreMin) % scoreStep !== 0) {

@@ -1,40 +1,49 @@
 package elections
 
-import "testing"
+import (
+	"testing"
+
+	"secure-voting/apps/backend/internal/computeclient"
+)
 
 func TestValidateTallyRuleCanonicalValues(t *testing.T) {
 	t.Parallel()
 
-	cases := []string{
-		"plurality",
-		"approval",
-		"inverse_plurality",
-		"borda",
-		"black",
-		"copeland_i",
-		"copeland_ii",
-		"copeland_iii",
-		"simpson",
-		"minmax",
-		"hare",
-		"inverse_borda",
-		"nanson",
-		"coombs",
-		"practical_condorcet",
-		"threshold",
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{in: "plurality", want: "plurality"},
+		{in: "approval", want: "approval"},
+		{in: "inverse_plurality", want: "inverse_plurality"},
+		{in: "borda", want: "borda"},
+		{in: "black", want: "black"},
+		{in: "copeland_i", want: "copeland_i"},
+		{in: "copeland_ii", want: "copeland_ii"},
+		{in: "copeland_iii", want: "copeland_iii"},
+		{in: "simpson", want: "simpson"},
+		{in: "minmax", want: "minmax"},
+		{in: "hare", want: "hare"},
+		{in: "inverse_borda", want: "inverse_borda"},
+		{in: "nanson", want: "nanson"},
+		{in: "coombs", want: "coombs"},
+		{in: "practical_condorcet", want: "practical_condorcet"},
+		{in: "threshold", want: "threshold"},
+		{in: "strong_q_paretian_plurality", want: "strong_q_paretian_plurality"},
+		{in: "strongest_q_paretian_simple_majority", want: "strongest_q_paretian_simple_majority"},
 	}
 
 	for _, tc := range cases {
 		tc := tc
-		t.Run(tc, func(t *testing.T) {
+		t.Run(tc.in, func(t *testing.T) {
 			t.Parallel()
 
-			got, ok := validateTallyRule(tc)
+			got, ok := validateTallyRule(tc.in)
 			if !ok {
-				t.Fatalf("validateTallyRule(%q) returned ok=false", tc)
+				t.Fatalf("validateTallyRule(%q) returned ok=false", tc.in)
 			}
-			if got != tc {
-				t.Fatalf("validateTallyRule(%q) = %q, want %q", tc, got, tc)
+			if got != tc.want {
+				t.Fatalf("validateTallyRule(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -70,16 +79,17 @@ func TestValidateTallyRuleAliases(t *testing.T) {
 	}
 }
 
-func TestValidateTallyRuleRejectsUnknown(t *testing.T) {
+func TestValidateTallyRuleRejectsInvalidSyntax(t *testing.T) {
 	t.Parallel()
 
 	cases := []string{
 		"",
 		"   ",
-		"minimaxx",
-		"condorcet",
-		"strong_q_paretian_plurality",
-		"totally_unknown_rule",
+		"bad rule",
+		"bad-rule!",
+		"1plurality",
+		"_plurality",
+		"rule.with.dot",
 	}
 
 	for _, tc := range cases {
@@ -93,6 +103,40 @@ func TestValidateTallyRuleRejectsUnknown(t *testing.T) {
 			}
 			if got != "" {
 				t.Fatalf("validateTallyRule(%q) returned %q, want empty string", tc, got)
+			}
+		})
+	}
+}
+
+func TestValidateKnownTallyRule_UsesCapabilitiesAsSourceOfTruth(t *testing.T) {
+	t.Parallel()
+
+	rules := []computeclient.TallyRuleInfo{
+		{ID: "plurality"},
+		{ID: "minmax"},
+		{ID: "practical_condorcet"},
+		{ID: "strong_q_paretian_plurality"},
+	}
+
+	cases := []struct {
+		rule string
+		want bool
+	}{
+		{rule: "plurality", want: true},
+		{rule: "minimax", want: true},
+		{rule: "condorcet_practical", want: true},
+		{rule: "strong_q_paretian_plurality", want: true},
+		{rule: "unknown_rule", want: false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.rule, func(t *testing.T) {
+			t.Parallel()
+
+			got := validateKnownTallyRule(tc.rule, rules)
+			if got != tc.want {
+				t.Fatalf("validateKnownTallyRule(%q) = %v, want %v", tc.rule, got, tc.want)
 			}
 		})
 	}

@@ -206,22 +206,37 @@ export function ElectionRulesPage() {
 
     const candidatesCount = item.candidates.length;
 
+    if (rulesLoading && availableRules.length === 0) {
+      return "Список правил еще загружается";
+    }
+    if (availableRules.length === 0) {
+      return "Нет доступных правил подсчёта";
+    }
     if (!tallyRule.trim()) return "Выберите правило подсчёта";
-    if (!availableRules.some((item) => item.id === tallyRule)) return "Недопустимое правило подсчёта";
-    if (committeeSize < 1) return "Размер комитета должен быть не меньше 1";
+    if (!currentRule) return "Выберите допустимое правило подсчёта";
+    if (!currentRule.supports_election_tally) {
+      return "Выбранное правило недоступно для подсчёта голосования";
+    }
+    if (!supportsBallotFormat(currentRule, ballotFormat)) {
+      return "Выбранное правило не поддерживает этот формат бюллетеня";
+    }
 
-    if (ballotFormat === "approval") {
+    if (currentRule.requires_committee_size && committeeSize < 1) {
+      return "Размер комитета должен быть не меньше 1";
+    }
+
+    if (ballotFormat === "approval" && currentRule.requires_approval_max_choices) {
       if (approvalMaxChoices < 1) return "Максимум отметок должен быть не меньше 1";
       if (approvalMaxChoices > candidatesCount) return "Максимум отметок не может превышать число кандидатов";
     }
 
-    if (ballotFormat === "ranking" && limitRankingTopK) {
+    if (ballotFormat === "ranking" && currentRule.supports_ranking_top_k && limitRankingTopK) {
       const topK = normalizedTopK();
       if (topK < 1) return "top-k должен быть не меньше 1";
       if (topK > candidatesCount) return "top-k не может превышать число кандидатов";
     }
 
-    if (ballotFormat === "score") {
+    if (ballotFormat === "score" && currentRule.requires_score_range) {
       if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
       if (scoreMin > scoreMax) return "Нижняя граница оценки не может быть больше верхней";
       if ((scoreMax - scoreMin) % scoreStep !== 0) {

@@ -9,43 +9,67 @@ import (
 func mockRules() []computeclient.TallyRuleInfo {
 	return []computeclient.TallyRuleInfo{
 		{
-			ID:                       "plurality",
-			BallotFormats:            []string{"ranking"},
-			RequiresCommitteeSize:    true,
-			SupportsQuotaType:        false,
+			ID:                         "plurality",
+			BallotFormats:              []string{"ranking"},
+			SupportsElectionTally:      true,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          false,
 			RequiresApprovalMaxChoices: false,
-			SupportsRankingTopK:      true,
-			RequiresScoreRange:       false,
+			SupportsRankingTopK:        true,
+			RequiresScoreRange:         false,
 		},
 		{
-			ID:                       "approval",
-			BallotFormats:            []string{"approval"},
-			RequiresCommitteeSize:    true,
-			SupportsQuotaType:        false,
+			ID:                         "approval",
+			BallotFormats:              []string{"approval"},
+			SupportsElectionTally:      true,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          false,
 			RequiresApprovalMaxChoices: true,
-			SupportsRankingTopK:      false,
-			RequiresScoreRange:       false,
+			SupportsRankingTopK:        false,
+			RequiresScoreRange:         false,
 		},
 		{
-			ID:                       "score_rule",
-			BallotFormats:            []string{"score"},
-			RequiresCommitteeSize:    true,
-			SupportsQuotaType:        false,
+			ID:                         "score_rule",
+			BallotFormats:              []string{"score"},
+			SupportsElectionTally:      true,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          false,
 			RequiresApprovalMaxChoices: false,
-			SupportsRankingTopK:      false,
-			RequiresScoreRange:       true,
+			SupportsRankingTopK:        false,
+			RequiresScoreRange:         true,
+		},
+		{
+			ID:                         "experiment_only_rule",
+			BallotFormats:              []string{"ranking"},
+			SupportsElectionTally:      false,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          false,
+			RequiresApprovalMaxChoices: false,
+			SupportsRankingTopK:        true,
+			RequiresScoreRange:         false,
+		},
+		{
+			ID:                         "minmax",
+			BallotFormats:              []string{"ranking"},
+			SupportsElectionTally:      true,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          false,
+			RequiresApprovalMaxChoices: false,
+			SupportsRankingTopK:        true,
+			RequiresScoreRange:         false,
 		},
 	}
 }
 
-func TestValidateRuleCompatibility_OK(t *testing.T) {
+func TestValidateRuleCompatibility_OK_WithPointerParams(t *testing.T) {
 	rules := mockRules()
 
 	err := validateRuleCompatibility(
 		"plurality",
 		"ranking",
 		map[string]any{
-			"committee_size": 3,
+			"committee_size": intPtr(3),
+			"ranking_top_k":  intPtr(2),
 		},
 		rules,
 	)
@@ -62,13 +86,16 @@ func TestValidateRuleCompatibility_InvalidFormat(t *testing.T) {
 		"plurality",
 		"score",
 		map[string]any{
-			"committee_size": 3,
+			"committee_size": intPtr(3),
 		},
 		rules,
 	)
 
 	if err == nil {
 		t.Fatalf("expected error")
+	}
+	if err != ErrIncompatibleBallotFormat {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -79,13 +106,16 @@ func TestValidateRuleCompatibility_MissingApprovalParam(t *testing.T) {
 		"approval",
 		"approval",
 		map[string]any{
-			"committee_size": 3,
+			"committee_size": intPtr(3),
 		},
 		rules,
 	)
 
 	if err == nil {
 		t.Fatalf("expected error")
+	}
+	if err != ErrMissingApprovalMaxChoices {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -96,7 +126,7 @@ func TestValidateRuleCompatibility_ScoreMissingRange(t *testing.T) {
 		"score_rule",
 		"score",
 		map[string]any{
-			"committee_size": 3,
+			"committee_size": intPtr(3),
 		},
 		rules,
 	)
@@ -104,23 +134,67 @@ func TestValidateRuleCompatibility_ScoreMissingRange(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error")
 	}
+	if err != ErrInvalidScoreRange {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
-func TestValidateRuleCompatibility_UnsupportedTopK(t *testing.T) {
+func TestValidateRuleCompatibility_UnsupportedTopK_WithPointerParam(t *testing.T) {
 	rules := mockRules()
 
 	err := validateRuleCompatibility(
 		"approval",
 		"approval",
 		map[string]any{
-			"committee_size": 3,
-			"ranking_top_k":  2,
-			"approval_max_choices": 2,
+			"committee_size":       intPtr(3),
+			"approval_max_choices": intPtr(2),
+			"ranking_top_k":        intPtr(2),
 		},
 		rules,
 	)
 
 	if err == nil {
 		t.Fatalf("expected error")
+	}
+	if err != ErrUnsupportedTopK {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRuleCompatibility_UnsupportedElectionTally(t *testing.T) {
+	rules := mockRules()
+
+	err := validateRuleCompatibility(
+		"experiment_only_rule",
+		"ranking",
+		map[string]any{
+			"committee_size": intPtr(3),
+		},
+		rules,
+	)
+
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if err != ErrUnsupportedElectionTally {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRuleCompatibility_AliasLookupUsesCanonicalMatrix(t *testing.T) {
+	rules := mockRules()
+
+	err := validateRuleCompatibility(
+		"minimax",
+		"ranking",
+		map[string]any{
+			"committee_size": intPtr(2),
+			"ranking_top_k":  intPtr(2),
+		},
+		rules,
+	)
+
+	if err != nil {
+		t.Fatalf("expected ok, got %v", err)
 	}
 }

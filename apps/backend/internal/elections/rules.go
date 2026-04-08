@@ -193,6 +193,35 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		return code, nil
 	}
 
+	rules, err := s.capabilities.ListTallyRules(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	if !validateKnownTallyRule(finalTally, rules) {
+		return "invalid_tally_rule", nil
+	}
+
+	params := map[string]any{
+		"committee_size":       finalCommittee,
+		"quota_type":           finalQuota,
+		"approval_max_choices": finalApproval,
+		"ranking_top_k":        finalTopK,
+		"score_min":            finalScoreMin,
+		"score_max":            finalScoreMax,
+		"score_step":           finalScoreStep,
+	}
+
+	if err := validateRuleCompatibility(
+		finalTally,
+		finalFormat,
+		params,
+		rules,
+	); err != nil {
+		return err.Error(), nil
+	}
+
+
 	_, err = s.db.Exec(ctx, `
 		UPDATE elections
 		SET

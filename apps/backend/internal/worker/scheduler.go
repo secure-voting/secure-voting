@@ -154,17 +154,7 @@ func (w *Worker) autoPublishDueElections(ctx context.Context) error {
 	now := time.Now().UTC()
 
 	for _, electionID := range electionIDs {
-		_, err := tx.Exec(ctx, `
-			UPDATE elections
-			SET status = 'published', published_at = $2
-			WHERE id = $1::uuid
-			  AND status = 'results_ready'
-		`, electionID, now)
-		if err != nil {
-			return err
-		}
-
-		_, err = tx.Exec(ctx, `
+		tag, err := tx.Exec(ctx, `
 			WITH latest AS (
 				SELECT id
 				FROM results
@@ -176,6 +166,19 @@ func (w *Worker) autoPublishDueElections(ctx context.Context) error {
 			SET published_at = COALESCE(r.published_at, $2)
 			FROM latest
 			WHERE r.id = latest.id
+		`, electionID, now)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			continue
+		}
+
+		_, err = tx.Exec(ctx, `
+			UPDATE elections
+			SET status = 'published', published_at = $2
+			WHERE id = $1::uuid
+			  AND status = 'results_ready'
 		`, electionID, now)
 		if err != nil {
 			return err

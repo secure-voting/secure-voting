@@ -228,7 +228,7 @@ components:
           type: boolean
         candidates:
           type: array
-          minItems: 1
+          minItems: 2
           items:
             $ref: '#/components/schemas/CandidateInput'
 

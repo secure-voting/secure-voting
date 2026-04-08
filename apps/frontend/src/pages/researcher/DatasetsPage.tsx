@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { DatasetDetail, DatasetGenerateReq, DatasetListItem } from "../../shared/api/types";
-import { useAuth } from "../../app/auth";
+import type { DatasetDetail, DatasetGenerateReq, DatasetListItem, TallyRuleInfo } from "../../shared/api/types";import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
@@ -11,16 +10,6 @@ import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
-
-const RANKING_EXPERIMENT_RULES = [
-  { value: "plurality", label: "Plurality" },
-  { value: "borda", label: "Borda" },
-  { value: "black", label: "Black" },
-  { value: "simpson", label: "Simpson" },
-  { value: "hare", label: "Hare" },
-  { value: "nanson", label: "Nanson" },
-  { value: "coombs", label: "Coombs" },
-] as const;
 
 const GENERATION_MODELS = [
   { value: "uniform", label: "uniform" },
@@ -105,6 +94,8 @@ export function DatasetsPage() {
   const [runRankingTopK, setRunRankingTopK] = useState(3);
   const [runLoading, setRunLoading] = useState(false);
   const [createdRuns, setCreatedRuns] = useState<CreatedSyntheticRun[]>([]);
+  const [availableRunRules, setAvailableRunRules] = useState<TallyRuleInfo[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
 
   const listAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
@@ -140,6 +131,44 @@ export function DatasetsPage() {
       detailAbortRef.current?.abort();
     };
   }, [loadList]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setRulesLoading(true);
+
+    api.capabilities
+      .tallyRules(token, ac.signal)
+      .then((items) => {
+        const rankingExperimentRules = items.filter(
+          (item) => item.supports_experiment_runs && item.ballot_formats.includes("ranking")
+        );
+
+        setAvailableRunRules(rankingExperimentRules);
+
+        setRunRules((prev) => {
+          const allowed = new Set(rankingExperimentRules.map((item) => item.id));
+          const next = prev.filter((item) => allowed.has(item));
+          if (next.length > 0) return next;
+          return rankingExperimentRules.slice(0, 3).map((item) => item.id);
+        });
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setErr((prev) => prev || "Не удалось загрузить список правил для экспериментов");
+        setAvailableRunRules([]);
+      })
+      .finally(() => {
+        setRulesLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
 
   const loadDetail = async (id: string) => {
     if (!token) return;
@@ -354,6 +383,22 @@ export function DatasetsPage() {
 
     if (selected.format !== "ranking") {
       setErr("Через кнопку сейчас запускаются только ranking-эксперименты");
+      return;
+    }
+
+    if (rulesLoading) {
+      setErr("Список правил для экспериментов еще загружается");
+      return;
+    }
+
+    if (availableRunRules.length === 0) {
+      setErr("Нет доступных правил для ranking-экспериментов");
+      return;
+    }
+
+    const allowedRuleIds = new Set(availableRunRules.map((item) => item.id));
+    if (runRules.some((rule) => !allowedRuleIds.has(rule))) {
+      setErr("Выбран недопустимый идентификатор правила");
       return;
     }
 
@@ -724,40 +769,51 @@ export function DatasetsPage() {
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 8,
-                      }}
-                    >
-                      {RANKING_EXPERIMENT_RULES.map((rule) => {
-                        const checked = runRules.includes(rule.value);
+                                    <div>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
 
-                        return (
-                          <label
-                            key={rule.value}
-                            style={{
-                              ...styles.card,
-                              padding: 10,
-                              display: "flex",
-                              gap: 8,
-                              alignItems: "center",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleRunRule(rule.value)}
-                            />
-                            <span>{rule.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                    {rulesLoading ? (
+                      <div style={styles.muted}>Загрузка списка правил…</div>
+                    ) : null}
+
+                    {!rulesLoading && availableRunRules.length === 0 ? (
+                      <div style={styles.muted}>Нет доступных правил для ranking-экспериментов</div>
+                    ) : null}
+
+                    {availableRunRules.length > 0 ? (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                          gap: 8,
+                        }}
+                      >
+                        {availableRunRules.map((rule) => {
+                          const checked = runRules.includes(rule.id);
+
+                          return (
+                            <label
+                              key={rule.id}
+                              style={{
+                                ...styles.card,
+                                padding: 10,
+                                display: "flex",
+                                gap: 8,
+                                alignItems: "center",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleRunRule(rule.id)}
+                              />
+                              <span>{rule.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={styles.grid2}>

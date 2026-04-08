@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"regexp"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"secure-voting/apps/backend/internal/computeclient"
@@ -304,43 +305,28 @@ var allowedQuotaTypes = map[string]bool{
 	"droop": true,
 }
 
-var allowedTallyRules = map[string]bool{
-	"plurality":           true,
-	"approval":            true,
-	"inverse_plurality":   true,
-	"borda":               true,
-	"black":               true,
-	"copeland_i":          true,
-	"copeland_ii":         true,
-	"copeland_iii":        true,
-	"simpson":             true,
-	"minmax":              true,
-	"hare":                true,
-	"inverse_borda":       true,
-	"nanson":              true,
-	"coombs":              true,
-	"practical_condorcet": true,
-	"threshold":           true,
-}
-
 var tallyRuleAliases = map[string]string{
 	"minimax":             "minmax",
 	"condorcet_practical": "practical_condorcet",
 }
 
+var tallyRuleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
 func validateTallyRule(v string) (string, bool) {
-	n := norm(v)
-	n = strings.ReplaceAll(n, "-", "_")
+	n := normalizeRuleName(v)
 	if n == "" {
 		return "", false
 	}
-	if alias, ok := tallyRuleAliases[n]; ok {
-		n = alias
-	}
-	if !allowedTallyRules[n] {
+	if !tallyRuleIDPattern.MatchString(n) {
 		return "", false
 	}
 	return n, true
+}
+
+func validateKnownTallyRule(rule string, rules []computeclient.TallyRuleInfo) bool {
+	matrix := buildRuleMatrix(rules)
+	_, ok := matrix.get(rule)
+	return ok
 }
 
 func validateBallotParams(
@@ -399,14 +385,44 @@ func validateBallotParams(
 }
 
 var (
-	ErrInvalidTallyRule           = errors.New("invalid_tally_rule")
-	ErrIncompatibleBallotFormat   = errors.New("incompatible_ballot_format")
-	ErrInvalidCommitteeSize       = errors.New("invalid_committee_size")
-	ErrUnsupportedQuota           = errors.New("unsupported_quota")
-	ErrMissingApprovalMaxChoices  = errors.New("missing_approval_max_choices")
-	ErrUnsupportedTopK            = errors.New("unsupported_top_k")
-	ErrInvalidScoreRange          = errors.New("invalid_score_range")
+	ErrInvalidTallyRule          = errors.New("invalid_tally_rule")
+	ErrIncompatibleBallotFormat  = errors.New("incompatible_ballot_format")
+	ErrUnsupportedElectionTally  = errors.New("unsupported_election_tally")
+	ErrInvalidCommitteeSize      = errors.New("invalid_committee_size")
+	ErrUnsupportedQuota          = errors.New("unsupported_quota")
+	ErrMissingApprovalMaxChoices = errors.New("missing_approval_max_choices")
+	ErrUnsupportedTopK           = errors.New("unsupported_top_k")
+	ErrInvalidScoreRange         = errors.New("invalid_score_range")
 )
+
+func hasParam(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case *int:
+		return x != nil
+	case *string:
+		return x != nil && strings.TrimSpace(*x) != ""
+	case string:
+		return strings.TrimSpace(x) != ""
+	default:
+		return true
+	}
+}
+
+func intParam(v any) (int, bool) {
+	switch x := v.(type) {
+	case int:
+		return x, true
+	case *int:
+		if x == nil {
+			return 0, false
+		}
+		return *x, true
+	default:
+		return 0, false
+	}
+}
 
 func validateRuleCompatibility(
 	rule string,
@@ -421,10 +437,15 @@ func validateRuleCompatibility(
 		return ErrInvalidTallyRule
 	}
 
-	// ballot format
+	if !info.SupportsElectionTally {
+		return ErrUnsupportedElectionTally
+	}
+
+	normalizedFormat := norm(format)
+
 	allowed := false
 	for _, f := range info.BallotFormats {
-		if f == format {
+		if norm(f) == normalizedFormat {
 			allowed = true
 			break
 		}
@@ -433,39 +454,29 @@ func validateRuleCompatibility(
 		return ErrIncompatibleBallotFormat
 	}
 
-	// committee size
 	if info.RequiresCommitteeSize {
-		if v, ok := params["committee_size"].(int); !ok || v < 1 {
+		v, ok := intParam(params["committee_size"])
+		if !ok || v < 1 {
 			return ErrInvalidCommitteeSize
 		}
 	}
 
-	// quota
-	if !info.SupportsQuotaType {
-		if params["quota_type"] != nil {
-			return ErrUnsupportedQuota
-		}
+	if !info.SupportsQuotaType && hasParam(params["quota_type"]) {
+		return ErrUnsupportedQuota
 	}
 
-	// approval
-	if info.RequiresApprovalMaxChoices {
-		if params["approval_max_choices"] == nil {
-			return ErrMissingApprovalMaxChoices
-		}
+	if info.RequiresApprovalMaxChoices && !hasParam(params["approval_max_choices"]) {
+		return ErrMissingApprovalMaxChoices
 	}
 
-	// ranking
-	if !info.SupportsRankingTopK {
-		if params["ranking_top_k"] != nil {
-			return ErrUnsupportedTopK
-		}
+	if !info.SupportsRankingTopK && hasParam(params["ranking_top_k"]) {
+		return ErrUnsupportedTopK
 	}
 
-	// score
 	if info.RequiresScoreRange {
-		if params["score_min"] == nil ||
-			params["score_max"] == nil ||
-			params["score_step"] == nil {
+		if !hasParam(params["score_min"]) ||
+			!hasParam(params["score_max"]) ||
+			!hasParam(params["score_step"]) {
 			return ErrInvalidScoreRange
 		}
 	}

@@ -77,6 +77,10 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return "", err
 		}
 
+		if !validateKnownTallyRule(tallyRule, rules) {
+			return "invalid_tally_rule", nil
+		}
+
 		params := map[string]any{
 			"committee_size": committeeSize,
 			"ranking_top_k":  rankingTopK,
