@@ -11,9 +11,9 @@ export function RequireAnyRole({
 }) {
   const { me } = useAuth();
 
-  if (!me?.role) return <Navigate to="/elections" replace />;
+  if (!me?.role) return <Navigate to="/dashboard" replace />;
   if (!roles.includes(me.role as "admin" | "voter" | "researcher")) {
-    return <Navigate to="/elections" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;

@@ -75,7 +75,7 @@ export function LoginPage() {
   const [rawResp, setRawResp] = useState<unknown>(null);
 
   useEffect(() => {
-    if (authed) nav("/elections", { replace: true });
+    if (authed) nav("/dashboard", { replace: true });
   }, [authed, nav]);
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function LoginPage() {
       }
 
       const to =
-        loc?.state?.from && typeof loc.state.from === "string" ? loc.state.from : "/elections";
+        loc?.state?.from && typeof loc.state.from === "string" ? loc.state.from : "/dashboard";
       nav(to, { replace: true });
     } catch (e: any) {
       setErr(e?.message || "Ошибка авторизации");
