@@ -11,6 +11,14 @@ pub enum AlgorithmError {
 pub trait Algorithm: std::fmt::Debug + Send + Sync {
     fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError>;
     fn alias(&self) -> &'static str;
+    fn ballot_formats(&self) -> &[&'static str];
+    fn supports_election_tally(&self) -> bool;
+    fn supports_experiment_runs(&self) -> bool;
+    fn requires_committee_size(&self) -> bool;
+    fn supports_quota_type(&self) -> bool;
+    fn requires_approval_max_choices(&self) -> bool;
+    fn supports_ranking_top_k(&self) -> bool;
+    fn requires_score_range(&self) -> bool;
 }
 
 #[derive(Debug, Default)]
