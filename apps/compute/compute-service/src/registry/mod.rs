@@ -60,4 +60,8 @@ impl Registry {
             .ok_or(AlgorithmError::NoSuchAlgorithm)?;
         self.algorithms[index].run_election(input)
     }
+
+    pub fn algorithms(&self) -> &[Box<dyn Algorithm>] {
+        &self.algorithms
+    }
 }
