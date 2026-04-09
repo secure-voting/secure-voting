@@ -1,5 +1,10 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    ops::{Deref, DerefMut},
+    os::fd::OwnedFd,
+    sync::{Arc, RwLock},
+};
 
+use prost_types::ListValue;
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
@@ -8,7 +13,7 @@ use tonic::{
 use crate::{
     registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
     securevoting::compute::v1::{
-        RunChunk, RunResult,
+        ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
         ballot::Payload,
         compute_server::{Compute, ComputeServer},
         run_chunk::Part,
@@ -167,6 +172,37 @@ impl Compute for ComputeService {
                 e,
             ))),
         }
+    }
+
+    async fn list_tally_rules(
+        &self,
+        _request: tonic::Request<()>,
+    ) -> Result<tonic::Response<ListTallyRulesResponse>, tonic::Status> {
+        Ok(tonic::Response::new(ListTallyRulesResponse {
+            rules: self
+                .registry
+                .read()
+                .expect("RwLock is poisoned")
+                .algorithms()
+                .iter()
+                .map(|algo| TallyRuleInfo {
+                    id: algo.alias().to_lowercase().replace(" ", "-"),
+                    label: algo.alias().to_owned(),
+                    ballot_formats: algo
+                        .ballot_formats()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                    supports_election_tally: algo.supports_election_tally(),
+                    supports_experiment_runs: algo.supports_experiment_runs(),
+                    requires_committee_size: algo.requires_committee_size(),
+                    supports_quota_type: algo.supports_quota_type(),
+                    requires_approval_max_choices: algo.requires_approval_max_choices(),
+                    supports_ranking_top_k: algo.supports_ranking_top_k(),
+                    requires_score_range: algo.requires_score_range(),
+                })
+                .collect(),
+        }))
     }
 }
 
