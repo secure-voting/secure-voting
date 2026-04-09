@@ -1,14 +1,18 @@
+use std::sync::{Arc, RwLock};
+
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
 };
-use voting_core::prelude::*;
 
-use crate::securevoting::compute::v1::{
-    RunChunk, RunResult,
-    ballot::Payload,
-    compute_server::{Compute, ComputeServer},
-    run_chunk::Part,
+use crate::{
+    registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
+    securevoting::compute::v1::{
+        RunChunk, RunResult,
+        ballot::Payload,
+        compute_server::{Compute, ComputeServer},
+        run_chunk::Part,
+    },
 };
 
 #[allow(clippy::default_trait_access)]
@@ -21,6 +25,8 @@ pub mod securevoting {
         }
     }
 }
+
+pub mod registry;
 
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
     RunResult {
@@ -62,7 +68,9 @@ fn create_winner_response(winners: Vec<String>) -> RunResult {
 }
 
 #[derive(Debug, Default)]
-struct ComputeService;
+struct ComputeService {
+    registry: Arc<RwLock<Registry>>,
+}
 
 #[tonic::async_trait]
 impl Compute for ComputeService {
@@ -142,34 +150,21 @@ impl Compute for ComputeService {
             )));
         }
 
-        let result = match header.tally_rule.as_str() {
-            "borda" => run_election(ballots, &BordaRule::default()),
-            "plurality" => run_election(ballots, &PluralityRule::default()),
-            "approval-2" => run_election(ballots, &ApprovalRule::<2>::default()),
-            "approval-3" => run_election(ballots, &ApprovalRule::<3>::default()),
-            "inverse-plurality" => run_election(ballots, &AntiPluralityRule::default()),
-            "black" => run_election(ballots, &BlackRule::default()),
-            "copeland-i" => run_election(ballots, &CopelandIRule::default()),
-            "copeland-ii" => run_election(ballots, &CopelandIIRule::default()),
-            "copeland-iii" => run_election(ballots, &CopelandIIIRule::default()),
-            "simpson" => run_election(ballots, &SimpsonRule::default()),
-            "Minmax" | "minmax" => run_election(ballots, &MinmaxRule::default()),
-            "hare" => run_election(ballots, &HareRule::default()),
-            "nanson" => run_election(ballots, &NansonRule::default()),
-            "coombs" => run_election(ballots, &CoombsRule::default()),
-            "inverse-borda" => run_election(ballots, &InverseBordaRule::default()),
-            _ => {
-                return Ok(Response::new(create_error_type(
-                    tonic::Code::Unimplemented,
-                    "not yet supported",
-                )));
-            }
-        };
-        match result {
-            Ok(voting_results) => Ok(Response::new(create_winner_response(voting_results))),
-            Err(e) => Ok(Response::new(create_error_type(
+        #[allow(clippy::expect_used)]
+        match self
+            .registry
+            .read()
+            .expect("RwLock is poisoned")
+            .execute(ballots, header.tally_rule.as_str())
+        {
+            Ok(result) => Ok(Response::new(create_winner_response(result))),
+            Err(AlgorithmError::NoSuchAlgorithm) => Ok(Response::new(create_error_type(
+                tonic::Code::Unimplemented,
+                "No such algorithm",
+            ))),
+            Err(AlgorithmError::InvalidArgument(e)) => Ok(Response::new(create_error_type(
                 tonic::Code::InvalidArgument,
-                e.to_string(),
+                e,
             ))),
         }
     }
@@ -177,10 +172,14 @@ impl Compute for ComputeService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let registry = get_core_registry();
+
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
         .parse()?;
-    let server = ComputeService;
+    let server = ComputeService {
+        registry: Arc::new(RwLock::new(registry)),
+    };
 
     let cert = std::fs::read_to_string(format!(
         "{}/../../../scripts/certs/out/compute.pem",
