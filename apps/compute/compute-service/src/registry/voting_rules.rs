@@ -43,7 +43,7 @@ macro_rules! impl_algorithm {
 
 impl_algorithm!(
     BordaRule,
-    "borda",
+    "Borda",
     &["ranking"],
     true,
     true,
@@ -55,7 +55,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     PluralityRule,
-    "plurality",
+    "Plurality",
     &["ranking"],
     true,
     true,
@@ -67,7 +67,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     ApprovalRule::<2>,
-    "approval-2",
+    "Approval-2",
     &["ranking"],
     false,
     true,
@@ -79,7 +79,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     ApprovalRule::<3>,
-    "approval-3",
+    "Approval-3",
     &["ranking"],
     false,
     true,
@@ -91,7 +91,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     AntiPluralityRule,
-    "inverse-pluarlity",
+    "Inverse Pluarlity",
     &["ranking"],
     true,
     true,
@@ -103,7 +103,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     BlackRule,
-    "black",
+    "Black",
     &["ranking"],
     true,
     true,
@@ -115,7 +115,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     CopelandIRule,
-    "copeland-i",
+    "Copeland I",
     &["ranking"],
     true,
     true,
@@ -127,7 +127,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     CopelandIIRule,
-    "copeland-ii",
+    "Copeland II",
     &["ranking"],
     true,
     true,
@@ -139,7 +139,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     CopelandIIIRule,
-    "copeland-iii",
+    "Copeland III",
     &["ranking"],
     true,
     true,
@@ -151,7 +151,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     SimpsonRule,
-    "simpson",
+    "Simpson",
     &["ranking"],
     true,
     true,
@@ -163,7 +163,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     MinmaxRule,
-    "minmax",
+    "Minmax",
     &["ranking"],
     true,
     true,
@@ -175,7 +175,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     HareRule,
-    "hare",
+    "Hare",
     &["ranking"],
     true,
     true,
@@ -187,7 +187,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     NansonRule,
-    "nanson",
+    "Nanson",
     &["ranking"],
     true,
     true,
@@ -199,7 +199,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     CoombsRule,
-    "coombs",
+    "Coombs",
     &["ranking"],
     true,
     true,
@@ -211,7 +211,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     InverseBordaRule,
-    "inverse-borda",
+    "Inverse Borda",
     &["ranking"],
     true,
     true,
