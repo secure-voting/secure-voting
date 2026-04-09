@@ -5,6 +5,7 @@ package securevoting.compute.v1;
 option go_package = "secure-voting/apps/backend/internal/compute/pb;pb";
 
 import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
 
 message Candidate {
   string id = 1;
@@ -89,9 +90,30 @@ message RunResult {
 
   bytes timings_json   = 8;
   bytes artifacts_json = 9;
+}
 
+message TallyRuleInfo {
+  string id = 1;
+  string label = 2;
+
+  repeated string ballot_formats = 3;
+
+  bool supports_election_tally = 4;
+  bool supports_experiment_runs = 5;
+
+  bool requires_committee_size = 6;
+  bool supports_quota_type = 7;
+
+  bool requires_approval_max_choices = 8;
+  bool supports_ranking_top_k = 9;
+  bool requires_score_range = 10;
+}
+
+message ListTallyRulesResponse {
+  repeated TallyRuleInfo rules = 1;
 }
 
 service Compute {
   rpc Run (stream RunChunk) returns (RunResult);
+  rpc ListTallyRules(google.protobuf.Empty) returns (ListTallyRulesResponse);
 }
