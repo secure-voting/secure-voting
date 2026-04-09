@@ -6,7 +6,12 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { Badge } from "../../shared/ui/Badge";
 import { styles } from "../../shared/ui/styles";
-import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
+import {
+  downloadCsvFile,
+  downloadJsonFile,
+  downloadPdfTextFile,
+  downloadXlsxFile,
+} from "../../shared/utils/export";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -30,6 +35,51 @@ function auditCsvRows(items: AuditLogItem[]) {
     event_type: compact(item.event_type),
     details: compact((item as Record<string, unknown>).details),
   }));
+}
+
+function buildAuditReportText(
+  items: AuditLogItem[],
+  selected: AuditLogItem | null,
+  filters: {
+    eventType: string;
+    actorUserId: string;
+    since: string;
+    until: string;
+  }
+) {
+  const lines: string[] = [];
+
+  lines.push("Audit log report");
+  lines.push("");
+
+  lines.push("Filters:");
+  lines.push(`- event_type: ${filters.eventType || "—"}`);
+  lines.push(`- actor_user_id: ${filters.actorUserId || "—"}`);
+  lines.push(`- since: ${filters.since || "—"}`);
+  lines.push(`- until: ${filters.until || "—"}`);
+  lines.push("");
+
+  lines.push(`Total items: ${items.length}`);
+  lines.push("");
+
+  items.forEach((item, index) => {
+    lines.push(`${index + 1}. id=${compact(item.id)} event_type=${compact(item.event_type)} occurred_at=${compact(item.occurred_at)}`);
+  });
+
+  lines.push("");
+  lines.push("Selected item:");
+  if (selected) {
+    try {
+      lines.push(JSON.stringify(selected, null, 2));
+    } catch {
+      lines.push(String(selected));
+    }
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
+  return `${lines.join("\n")}`;
 }
 
 export function AuditLogPage() {
@@ -84,6 +134,23 @@ export function AuditLogPage() {
       downloadCsvFile("audit-log.csv", auditCsvRows(items));
     }, [items]);
 
+    const exportXlsx = useCallback(() => {
+      downloadXlsxFile("audit-log.xlsx", auditCsvRows(items), "AuditLog");
+    }, [items]);
+
+    const exportPdf = useCallback(() => {
+      downloadPdfTextFile(
+        "audit-log-report.pdf",
+        "Audit log report",
+        buildAuditReportText(items, selected, {
+          eventType,
+          actorUserId,
+          since,
+          until,
+        })
+      );
+    }, [items, selected, eventType, actorUserId, since, until]);
+
     const exportJson = useCallback(() => {
       downloadJsonFile("audit-log.json", items);
     }, [items]);
@@ -111,8 +178,14 @@ export function AuditLogPage() {
             <button style={styles.btn} onClick={exportCsv} disabled={items.length === 0}>
               Export CSV
             </button>
+            <button style={styles.btn} onClick={exportXlsx} disabled={items.length === 0}>
+              Export XLSX
+            </button>
             <button style={styles.btn} onClick={exportJson} disabled={items.length === 0}>
               Export JSON
+            </button>
+            <button style={styles.btn} onClick={exportPdf} disabled={items.length === 0}>
+              Export PDF
             </button>
             <button style={styles.btn} onClick={exportSelectedJson} disabled={!selected}>
               Export selected JSON

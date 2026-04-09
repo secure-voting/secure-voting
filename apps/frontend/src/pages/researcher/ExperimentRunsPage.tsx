@@ -11,7 +11,13 @@ import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
 import { styles } from "../../shared/ui/styles";
-import { downloadCsvFile, downloadJsonFile, downloadTextFile } from "../../shared/utils/export";
+import {
+  downloadCsvFile,
+  downloadJsonFile,
+  downloadPdfTextFile,
+  downloadTextFile,
+  downloadXlsxFile,
+} from "../../shared/utils/export";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -580,13 +586,46 @@ export function ExperimentRunsPage() {
     );
   };
 
-    const exportRunsJson = () => {
+  const exportRunsXlsx = () => {
+    downloadXlsxFile(
+      "experiment-runs.xlsx",
+      items.map((item, index) => ({
+        id: runId(item, index),
+        status: runStatus(item),
+        experiment_id: prettyValue((item as any)?.experiment_id),
+        dataset_id: prettyValue((item as any)?.dataset_id),
+        started_at: prettyValue((item as any)?.started_at),
+        finished_at: prettyValue((item as any)?.finished_at),
+      })),
+      "Runs"
+    );
+  };
+
+  const exportRunsJson = () => {
     downloadJsonFile("experiment-runs.json", items);
   };
 
   const exportResultSummaryCsv = () => {
     if (!selectedResult) return;
     downloadCsvFile("experiment-run-result-summary.csv", resultSummaryCsvRows(selectedResult));
+  };
+
+  const exportResultSummaryXlsx = () => {
+    if (!selectedResult) return;
+    downloadXlsxFile(
+      "experiment-run-result-summary.xlsx",
+      resultSummaryCsvRows(selectedResult),
+      "ResultSummary"
+    );
+  };
+
+  const exportResultReportPdf = () => {
+    if (!selectedResult) return;
+    downloadPdfTextFile(
+      "experiment-run-report.pdf",
+      "Experiment run report",
+      buildRunReportText(selected, selectedResult)
+    );
   };
 
   const exportResultReportTxt = () => {
@@ -614,6 +653,9 @@ export function ExperimentRunsPage() {
             <button style={styles.btn} onClick={exportRunsCsv} disabled={items.length === 0}>
               Export CSV
             </button>
+            <button style={styles.btn} onClick={exportRunsXlsx} disabled={items.length === 0}>
+              Export XLSX
+            </button>
             <button style={styles.btn} onClick={exportRunsJson} disabled={items.length === 0}>
               Export runs JSON
             </button>
@@ -628,8 +670,14 @@ export function ExperimentRunsPage() {
                 <button style={styles.btn} onClick={exportResultSummaryCsv}>
                   Export summary CSV
                 </button>
+                <button style={styles.btn} onClick={exportResultSummaryXlsx}>
+                  Export summary XLSX
+                </button>
                 <button style={styles.btn} onClick={exportResultReportTxt}>
                   Export report TXT
+                </button>
+                <button style={styles.btn} onClick={exportResultReportPdf}>
+                  Export report PDF
                 </button>
               </>
             ) : null}

@@ -7,7 +7,12 @@ import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { styles } from "../../shared/ui/styles";
-import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
+import {
+  downloadCsvFile,
+  downloadJsonFile,
+  downloadPdfTextFile,
+  downloadXlsxFile,
+} from "../../shared/utils/export";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -65,6 +70,37 @@ function jobsCsvRows(items: JobItem[]) {
       }
     })(),
   }));
+}
+
+function buildJobsReportText(
+  items: JobItem[],
+  filters: {
+    statusFilter: string;
+    kindFilter: string;
+  }
+) {
+  const lines: string[] = [];
+
+  lines.push("Jobs report");
+  lines.push("");
+
+  lines.push("Filters:");
+  lines.push(`- status: ${filters.statusFilter || "—"}`);
+  lines.push(`- kind: ${filters.kindFilter || "—"}`);
+  lines.push("");
+
+  lines.push(`Total jobs: ${items.length}`);
+  lines.push("");
+
+  items.forEach((job, index) => {
+    lines.push(
+      `${index + 1}. id=${idOf(job, index)} kind=${kindOf(job)} status=${statusOf(job)} created_at=${str((job as any)?.created_at)}`
+    );
+  });
+
+  lines.push("");
+
+  return `${lines.join("\n")}`;
 }
 
 export function JobsPage() {
@@ -197,6 +233,21 @@ export function JobsPage() {
     downloadCsvFile("jobs.csv", jobsCsvRows(items));
   }, [items]);
 
+  const exportXlsx = useCallback(() => {
+    downloadXlsxFile("jobs.xlsx", jobsCsvRows(items), "Jobs");
+  }, [items]);
+
+  const exportPdf = useCallback(() => {
+    downloadPdfTextFile(
+      "jobs-report.pdf",
+      "Jobs report",
+      buildJobsReportText(items, {
+        statusFilter,
+        kindFilter,
+      })
+    );
+  }, [items, statusFilter, kindFilter]);
+
   const exportJson = useCallback(() => {
     downloadJsonFile("jobs.json", items);
   }, [items]);
@@ -213,8 +264,14 @@ export function JobsPage() {
             <button style={styles.btn} onClick={exportCsv} disabled={items.length === 0}>
               Export CSV
             </button>
+            <button style={styles.btn} onClick={exportXlsx} disabled={items.length === 0}>
+              Export XLSX
+            </button>
             <button style={styles.btn} onClick={exportJson} disabled={items.length === 0}>
               Export JSON
+            </button>
+            <button style={styles.btn} onClick={exportPdf} disabled={items.length === 0}>
+              Export PDF
             </button>
           </div>
         </div>

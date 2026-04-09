@@ -10,7 +10,11 @@ import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
 import { styles } from "../../shared/ui/styles";
-import { downloadJsonFile } from "../../shared/utils/export";
+import {
+  downloadJsonFile,
+  downloadPdfTextFile,
+  downloadXlsxFile,
+} from "../../shared/utils/export";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -73,6 +77,116 @@ function numericItemsFromObject(value: unknown): Array<{ label: string; value: n
       label: key,
       value: Number(val),
     }));
+}
+
+function resultRows(result: ResultResp): Array<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = [];
+
+  rows.push(
+    { section: "summary", key: "election_id", value: result.election_id },
+    { section: "summary", key: "version", value: result.version },
+    { section: "summary", key: "method", value: result.method },
+    { section: "summary", key: "published_at", value: result.published_at ?? "" }
+  );
+
+  extractWinnerList(result.winners).forEach((winner, index) => {
+    rows.push({
+      section: "winners",
+      key: index + 1,
+      value: winner,
+    });
+  });
+
+  if (isObject(result.metrics)) {
+    Object.entries(result.metrics).forEach(([key, value]) => {
+      rows.push({
+        section: "metrics",
+        key,
+        value: compactValue(value),
+      });
+    });
+  }
+
+  if (isObject(result.params)) {
+    Object.entries(result.params).forEach(([key, value]) => {
+      rows.push({
+        section: "params",
+        key,
+        value: compactValue(value),
+      });
+    });
+  }
+
+  if (isObject(result.protocol)) {
+    Object.entries(result.protocol).forEach(([key, value]) => {
+      rows.push({
+        section: "protocol",
+        key,
+        value: compactValue(value),
+      });
+    });
+  }
+
+  return rows;
+}
+
+function buildResultReportText(result: ResultResp) {
+  const winners = extractWinnerList(result.winners);
+  const lines: string[] = [];
+
+  lines.push("Election result report");
+  lines.push("");
+
+  lines.push("Summary:");
+  lines.push(`- election_id: ${compactValue(result.election_id)}`);
+  lines.push(`- version: ${compactValue(result.version)}`);
+  lines.push(`- method: ${compactValue(result.method)}`);
+  lines.push(`- published_at: ${compactValue(result.published_at ?? "—")}`);
+  lines.push("");
+
+  lines.push("Winners:");
+  if (winners.length > 0) {
+    winners.forEach((winner, index) => {
+      lines.push(`${index + 1}. ${winner}`);
+    });
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
+  lines.push("Metrics:");
+  if (isObject(result.metrics) && Object.keys(result.metrics).length > 0) {
+    Object.entries(result.metrics).forEach(([key, value]) => {
+      lines.push(`- ${key}: ${compactValue(value)}`);
+    });
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
+  lines.push("Params:");
+  if (isObject(result.params) && Object.keys(result.params).length > 0) {
+    Object.entries(result.params).forEach(([key, value]) => {
+      lines.push(`- ${key}: ${compactValue(value)}`);
+    });
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
+  lines.push("Protocol:");
+  if (result.protocol != null) {
+    try {
+      lines.push(JSON.stringify(result.protocol, null, 2));
+    } catch {
+      lines.push(String(result.protocol));
+    }
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
+  return `${lines.join("\n")}`;
 }
 
 export function ResultsPage() {
@@ -152,12 +266,38 @@ export function ResultsPage() {
               Обновить
             </button>
             {res ? (
-              <button
-                style={styles.btn}
-                onClick={() => downloadJsonFile(`election-result-${electionId}.json`, res)}
-              >
-                Export JSON
-              </button>
+              <>
+                <button
+                  style={styles.btn}
+                  onClick={() => downloadJsonFile(`election-result-${electionId}.json`, res)}
+                >
+                  Export JSON
+                </button>
+                <button
+                  style={styles.btn}
+                  onClick={() =>
+                    downloadXlsxFile(
+                      `election-result-${electionId}.xlsx`,
+                      resultRows(res),
+                      "Results"
+                    )
+                  }
+                >
+                  Export XLSX
+                </button>
+                <button
+                  style={styles.btn}
+                  onClick={() =>
+                    downloadPdfTextFile(
+                      `election-result-${electionId}.pdf`,
+                      "Election result report",
+                      buildResultReportText(res)
+                    )
+                  }
+                >
+                  Export PDF
+                </button>
+              </>
             ) : null}
           </div>
         </div>

@@ -41,6 +41,8 @@ type routeCtx struct {
 
 	authSvc *asvc.Service
 
+	computeClient *computeclient.Client
+
 	authH         *ah.Handlers
 	electionsH    *eh.Handlers
 	ballotsH      *bh.Handlers
@@ -85,6 +87,8 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 		mux: mux,
 
 		authSvc: authSvc,
+
+		computeClient: computeClient,
 
 		authH:         ah.NewHandlers(authSvc),
 		electionsH:    eh.NewHandlers(electionsSvc),

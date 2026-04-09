@@ -96,3 +96,17 @@ func (c *Client) Close() error {
 func (c *Client) Compute() pb.ComputeClient {
 	return c.client
 }
+
+func (c *Client) ConnectivityState() string {
+	if c == nil || c.conn == nil {
+		return connectivity.Shutdown.String()
+	}
+	return c.conn.GetState().String()
+}
+
+func (c *Client) Ready() bool {
+	if c == nil || c.conn == nil {
+		return false
+	}
+	return c.conn.GetState() == connectivity.Ready
+}

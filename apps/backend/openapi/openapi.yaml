@@ -911,6 +911,30 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuditItem'
+    
+    SystemComponentStatus:
+      type: object
+      required: [ok, status]
+      properties:
+        ok:
+          type: boolean
+        status:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    SystemStatusResponse:
+      type: object
+      required: [backend, compute, checked_at]
+      properties:
+        backend:
+          $ref: '#/components/schemas/SystemComponentStatus'
+        compute:
+          $ref: '#/components/schemas/SystemComponentStatus'
+        checked_at:
+          type: string
+          format: date-time
 
 paths:
   /health:
@@ -2353,6 +2377,32 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/system/status:
+    get:
+      tags: [System]
+      summary: Get backend and compute connectivity status
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current system status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStatusResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
           content:
             application/json:
               schema:
