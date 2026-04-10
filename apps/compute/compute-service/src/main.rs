@@ -1,10 +1,5 @@
-use std::{
-    ops::{Deref, DerefMut},
-    os::fd::OwnedFd,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
-use prost_types::ListValue;
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
