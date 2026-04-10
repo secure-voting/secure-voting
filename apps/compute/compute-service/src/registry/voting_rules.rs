@@ -222,6 +222,58 @@ impl_algorithm!(
     false
 );
 
+impl_algorithm!(
+    QParetianStrongSimpleMajorityRule::<30>,
+    "Strong q-Paretian Simple Majority",
+    &["ranking"],
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+
+impl_algorithm!(
+    QParetianStrongPluralityRule::<30>,
+    "Strong q-Paretian Plurality",
+    &["ranking"],
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+
+impl_algorithm!(
+    QParetianStrongestSimpleMajorityRule::<30>,
+    "Strongest q-Paretian Simple Majority",
+    &["ranking"],
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+
+impl_algorithm!(
+    ThresholdRule,
+    "Threshold",
+    &["ranking"],
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+
 pub fn get_core_registry() -> Registry {
     let mut registry = Registry::new();
     registry.add(BordaRule::default());
@@ -239,6 +291,10 @@ pub fn get_core_registry() -> Registry {
     registry.add(NansonRule::default());
     registry.add(CoombsRule::default());
     registry.add(InverseBordaRule::default());
+    registry.add(QParetianStrongSimpleMajorityRule::<30>::create_default());
+    registry.add(QParetianStrongPluralityRule::<30>::create_default());
+    registry.add(QParetianStrongestSimpleMajorityRule::<30>::create_default());
+    registry.add(ThresholdRule::default());
 
     registry
 }
