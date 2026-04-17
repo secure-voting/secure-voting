@@ -1,18 +1,7 @@
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
-
-export type NotificationKind = "info" | "success" | "warning" | "error";
-
-export type NotificationItem = {
-  id: string;
-  title: string;
-  message: string;
-  details?: string;
-  action_label?: string;
-  action_to?: string;
-  kind: NotificationKind;
-  created_at: string;
-  read: boolean;
-};
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useAuth } from "./auth";
+import { api } from "../shared/api/client";
+import type { NotificationCreateReq, NotificationItem, NotificationKind } from "../shared/api/types";
 
 type AddNotificationInput = {
   title: string;
@@ -33,103 +22,135 @@ type NotificationsContextValue = {
   clearAll: () => void;
 };
 
-const STORAGE_KEY = "sv_notifications";
-
 const NotificationsContext = createContext<NotificationsContextValue | null>(null);
 
-function newNotificationId() {
+function newLocalNotification(input: AddNotificationInput): NotificationItem {
   const g = globalThis as any;
-  if (typeof g?.crypto?.randomUUID === "function") {
-    return g.crypto.randomUUID();
-  }
-  return `n-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
-}
+  const id =
+    typeof g?.crypto?.randomUUID === "function"
+      ? g.crypto.randomUUID()
+      : `n-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
 
-function readInitialState(): NotificationItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as NotificationItem[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (item) =>
-        item &&
-        typeof item.id === "string" &&
-        typeof item.title === "string" &&
-        typeof item.message === "string" &&
-        (item.details === undefined || typeof item.details === "string") &&
-        (item.action_label === undefined || typeof item.action_label === "string") &&
-        (item.action_to === undefined || typeof item.action_to === "string") &&
-        typeof item.kind === "string" &&
-        typeof item.created_at === "string" &&
-        typeof item.read === "boolean"
-    );
-  } catch {
-    return [];
-  }
-}
-
-function writeState(items: NotificationItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-  }
+  return {
+    id,
+    title: input.title,
+    message: input.message,
+    details: input.details,
+    action_label: input.action_label,
+    action_to: input.action_to,
+    kind: input.kind ?? "info",
+    created_at: new Date().toISOString(),
+    read: false,
+  };
 }
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<NotificationItem[]>(() => readInitialState());
+  const { token, authed } = useAuth();
+  const [items, setItems] = useState<NotificationItem[]>([]);
 
-  const updateItems = useCallback((next: NotificationItem[] | ((prev: NotificationItem[]) => NotificationItem[])) => {
-    setItems((prev) => {
-      const resolved = typeof next === "function" ? next(prev) : next;
-      const trimmed = resolved.slice(0, 100);
-      writeState(trimmed);
-      return trimmed;
-    });
-  }, []);
+  const refresh = useCallback(async () => {
+    if (!token) {
+      setItems([]);
+      return;
+    }
+
+    try {
+      const next = await api.notifications.list(token);
+      setItems(next.slice(0, 100));
+    } catch {
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!authed || !token) {
+      setItems([]);
+      return;
+    }
+    void refresh();
+  }, [authed, token, refresh]);
 
   const addNotification = useCallback(
     (input: AddNotificationInput) => {
-      const nextItem: NotificationItem = {
-        id: newNotificationId(),
-        title: input.title,
-        message: input.message,
-        details: input.details,
-        action_label: input.action_label,
-        action_to: input.action_to,
-        kind: input.kind ?? "info",
-        created_at: new Date().toISOString(),
-        read: false,
-      };
+      if (!token) {
+        setItems((prev) => [newLocalNotification(input), ...prev].slice(0, 100));
+        return;
+      }
 
-      updateItems((prev) => [nextItem, ...prev]);
+      const optimistic = newLocalNotification(input);
+      setItems((prev) => [optimistic, ...prev].slice(0, 100));
+
+      void (async () => {
+        try {
+          const created = await api.notifications.create(token, input as NotificationCreateReq);
+          setItems((prev) => {
+            const rest = prev.filter((item) => item.id !== optimistic.id);
+            return [created, ...rest].slice(0, 100);
+          });
+        } catch {
+          void refresh();
+        }
+      })();
     },
-    [updateItems]
+    [token, refresh]
   );
 
   const markRead = useCallback(
     (id: string) => {
-      updateItems((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, read: true } : item))
-      );
+      setItems((prev) => prev.map((item) => (item.id === id ? { ...item, read: true } : item)));
+
+      if (!token) return;
+      void (async () => {
+        try {
+          await api.notifications.markRead(token, id);
+        } catch {
+          void refresh();
+        }
+      })();
     },
-    [updateItems]
+    [token, refresh]
   );
 
   const markAllRead = useCallback(() => {
-    updateItems((prev) => prev.map((item) => ({ ...item, read: true })));
-  }, [updateItems]);
+    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+
+    if (!token) return;
+    void (async () => {
+      try {
+        await api.notifications.markAllRead(token);
+      } catch {
+        void refresh();
+      }
+    })();
+  }, [token, refresh]);
 
   const removeNotification = useCallback(
     (id: string) => {
-      updateItems((prev) => prev.filter((item) => item.id !== id));
+      setItems((prev) => prev.filter((item) => item.id !== id));
+
+      if (!token) return;
+      void (async () => {
+        try {
+          await api.notifications.remove(token, id);
+        } catch {
+          void refresh();
+        }
+      })();
     },
-    [updateItems]
+    [token, refresh]
   );
 
   const clearAll = useCallback(() => {
-    updateItems([]);
-  }, [updateItems]);
+    setItems([]);
+
+    if (!token) return;
+    void (async () => {
+      try {
+        await api.notifications.clearAll(token);
+      } catch {
+        void refresh();
+      }
+    })();
+  }, [token, refresh]);
 
   const value = useMemo<NotificationsContextValue>(() => {
     const unreadCount = items.filter((item) => !item.read).length;

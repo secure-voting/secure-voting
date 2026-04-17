@@ -15,6 +15,8 @@ type AuthService interface {
 	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
+	GetProfile(ctx context.Context, userID string) (asvc.User, string, error)
+	UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error)
 }
 
 type Handlers struct {
@@ -118,14 +120,19 @@ func (h *Handlers) Me(w http.ResponseWriter, r *http.Request) error {
 	if !ok {
 		return apperr.Unauthorized("invalid or expired token")
 	}
-	email, _ := middleware.EmailFromContext(r.Context())
-	role, _ := middleware.RoleFromContext(r.Context())
 
-	httputil.WriteJSON(w, http.StatusOK, asvc.User{
-		ID:    uid,
-		Email: email,
-		Role:  role,
-	})
+	res, code, err := h.svc.GetProfile(r.Context(), uid)
+	if err != nil {
+		return apperr.Internal(err, "load profile failed")
+	}
+	if code == "unauthorized" {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+	if code != "" {
+		return apperr.Invalid(code, "invalid input")
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
 	return nil
 }
 
@@ -190,5 +197,46 @@ func (h *Handlers) ChangePassword(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	return nil
+}
+
+type updateProfileReq struct {
+	FullName string `json:"full_name"`
+	Phone    string `json:"phone"`
+}
+
+func mapUpdateProfileCode(code string) error {
+	switch code {
+	case "unauthorized":
+		return apperr.Unauthorized("invalid or expired token")
+	case "invalid_full_name":
+		return apperr.Invalid(code, "full_name is too long")
+	case "invalid_phone":
+		return apperr.Invalid(code, "invalid phone")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
+}
+
+func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	var req updateProfileReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.UpdateProfile(r.Context(), userID, req.FullName, req.Phone)
+	if err != nil {
+		return apperr.Internal(err, "update profile failed")
+	}
+	if code != "" {
+		return mapUpdateProfileCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
 	return nil
 }

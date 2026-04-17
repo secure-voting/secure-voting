@@ -34,10 +34,6 @@ var handleExperimentRunFn = func(w *Worker, ctx context.Context, job jobs.Claime
 	return w.handleExperimentRun(ctx, job)
 }
 
-var handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
-	return w.handleTallyLocal(ctx, job)
-}
-
 var handleTallyJobFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 	return w.handleTallyJob(ctx, job)
 }

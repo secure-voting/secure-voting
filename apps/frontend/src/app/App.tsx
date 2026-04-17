@@ -27,6 +27,8 @@ import { DashboardRedirectPage } from "../pages/dashboard/DashboardRedirectPage"
 import { VoterDashboardPage } from "../pages/dashboard/VoterDashboardPage";
 import { AdminDashboardPage } from "../pages/dashboard/AdminDashboardPage";
 import { ResearcherDashboardPage } from "../pages/dashboard/ResearcherDashboardPage";
+import { AdminUsersPage } from "../pages/admin/AdminUsersPage";
+import { AdminSettingsPage } from "../pages/admin/AdminSettingsPage";
 
 function HomeRedirect() {
   const { authed } = useAuth();
@@ -149,6 +151,17 @@ export default function App() {
               />
 
               <Route
+                path="/admin/users"
+                element={
+                  <RequireAuth>
+                    <RequireRole role="admin">
+                      <AdminUsersPage />
+                    </RequireRole>
+                  </RequireAuth>
+                }
+              />
+
+              <Route
                 path="/research/datasets"
                 element={
                   <RequireAuth>
@@ -223,6 +236,17 @@ export default function App() {
                 element={
                   <RequireAuth>
                     <NotificationsPage />
+                  </RequireAuth>
+                }
+              />
+
+              <Route
+                path="/admin/settings"
+                element={
+                  <RequireAuth>
+                    <RequireRole role="admin">
+                      <AdminSettingsPage />
+                    </RequireRole>
                   </RequireAuth>
                 }
               />

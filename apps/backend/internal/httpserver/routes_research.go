@@ -25,13 +25,17 @@ func registerResearchRoutes(r *routeCtx) {
 	)
 
 	r.mux.Handle("POST /api/v1/datasets/import",
-		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Import)),
+		r.LimitWrite(
+			middleware.RequireAuth(r.authSvc,
+				middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Import)),
+			),
 		),
 	)
 	r.mux.Handle("POST /api/v1/datasets/generate",
-		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Generate)),
+		r.LimitWrite(
+			middleware.RequireAuth(r.authSvc,
+				middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Generate)),
+			),
 		),
 	)
 	r.mux.Handle("GET /api/v1/datasets",
@@ -51,8 +55,10 @@ func registerResearchRoutes(r *routeCtx) {
 	)
 
 	r.mux.Handle("POST /api/v1/experiments",
-		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.experimentsH.Create)),
+		r.LimitWrite(
+			middleware.RequireAuth(r.authSvc,
+				middleware.RequireRole("researcher", http.HandlerFunc(r.experimentsH.Create)),
+			),
 		),
 	)
 	r.mux.Handle("GET /api/v1/experiments",
@@ -67,8 +73,10 @@ func registerResearchRoutes(r *routeCtx) {
 	)
 
 	r.mux.Handle("POST /api/v1/experiment-runs/batch",
-		middleware.RequireAuth(r.authSvc,
-			middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.runsH.Batch)),
+		r.LimitWrite(
+			middleware.RequireAuth(r.authSvc,
+				middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.runsH.Batch)),
+			),
 		),
 	)
 	r.mux.Handle("GET /api/v1/experiment-runs",

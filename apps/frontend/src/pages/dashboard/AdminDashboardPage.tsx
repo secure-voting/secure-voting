@@ -93,6 +93,14 @@ export function AdminDashboardPage() {
           <Link to="/admin/elections/create" style={{ textDecoration: "none" }}>
             <button style={styles.btnPrimary}>Создать голосование</button>
           </Link>
+
+          <Link to="/admin/users" style={{ textDecoration: "none" }}>
+            <button style={styles.btn}>Пользователи</button>
+          </Link>
+
+          <Link to="/admin/settings" style={{ textDecoration: "none" }}>
+            <button style={styles.btn}>Настройки</button>
+          </Link>
         </div>
 
         <ErrorBanner error={err} />

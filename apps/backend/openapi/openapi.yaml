@@ -12,6 +12,7 @@ servers:
 tags:
   - name: System
   - name: Auth
+  - name: Admin
   - name: Elections
   - name: Ballots
   - name: Results
@@ -19,6 +20,7 @@ tags:
   - name: Experiment Runs
   - name: Jobs
   - name: Audit
+  - name: Notifications
 
 components:
   securitySchemes:
@@ -61,6 +63,10 @@ components:
         role:
           type: string
           enum: [admin, voter, researcher]
+        full_name:
+          type: string
+        phone:
+          type: string
 
     AuthResponse:
       type: object
@@ -73,6 +79,43 @@ components:
           format: date-time
         user:
           $ref: '#/components/schemas/User'
+    
+    AdminUser:
+      type: object
+      required: [id, email, role, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, voter, researcher]
+        full_name:
+          type: string
+        phone:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AdminUserListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+
+    AdminUserRoleUpdateRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, voter, researcher]
 
     RegisterRequest:
       type: object
@@ -103,6 +146,124 @@ components:
         current_password:
           type: string
         new_password:
+          type: string
+    
+    UpdateProfileRequest:
+      type: object
+      properties:
+        full_name:
+          type: string
+        phone:
+          type: string
+    
+    NotificationItem:
+      type: object
+      required: [id, title, message, kind, created_at, read]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+        action_label:
+          type: string
+        action_to:
+          type: string
+        kind:
+          type: string
+          enum: [info, success, warning, error]
+        created_at:
+          type: string
+          format: date-time
+        read:
+          type: boolean
+
+    NotificationListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationItem'
+
+    NotificationCreateRequest:
+      type: object
+      required: [title, message]
+      properties:
+        title:
+          type: string
+        message:
+          type: string
+        details:
+          type: string
+        action_label:
+          type: string
+        action_to:
+          type: string
+        kind:
+          type: string
+          enum: [info, success, warning, error]
+
+    AdminSettings:
+      type: object
+      required:
+        - tls_mode
+        - backup_enabled
+      properties:
+        public_base_url:
+          type: string
+        tls_mode:
+          type: string
+          enum: [disabled, lets_encrypt, custom]
+        tls_domain:
+          type: string
+        tls_contact_email:
+          type: string
+        backup_enabled:
+          type: boolean
+        backup_schedule:
+          type: string
+        backup_retention_days:
+          type: integer
+        database_host:
+          type: string
+        database_name:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+        has_unsaved_warning:
+          type: boolean
+
+    AdminSettingsUpdateRequest:
+      type: object
+      required:
+        - tls_mode
+        - backup_enabled
+      properties:
+        public_base_url:
+          type: string
+        tls_mode:
+          type: string
+          enum: [disabled, lets_encrypt, custom]
+        tls_domain:
+          type: string
+        tls_contact_email:
+          type: string
+        backup_enabled:
+          type: boolean
+        backup_schedule:
+          type: string
+        backup_retention_days:
+          type: integer
+        database_host:
+          type: string
+        database_name:
           type: string
 
     CandidateInput:
@@ -558,6 +719,7 @@ components:
 
     ResultResponse:
       type: object
+      description: Latest persisted election result produced by asynchronous compute tally.
       required: [election_id, version, method, winners]
       properties:
         election_id:
@@ -791,6 +953,9 @@ components:
           format: uuid
         kind:
           type: string
+          description: >
+            Job kind. For election close flow, tally means an asynchronous election tally
+            task processed through the compute pipeline.
         status:
           type: string
         progress:
@@ -813,6 +978,7 @@ components:
         result_ref:
           type: object
           additionalProperties: true
+          description: Reference to persisted result artifacts created after job completion.
         error_text:
           type: string
         created_at:
@@ -1073,6 +1239,358 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /api/v1/auth/profile:
+    patch:
+      tags: [Auth]
+      summary: Update current user profile contact data
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Updated current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation or business error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: List current user notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Notifications list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    post:
+      tags: [Notifications]
+      summary: Create notification for current user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationCreateRequest'
+      responses:
+        '200':
+          description: Notification created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationItem'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    delete:
+      tags: [Notifications]
+      summary: Clear all current user notifications
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Notifications cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/notifications/{id}:
+    delete:
+      tags: [Notifications]
+      summary: Delete one current user notification
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark one current user notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Notification marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Mark all current user notifications as read
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: All notifications marked as read
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/admin/users:
+    get:
+      tags: [Admin]
+      summary: List users for admin role management
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/admin/users/{id}/role:
+    patch:
+      tags: [Admin]
+      summary: Update user role
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserRoleUpdateRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: Validation or business error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/admin/settings:
+    get:
+      tags: [Admin]
+      summary: Get self-hosted deployment settings
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current admin settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+    put:
+      tags: [Admin]
+      summary: Update self-hosted deployment settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminSettingsUpdateRequest'
+      responses:
+        '200':
+          description: Updated admin settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSettings'
+        '400':
+          description: Validation or business error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /api/v1/elections:
     get:
       tags: [Elections]
@@ -1227,6 +1745,13 @@ paths:
     post:
       tags: [Elections]
       summary: Perform election lifecycle action
+      description: >
+        Applies an election lifecycle transition.
+        The close action does not calculate results inline.
+        It closes the election and enqueues an asynchronous tally job
+        processed by the compute pipeline.
+        The publish action publishes the latest persisted result version
+        and does not recalculate the tally.
       security:
         - bearerAuth: []
       parameters:
@@ -1513,7 +2038,11 @@ paths:
   /api/v1/elections/{id}/results:
     get:
       tags: [Results]
-      summary: Get election results
+      summary: Get latest persisted election results
+      description: >
+        Returns the latest persisted result version for the election.
+        Results are produced asynchronously by the compute pipeline after
+        the election is closed and become visible to voters only after publish.
       security:
         - bearerAuth: []
       parameters:
@@ -1830,7 +2359,11 @@ paths:
   /api/v1/capabilities/tally-rules:
     get:
       tags: [System]
-      summary: List supported tally rules and their capabilities
+      summary: List tally rules supported by the compute service
+      description: >
+        Returns the current tally-rule capability matrix reported by the compute service.
+        This endpoint is the source of truth for supported rules, ballot formats,
+        and rule-specific parameter requirements.
       security:
         - bearerAuth: []
       responses:

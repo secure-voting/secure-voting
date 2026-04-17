@@ -10,16 +10,50 @@ import (
 )
 
 type RateLimiter struct {
-	rdb   *redis.Client
-	limit int
-	ttl   time.Duration
+	rdb          *redis.Client
+	keyPrefix    string
+	limit        int
+	ttl          time.Duration
+	methods      map[string]struct{}
+	pathPrefixes []string
 }
 
-func NewRateLimiter(rdb *redis.Client, limit int, ttl time.Duration) *RateLimiter {
+func NewRateLimiter(
+	rdb *redis.Client,
+	keyPrefix string,
+	limit int,
+	ttl time.Duration,
+	methods []string,
+	pathPrefixes []string,
+) *RateLimiter {
+	mm := make(map[string]struct{}, len(methods))
+	for _, m := range methods {
+		m = strings.ToUpper(strings.TrimSpace(m))
+		if m != "" {
+			mm[m] = struct{}{}
+		}
+	}
+
+	pp := make([]string, 0, len(pathPrefixes))
+	for _, p := range pathPrefixes {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			pp = append(pp, p)
+		}
+	}
+
+	keyPrefix = strings.TrimSpace(keyPrefix)
+	if keyPrefix == "" {
+		keyPrefix = "rl"
+	}
+
 	return &RateLimiter{
-		rdb:   rdb,
-		limit: limit,
-		ttl:   ttl,
+		rdb:          rdb,
+		keyPrefix:    keyPrefix,
+		limit:        limit,
+		ttl:          ttl,
+		methods:      mm,
+		pathPrefixes: pp,
 	}
 }
 
@@ -30,7 +64,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if strings.HasPrefix(r.URL.Path, "/api/v1/auth") {
+		if !rl.shouldLimit(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -41,7 +75,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		key := "rl:" + ip
+		key := rl.keyPrefix + ":" + ip
 
 		n, err := rl.rdb.Incr(r.Context(), key).Result()
 		if err != nil {
@@ -62,6 +96,26 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (rl *RateLimiter) shouldLimit(r *http.Request) bool {
+	if len(rl.methods) > 0 {
+		if _, ok := rl.methods[strings.ToUpper(strings.TrimSpace(r.Method))]; !ok {
+			return false
+		}
+	}
+
+	if len(rl.pathPrefixes) == 0 {
+		return true
+	}
+
+	path := strings.TrimSpace(r.URL.Path)
+	for _, p := range rl.pathPrefixes {
+		if strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func clientIP(r *http.Request) string {

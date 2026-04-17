@@ -25,10 +25,19 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 	var tallyRule string
 	var ballotFormat string
 	var committeeSize *int
+	var quotaType *string
+	var approvalMaxChoices *int
 	var rankingTopK *int
+	var scoreMin *int
+	var scoreMax *int
+	var scoreStep *int
+	var scoreAllowSkip bool
 
 	err = tx.QueryRow(ctx, `
-		SELECT status, tally_rule, ballot_format, committee_size, ranking_top_k
+		SELECT status, tally_rule, ballot_format,
+		       committee_size, quota_type,
+		       approval_max_choices, ranking_top_k,
+		       score_min, score_max, score_step, score_allow_skip
 		FROM elections
 		WHERE id = $1::uuid AND created_by = $2::uuid
 		FOR UPDATE
@@ -37,7 +46,13 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		&tallyRule,
 		&ballotFormat,
 		&committeeSize,
+		&quotaType,
+		&approvalMaxChoices,
 		&rankingTopK,
+		&scoreMin,
+		&scoreMax,
+		&scoreStep,
+		&scoreAllowSkip,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -72,6 +87,18 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return actionValidationCode(err), nil
 		}
 
+		if code := validateBallotParams(
+			ballotFormat,
+			candidateCount,
+			approvalMaxChoices,
+			rankingTopK,
+			scoreMin,
+			scoreMax,
+			scoreStep,
+		); code != "" {
+			return code, nil
+		}
+
 		rules, err := s.capabilities.ListTallyRules(ctx)
 		if err != nil {
 			return "", err
@@ -82,8 +109,14 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		}
 
 		params := map[string]any{
-			"committee_size": committeeSize,
-			"ranking_top_k":  rankingTopK,
+			"committee_size":       committeeSize,
+			"quota_type":           quotaType,
+			"approval_max_choices": approvalMaxChoices,
+			"ranking_top_k":        rankingTopK,
+			"score_min":            scoreMin,
+			"score_max":            scoreMax,
+			"score_step":           scoreStep,
+			"score_allow_skip":     scoreAllowSkip,
 		}
 
 		if err := validateRuleCompatibility(

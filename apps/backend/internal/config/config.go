@@ -39,6 +39,14 @@ type Config struct {
 	BootstrapAdminPassword      string
 	BootstrapResearcherEmail    string
 	BootstrapResearcherPassword string
+
+	AuthRateLimit    int
+	AuthRateLimitTTL time.Duration
+
+	WriteRateLimit    int
+	WriteRateLimitTTL time.Duration
+
+	AdminTrustedCIDRs []string
 }
 
 func FromEnv() Config {
@@ -166,6 +174,34 @@ func FromEnv() Config {
 	bootstrapResearcherEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_EMAIL"))
 	bootstrapResearcherPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_PASSWORD"))
 
+	authRateLimit := 10
+	if s := os.Getenv("AUTH_RATE_LIMIT"); s != "" {
+		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+			authRateLimit = v
+		}
+	}
+
+	authRateLimitTTL := time.Minute
+	if s := os.Getenv("AUTH_RATE_LIMIT_TTL"); s != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil && d > 0 {
+			authRateLimitTTL = d
+		}
+	}
+
+	writeRateLimit := 30
+	if s := os.Getenv("WRITE_RATE_LIMIT"); s != "" {
+		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+			writeRateLimit = v
+		}
+	}
+
+	writeRateLimitTTL := time.Minute
+	if s := os.Getenv("WRITE_RATE_LIMIT_TTL"); s != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil && d > 0 {
+			writeRateLimitTTL = d
+		}
+	}
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
@@ -198,6 +234,14 @@ func FromEnv() Config {
 		BootstrapAdminPassword:      bootstrapAdminPassword,
 		BootstrapResearcherEmail:    bootstrapResearcherEmail,
 		BootstrapResearcherPassword: bootstrapResearcherPassword,
+
+		AuthRateLimit:    authRateLimit,
+		AuthRateLimitTTL: authRateLimitTTL,
+
+		WriteRateLimit:    writeRateLimit,
+		WriteRateLimitTTL: writeRateLimitTTL,
+
+		AdminTrustedCIDRs: splitCSV(os.Getenv("ADMIN_TRUSTED_CIDRS")),
 	}
 }
 

@@ -16,7 +16,7 @@ func (w *Worker) applyElectionTallyResult(ctx context.Context, res ElectionTally
 	res.Status = strings.TrimSpace(res.Status)
 	res.ErrorText = strings.TrimSpace(res.ErrorText)
 	res.Method = strings.TrimSpace(res.Method)
-	res.TallyRule = normalizeExternalRankingTallyRule(res.TallyRule)
+	res.TallyRule = normalizeExternalTallyRule(res.TallyRule)
 
 	if res.Status == "error" {
 		errText := res.ErrorText
@@ -42,12 +42,12 @@ func (w *Worker) applyElectionTallyResult(ctx context.Context, res ElectionTally
 		res.Artifacts = map[string]any{}
 	}
 
-	method := res.Method
+	method := normalizeExternalTallyRule(res.Method)
 	if method == "" {
 		method = res.TallyRule
 	}
 	if method == "" {
-		method = "ranking"
+		return w.runner.MarkError(ctx, res.JobID, "election tally result missing method")
 	}
 
 	_ = w.runner.UpdateProgress(ctx, res.JobID, 70)

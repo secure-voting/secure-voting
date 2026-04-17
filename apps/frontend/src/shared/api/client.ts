@@ -21,6 +21,11 @@ import type {
   ImportedCandidate,
   InviteImportResponse,
   SystemStatusResponse,
+  NotificationCreateReq,
+  NotificationItem,
+  AdminUser,
+  AdminSettings,
+  AdminSettingsUpdateRequest,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -197,6 +202,141 @@ export const api = {
             current_password: currentPassword,
             new_password: newPassword,
           }),
+        },
+        token
+      );
+    },
+
+    async updateProfile(token: string, fullName: string, phone: string) {
+      return await request<Me>(
+        "/api/v1/auth/profile",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            full_name: fullName,
+            phone,
+          }),
+        },
+        token
+      );
+    },
+  },
+
+  notifications: {
+    async list(
+      token: string,
+      params?: {
+        limit?: number;
+        offset?: number;
+      },
+      signal?: AbortSignal
+    ) {
+      const query = buildQuery({
+        limit: params?.limit,
+        offset: params?.offset,
+      });
+
+      const resp = await request<{ items: NotificationItem[] }>(
+        `/api/v1/notifications${query}`,
+        { method: "GET", signal },
+        token
+      );
+      return Array.isArray(resp.items) ? resp.items : [];
+    },
+
+    async create(token: string, body: NotificationCreateReq) {
+      return await request<NotificationItem>(
+        "/api/v1/notifications",
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+        token
+      );
+    },
+
+    async markRead(token: string, id: string) {
+      return await request<{ ok: boolean }>(
+        `/api/v1/notifications/${id}/read`,
+        { method: "POST", body: "{}" },
+        token
+      );
+    },
+
+    async markAllRead(token: string) {
+      return await request<{ ok: boolean }>(
+        "/api/v1/notifications/read-all",
+        { method: "POST", body: "{}" },
+        token
+      );
+    },
+
+    async remove(token: string, id: string) {
+      return await request<{ ok: boolean }>(
+        `/api/v1/notifications/${id}`,
+        { method: "DELETE" },
+        token
+      );
+    },
+
+    async clearAll(token: string) {
+      return await request<{ ok: boolean }>(
+        "/api/v1/notifications",
+        { method: "DELETE" },
+        token
+      );
+    },
+  },
+
+  adminUsers: {
+    async list(
+      token: string,
+      params?: {
+        limit?: number;
+        offset?: number;
+      },
+      signal?: AbortSignal
+    ) {
+      const query = buildQuery({
+        limit: params?.limit,
+        offset: params?.offset,
+      });
+
+      const resp = await request<{ items: AdminUser[] }>(
+        `/api/v1/admin/users${query}`,
+        { method: "GET", signal },
+        token
+      );
+      return Array.isArray(resp.items) ? resp.items : [];
+    },
+
+    async updateRole(token: string, userID: string, role: string) {
+      return await request<AdminUser>(
+        `/api/v1/admin/users/${userID}/role`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ role }),
+        },
+        token
+      );
+    },
+  },
+
+  adminSettings: {
+    async get(token: string, signal?: AbortSignal) {
+      return await request<AdminSettings>(
+        "/api/v1/admin/settings",
+        { method: "GET", signal },
+        token
+      );
+    },
+
+    async update(token: string, body: AdminSettingsUpdateRequest) {
+      return await request<AdminSettings>(
+        "/api/v1/admin/settings",
+        {
+          method: "PUT",
+          body: JSON.stringify(body),
         },
         token
       );

@@ -7,46 +7,52 @@ import (
 	"secure-voting/apps/backend/internal/jobs"
 )
 
-func TestHandleTallyJob_RoutesRankingToExternal(t *testing.T) {
-	oldLoadMeta := loadElectionRouteMetaFn
-	oldHandleExternal := handleElectionTallyExternalFn
-	oldHandleLocal := handleTallyLocalFn
+func TestHandleTallyJob_RoutesApprovalToExternal(t *testing.T) {
+	oldLoadElectionRouteMetaFn := loadElectionRouteMetaFn
+	oldHandleElectionTallyExternalFn := handleElectionTallyExternalFn
+	oldHandleTallyLocalFn := handleTallyLocalFn
+	oldMarkJobErrorFn := markJobErrorFn
+
 	defer func() {
-		loadElectionRouteMetaFn = oldLoadMeta
-		handleElectionTallyExternalFn = oldHandleExternal
-		handleTallyLocalFn = oldHandleLocal
+		loadElectionRouteMetaFn = oldLoadElectionRouteMetaFn
+		handleElectionTallyExternalFn = oldHandleElectionTallyExternalFn
+		handleTallyLocalFn = oldHandleTallyLocalFn
+		markJobErrorFn = oldMarkJobErrorFn
 	}()
 
-	electionID := "11111111-1111-1111-1111-111111111111"
-	job := jobs.ClaimedJob{
-		ID:         "job-1",
-		Kind:       jobKindTally,
-		ElectionID: &electionID,
-	}
-
-	loadElectionRouteMetaFn = func(_ *Worker, _ context.Context, _ string) (string, string, error) {
-		return "ranking", "plurality", nil
+	loadElectionRouteMetaFn = func(w *Worker, ctx context.Context, electionID string) (string, string, error) {
+		return "approval", "approval", nil
 	}
 
 	externalCalled := 0
 	localCalled := 0
+	markErrorCalled := 0
 
-	handleElectionTallyExternalFn = func(_ *Worker, _ context.Context, got jobs.ClaimedJob) error {
+	handleElectionTallyExternalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		externalCalled++
-		if got.ID != job.ID {
-			t.Fatalf("unexpected job id: %s", got.ID)
-		}
 		return nil
 	}
 
-	handleTallyLocalFn = func(_ *Worker, _ context.Context, _ jobs.ClaimedJob) error {
+	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		localCalled++
 		return nil
 	}
 
+	markJobErrorFn = func(w *Worker, ctx context.Context, jobID, errText string) error {
+		markErrorCalled++
+		return nil
+	}
+
+	electionID := "44444444-4444-4444-4444-444444444444"
+	job := jobs.ClaimedJob{
+		ID:         "55555555-5555-5555-5555-555555555555",
+		Kind:       jobKindTally,
+		ElectionID: &electionID,
+	}
+
 	w := &Worker{}
 	if err := w.handleTallyJob(context.Background(), job); err != nil {
-		t.Fatalf("handleTallyJob error: %v", err)
+		t.Fatalf("handleTallyJob returned error: %v", err)
 	}
 
 	if externalCalled != 1 {
@@ -55,101 +61,66 @@ func TestHandleTallyJob_RoutesRankingToExternal(t *testing.T) {
 	if localCalled != 0 {
 		t.Fatalf("expected localCalled=0, got %d", localCalled)
 	}
+	if markErrorCalled != 0 {
+		t.Fatalf("expected markErrorCalled=0, got %d", markErrorCalled)
+	}
 }
 
-func TestHandleTallyJob_RoutesApprovalToLocal(t *testing.T) {
-	oldLoadMeta := loadElectionRouteMetaFn
-	oldHandleExternal := handleElectionTallyExternalFn
-	oldHandleLocal := handleTallyLocalFn
+func TestHandleTallyJob_RoutesUnsupportedRankingToExternal(t *testing.T) {
+	oldLoadElectionRouteMetaFn := loadElectionRouteMetaFn
+	oldHandleElectionTallyExternalFn := handleElectionTallyExternalFn
+	oldHandleTallyLocalFn := handleTallyLocalFn
+	oldMarkJobErrorFn := markJobErrorFn
+
 	defer func() {
-		loadElectionRouteMetaFn = oldLoadMeta
-		handleElectionTallyExternalFn = oldHandleExternal
-		handleTallyLocalFn = oldHandleLocal
+		loadElectionRouteMetaFn = oldLoadElectionRouteMetaFn
+		handleElectionTallyExternalFn = oldHandleElectionTallyExternalFn
+		handleTallyLocalFn = oldHandleTallyLocalFn
+		markJobErrorFn = oldMarkJobErrorFn
 	}()
 
-	electionID := "22222222-2222-2222-2222-222222222222"
-	job := jobs.ClaimedJob{
-		ID:         "job-2",
-		Kind:       jobKindTally,
-		ElectionID: &electionID,
-	}
-
-	loadElectionRouteMetaFn = func(_ *Worker, _ context.Context, _ string) (string, string, error) {
-		return "approval", "approval", nil
+	loadElectionRouteMetaFn = func(w *Worker, ctx context.Context, electionID string) (string, string, error) {
+		return "ranking", "unknown_rule", nil
 	}
 
 	externalCalled := 0
 	localCalled := 0
+	markErrorCalled := 0
 
-	handleElectionTallyExternalFn = func(_ *Worker, _ context.Context, _ jobs.ClaimedJob) error {
+	handleElectionTallyExternalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		externalCalled++
 		return nil
 	}
 
-	handleTallyLocalFn = func(_ *Worker, _ context.Context, got jobs.ClaimedJob) error {
+	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		localCalled++
-		if got.ID != job.ID {
-			t.Fatalf("unexpected job id: %s", got.ID)
-		}
 		return nil
 	}
 
-	w := &Worker{}
-	if err := w.handleTallyJob(context.Background(), job); err != nil {
-		t.Fatalf("handleTallyJob error: %v", err)
+	markJobErrorFn = func(w *Worker, ctx context.Context, jobID, errText string) error {
+		markErrorCalled++
+		return nil
 	}
 
-	if externalCalled != 0 {
-		t.Fatalf("expected externalCalled=0, got %d", externalCalled)
-	}
-	if localCalled != 1 {
-		t.Fatalf("expected localCalled=1, got %d", localCalled)
-	}
-}
-
-func TestHandleTallyJob_RoutesUnsupportedRankingToLocal(t *testing.T) {
-	oldLoadMeta := loadElectionRouteMetaFn
-	oldHandleExternal := handleElectionTallyExternalFn
-	oldHandleLocal := handleTallyLocalFn
-	defer func() {
-		loadElectionRouteMetaFn = oldLoadMeta
-		handleElectionTallyExternalFn = oldHandleExternal
-		handleTallyLocalFn = oldHandleLocal
-	}()
-
-	electionID := "33333333-3333-3333-3333-333333333333"
+	electionID := "44444444-4444-4444-4444-444444444444"
 	job := jobs.ClaimedJob{
-		ID:         "job-3",
+		ID:         "55555555-5555-5555-5555-555555555555",
 		Kind:       jobKindTally,
 		ElectionID: &electionID,
 	}
 
-	loadElectionRouteMetaFn = func(_ *Worker, _ context.Context, _ string) (string, string, error) {
-		return "ranking", "practical_condorcet", nil
-	}
-
-	externalCalled := 0
-	localCalled := 0
-
-	handleElectionTallyExternalFn = func(_ *Worker, _ context.Context, _ jobs.ClaimedJob) error {
-		externalCalled++
-		return nil
-	}
-
-	handleTallyLocalFn = func(_ *Worker, _ context.Context, _ jobs.ClaimedJob) error {
-		localCalled++
-		return nil
-	}
-
 	w := &Worker{}
 	if err := w.handleTallyJob(context.Background(), job); err != nil {
-		t.Fatalf("handleTallyJob error: %v", err)
+		t.Fatalf("handleTallyJob returned error: %v", err)
 	}
 
-	if externalCalled != 0 {
-		t.Fatalf("expected externalCalled=0, got %d", externalCalled)
+	if externalCalled != 1 {
+		t.Fatalf("expected externalCalled=1, got %d", externalCalled)
 	}
-	if localCalled != 1 {
-		t.Fatalf("expected localCalled=1, got %d", localCalled)
+	if localCalled != 0 {
+		t.Fatalf("expected localCalled=0, got %d", localCalled)
+	}
+	if markErrorCalled != 0 {
+		t.Fatalf("expected markErrorCalled=0, got %d", markErrorCalled)
 	}
 }

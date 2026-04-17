@@ -477,7 +477,6 @@ func TestLogout(t *testing.T) {
 	}
 }
 
-
 func TestChangePasswordValidation(t *testing.T) {
 	svc := NewService(nil, time.Hour)
 
@@ -612,6 +611,156 @@ func TestChangePasswordSuccessAndErrors(t *testing.T) {
 		}
 		if !committed {
 			t.Fatal("expected commit")
+		}
+	})
+}
+
+func TestValidateFullNameAndPhone(t *testing.T) {
+	if !ValidateFullName("") {
+		t.Fatal("empty full name should be allowed")
+	}
+	if !ValidateFullName("Иван Иванов") {
+		t.Fatal("expected valid full name")
+	}
+	if ValidateFullName(strings.Repeat("a", 121)) {
+		t.Fatal("expected invalid full name length")
+	}
+
+	if !ValidatePhone("") {
+		t.Fatal("empty phone should be allowed")
+	}
+	if !ValidatePhone("+7 (999) 000-00-00") {
+		t.Fatal("expected valid phone")
+	}
+	if ValidatePhone("abc") {
+		t.Fatal("expected invalid phone")
+	}
+}
+
+func TestGetProfile(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	svc := NewService(nil, time.Hour)
+
+	user, code, err := svc.GetProfile(context.Background(), "")
+	if err != nil || code != "unauthorized" || user != (User{}) {
+		t.Fatalf("unexpected empty user result: %+v %q %v", user, code, err)
+	}
+
+	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
+		return fakeRow{scanFn: func(dest ...any) error { return pgx.ErrNoRows }}
+	}
+	_, code, err = svc.GetProfile(context.Background(), "u1")
+	if err != nil || code != "unauthorized" {
+		t.Fatalf("unexpected not found result: %q %v", code, err)
+	}
+
+	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
+		return fakeRow{scanFn: func(dest ...any) error {
+			*(dest[0].(*string)) = "u1"
+			*(dest[1].(*string)) = "user@example.com"
+			*(dest[2].(*string)) = "voter"
+			*(dest[3].(**string)) = func() *string { s := "Иван Иванов"; return &s }()
+			*(dest[4].(**string)) = func() *string { s := "+79990000000"; return &s }()
+			return nil
+		}}
+	}
+	user, code, err = svc.GetProfile(context.Background(), "u1")
+	if err != nil || code != "" {
+		t.Fatalf("unexpected get profile error: %q %v", code, err)
+	}
+	if user.FullName == nil || *user.FullName != "Иван Иванов" {
+		t.Fatalf("unexpected full_name: %+v", user.FullName)
+	}
+	if user.Phone == nil || *user.Phone != "+79990000000" {
+		t.Fatalf("unexpected phone: %+v", user.Phone)
+	}
+}
+
+func TestUpdateProfile(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	svc := NewService(nil, time.Hour)
+
+	user, code, err := svc.UpdateProfile(context.Background(), "", "Иван", "+7999")
+	if err != nil || code != "unauthorized" || user != (User{}) {
+		t.Fatalf("unexpected unauthorized result: %+v %q %v", user, code, err)
+	}
+
+	_, code, err = svc.UpdateProfile(context.Background(), "u1", strings.Repeat("a", 121), "+7999")
+	if err != nil || code != "invalid_full_name" {
+		t.Fatalf("unexpected invalid_full_name result: %q %v", code, err)
+	}
+
+	_, code, err = svc.UpdateProfile(context.Background(), "u1", "Иван", "abc")
+	if err != nil || code != "invalid_phone" {
+		t.Fatalf("unexpected invalid_phone result: %q %v", code, err)
+	}
+
+	t.Run("not found", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error { return pgx.ErrNoRows }}
+				},
+			}, nil
+		}
+
+		_, code, err := svc.UpdateProfile(context.Background(), "u1", "Иван Иванов", "+79990000000")
+		if err != nil || code != "unauthorized" {
+			t.Fatalf("unexpected not found result: %q %v", code, err)
+		}
+	})
+
+	t.Run("success", func(t *testing.T) {
+		phase := 0
+		committed := false
+
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sql string, args ...any) rowScanner {
+					if phase == 0 {
+						phase++
+						return fakeRow{scanFn: func(dest ...any) error {
+							*(dest[0].(*string)) = "user@example.com"
+							*(dest[1].(*string)) = "voter"
+							*(dest[2].(**string)) = func() *string { s := "Старое имя"; return &s }()
+							*(dest[3].(**string)) = func() *string { s := "+70000000000"; return &s }()
+							return nil
+						}}
+					}
+
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "u1"
+						*(dest[1].(*string)) = "user@example.com"
+						*(dest[2].(*string)) = "voter"
+						*(dest[3].(**string)) = func() *string { s := "Иван Иванов"; return &s }()
+						*(dest[4].(**string)) = func() *string { s := "+79990000000"; return &s }()
+						return nil
+					}}
+				},
+				execFn: func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+					return pgconn.NewCommandTag("UPDATE 1"), nil
+				},
+				commitFn: func(ctx context.Context) error {
+					committed = true
+					return nil
+				},
+			}, nil
+		}
+
+		user, code, err := svc.UpdateProfile(context.Background(), "u1", "Иван Иванов", "+79990000000")
+		if err != nil || code != "" {
+			t.Fatalf("unexpected success result: %+v %q %v", user, code, err)
+		}
+		if !committed {
+			t.Fatal("expected commit")
+		}
+		if user.FullName == nil || *user.FullName != "Иван Иванов" {
+			t.Fatalf("unexpected full_name: %+v", user.FullName)
+		}
+		if user.Phone == nil || *user.Phone != "+79990000000" {
+			t.Fatalf("unexpected phone: %+v", user.Phone)
 		}
 	})
 }

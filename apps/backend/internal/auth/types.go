@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,9 +19,11 @@ func NewService(db *pgxpool.Pool, tokenTTL time.Duration) *Service {
 }
 
 type User struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID       string  `json:"id"`
+	Email    string  `json:"email"`
+	Role     string  `json:"role"`
+	FullName *string `json:"full_name,omitempty"`
+	Phone    *string `json:"phone,omitempty"`
 }
 
 type AuthResult struct {
@@ -49,6 +52,21 @@ func ValidatePassword(password string) bool {
 	return len(password) >= 8
 }
 
+func ValidateFullName(fullName string) bool {
+	fullName = strings.TrimSpace(fullName)
+	return len(fullName) <= 120
+}
+
+var phonePattern = regexp.MustCompile(`^\+?[0-9 ()-]{5,32}$`)
+
+func ValidatePhone(phone string) bool {
+	phone = strings.TrimSpace(phone)
+	if phone == "" {
+		return true
+	}
+	return phonePattern.MatchString(phone)
+}
+
 type acceptedInvite struct {
 	ID         string
 	ElectionID string
@@ -58,4 +76,28 @@ type ChangePasswordInput struct {
 	UserID          string
 	CurrentPassword string
 	NewPassword     string
+}
+
+type UpdateProfileInput struct {
+	UserID   string
+	FullName string
+	Phone    string
+}
+
+type AdminUser struct {
+	ID        string  `json:"id"`
+	Email     string  `json:"email"`
+	Role      string  `json:"role"`
+	FullName  *string `json:"full_name,omitempty"`
+	Phone     *string `json:"phone,omitempty"`
+	CreatedAt string  `json:"created_at"`
+}
+
+func ValidateRole(role string) bool {
+	switch strings.TrimSpace(strings.ToLower(role)) {
+	case "admin", "researcher", "voter":
+		return true
+	default:
+		return false
+	}
 }

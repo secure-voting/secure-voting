@@ -27,8 +27,13 @@ func (w *Worker) handleElectionTallyExternal(ctx context.Context, job jobs.Claim
 		return err
 	}
 
-	if !supportsExternalElectionTally(task.BallotFormat, task.TallyRule) {
-		return handleTallyLocalFn(w, ctx, job)
+	if task.TallyRule == "" {
+		_ = markJobErrorFn(w, ctx, job.ID, "invalid tally_rule in election config")
+		return nil
+	}
+	if task.BallotFormat == "" {
+		_ = markJobErrorFn(w, ctx, job.ID, "invalid ballot_format in election config")
+		return nil
 	}
 
 	_ = updateProgressFn(w, ctx, job.ID, 20)
@@ -63,15 +68,24 @@ func (w *Worker) handleElectionTallyExternal(ctx context.Context, job jobs.Claim
 
 func (w *Worker) loadElectionTallyTask(ctx context.Context, jobID, electionID string) (ElectionTallyTask, error) {
 	var (
-		task           ElectionTallyTask
-		committeeSize  *int
-		quotaType      *string
-		rankingTopK    *int
-		showAggregates bool
+		task               ElectionTallyTask
+		committeeSize      *int
+		quotaType          *string
+		approvalMaxChoices *int
+		rankingTopK        *int
+		scoreMin           *int
+		scoreMax           *int
+		scoreStep          *int
+		scoreAllowSkip     bool
+		showAggregates     bool
 	)
 
 	err := w.db.QueryRow(ctx, `
-		SELECT tally_rule, ballot_format, committee_size, quota_type, ranking_top_k, show_aggregates
+		SELECT tally_rule, ballot_format,
+		       committee_size, quota_type,
+		       approval_max_choices, ranking_top_k,
+		       score_min, score_max, score_step, score_allow_skip,
+		       show_aggregates
 		FROM elections
 		WHERE id = $1::uuid
 	`, electionID).Scan(
@@ -79,7 +93,12 @@ func (w *Worker) loadElectionTallyTask(ctx context.Context, jobID, electionID st
 		&task.BallotFormat,
 		&committeeSize,
 		&quotaType,
+		&approvalMaxChoices,
 		&rankingTopK,
+		&scoreMin,
+		&scoreMax,
+		&scoreStep,
+		&scoreAllowSkip,
 		&showAggregates,
 	)
 	if err != nil {
@@ -89,11 +108,16 @@ func (w *Worker) loadElectionTallyTask(ctx context.Context, jobID, electionID st
 	task.Kind = electionTallyTaskKind
 	task.JobID = strings.TrimSpace(jobID)
 	task.ElectionID = strings.TrimSpace(electionID)
-	task.TallyRule = normalizeExternalRankingTallyRule(task.TallyRule)
-	task.BallotFormat = strings.TrimSpace(task.BallotFormat)
+	task.TallyRule = normalizeExternalTallyRule(task.TallyRule)
+	task.BallotFormat = normalizeExternalBallotFormat(task.BallotFormat)
 	task.CommitteeSize = committeeSize
 	task.QuotaType = quotaType
+	task.ApprovalMaxChoices = approvalMaxChoices
 	task.RankingTopK = rankingTopK
+	task.ScoreMin = scoreMin
+	task.ScoreMax = scoreMax
+	task.ScoreStep = scoreStep
+	task.ScoreAllowSkip = scoreAllowSkip
 	task.ShowAggregates = showAggregates
 
 	rows, err := w.db.Query(ctx, `

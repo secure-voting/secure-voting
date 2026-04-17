@@ -122,14 +122,21 @@ func makeElectionErrorResult(task worker.ElectionTallyTask, errText string) work
 		errText = "error"
 	}
 
+	var approvalMax *int32
+	if task.ApprovalMaxChoices != nil {
+		v := int32(*task.ApprovalMaxChoices)
+		approvalMax = &v
+	}
+	method := resolveComputeTallyRule(task.TallyRule, approvalMax)
+
 	return worker.ElectionTallyResult{
 		Kind:       "election_tally_result",
 		JobID:      strings.TrimSpace(task.JobID),
 		ElectionID: strings.TrimSpace(task.ElectionID),
 		Status:     "error",
 		ErrorText:  errText,
-		Method:     normalizeComputeTallyRule(task.TallyRule),
-		TallyRule:  normalizeComputeTallyRule(task.TallyRule),
+		Method:     method,
+		TallyRule:  method,
 	}
 }
 
@@ -153,9 +160,16 @@ func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, met
 		}
 	}
 
+	var approvalMax *int32
+	if task.ApprovalMaxChoices != nil {
+		v := int32(*task.ApprovalMaxChoices)
+		approvalMax = &v
+	}
+	method := resolveComputeTallyRule(task.TallyRule, approvalMax)
+
 	params := map[string]any{
-		"ballot_format": "ranking",
-		"tally_rule":    normalizeComputeTallyRule(task.TallyRule),
+		"ballot_format": normalizeBallotFormat(task.BallotFormat),
+		"tally_rule":    method,
 	}
 	if task.CommitteeSize != nil {
 		params["committee_size"] = *task.CommitteeSize
@@ -163,9 +177,22 @@ func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, met
 	if task.QuotaType != nil {
 		params["quota_type"] = *task.QuotaType
 	}
+	if task.ApprovalMaxChoices != nil {
+		params["approval_max_choices"] = *task.ApprovalMaxChoices
+	}
 	if task.RankingTopK != nil {
 		params["ranking_top_k"] = *task.RankingTopK
 	}
+	if task.ScoreMin != nil {
+		params["score_min"] = *task.ScoreMin
+	}
+	if task.ScoreMax != nil {
+		params["score_max"] = *task.ScoreMax
+	}
+	if task.ScoreStep != nil {
+		params["score_step"] = *task.ScoreStep
+	}
+	params["score_allow_skip"] = task.ScoreAllowSkip
 	params["show_aggregates"] = task.ShowAggregates
 
 	return worker.ElectionTallyResult{
@@ -173,8 +200,8 @@ func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, met
 		JobID:      strings.TrimSpace(task.JobID),
 		ElectionID: strings.TrimSpace(task.ElectionID),
 		Status:     "done",
-		Method:     normalizeComputeTallyRule(task.TallyRule),
-		TallyRule:  normalizeComputeTallyRule(task.TallyRule),
+		Method:     method,
+		TallyRule:  method,
 		Params:     params,
 		Winners:    winners,
 		Metrics:    metrics,

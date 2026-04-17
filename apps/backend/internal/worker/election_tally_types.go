@@ -13,16 +13,21 @@ type ElectionCandidate struct {
 }
 
 type ElectionTallyTask struct {
-	Kind           string              `json:"kind"`
-	JobID          string              `json:"job_id"`
-	ElectionID     string              `json:"election_id"`
-	TallyRule      string              `json:"tally_rule"`
-	BallotFormat   string              `json:"ballot_format"`
-	CommitteeSize  *int                `json:"committee_size,omitempty"`
-	QuotaType      *string             `json:"quota_type,omitempty"`
-	RankingTopK    *int                `json:"ranking_top_k,omitempty"`
-	ShowAggregates bool                `json:"show_aggregates,omitempty"`
-	Candidates     []ElectionCandidate `json:"candidates"`
+	Kind               string              `json:"kind"`
+	JobID              string              `json:"job_id"`
+	ElectionID         string              `json:"election_id"`
+	TallyRule          string              `json:"tally_rule"`
+	BallotFormat       string              `json:"ballot_format"`
+	CommitteeSize      *int                `json:"committee_size,omitempty"`
+	QuotaType          *string             `json:"quota_type,omitempty"`
+	ApprovalMaxChoices *int                `json:"approval_max_choices,omitempty"`
+	RankingTopK        *int                `json:"ranking_top_k,omitempty"`
+	ScoreMin           *int                `json:"score_min,omitempty"`
+	ScoreMax           *int                `json:"score_max,omitempty"`
+	ScoreStep          *int                `json:"score_step,omitempty"`
+	ScoreAllowSkip     bool                `json:"score_allow_skip,omitempty"`
+	ShowAggregates     bool                `json:"show_aggregates,omitempty"`
+	Candidates         []ElectionCandidate `json:"candidates"`
 }
 
 type ElectionTallyResult struct {
@@ -41,36 +46,22 @@ type ElectionTallyResult struct {
 	Artifacts  map[string]any `json:"artifacts,omitempty"`
 }
 
-func normalizeExternalRankingTallyRule(rule string) string {
+func normalizeExternalTallyRule(rule string) string {
 	v := strings.ToLower(strings.TrimSpace(rule))
-	v = strings.ReplaceAll(v, "_", "-")
+	v = strings.ReplaceAll(v, "-", "_")
 
 	switch v {
-	case "plurality",
-		"borda",
-		"black",
-		"copeland-i",
-		"copeland-ii",
-		"copeland-iii",
-		"simpson",
-		"hare",
-		"nanson",
-		"coombs",
-		"inverse-borda",
-		"inverse-plurality":
-		return v
-	case "anti-plurality":
-		return "inverse-plurality"
-	case "minimax", "minmax":
+	case "anti_plurality":
+		return "inverse_plurality"
+	case "minimax":
 		return "minmax"
+	case "condorcet_practical":
+		return "practical_condorcet"
 	default:
-		return ""
+		return v
 	}
 }
 
-func supportsExternalElectionTally(ballotFormat, tallyRule string) bool {
-	if strings.TrimSpace(ballotFormat) != "ranking" {
-		return false
-	}
-	return normalizeExternalRankingTallyRule(tallyRule) != ""
+func normalizeExternalBallotFormat(ballotFormat string) string {
+	return strings.ToLower(strings.TrimSpace(ballotFormat))
 }

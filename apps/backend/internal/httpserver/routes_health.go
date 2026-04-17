@@ -27,7 +27,7 @@ func registerHealth(r *routeCtx) {
 		})
 	})
 
-	r.mux.Handle("GET /api/v1/system/status", r.RequireRole("admin", func(w http.ResponseWriter, _ *http.Request) error {
+	r.mux.Handle("GET /api/v1/system/status", r.RequireAdminTrusted(func(w http.ResponseWriter, _ *http.Request) error {
 		computeState := "unavailable"
 		computeOK := false
 

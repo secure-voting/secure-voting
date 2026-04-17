@@ -26,6 +26,14 @@ func getInt32(m map[string]any, key string) (int32, bool) {
 	switch t := v.(type) {
 	case float64:
 		return int32(t), true
+	case float32:
+		return int32(t), true
+	case int:
+		return int32(t), true
+	case int32:
+		return t, true
+	case int64:
+		return int32(t), true
 	case string:
 		n, err := strconv.Atoi(strings.TrimSpace(t))
 		if err != nil {
@@ -34,6 +42,29 @@ func getInt32(m map[string]any, key string) (int32, bool) {
 		return int32(n), true
 	default:
 		return 0, false
+	}
+}
+
+func getBool(m map[string]any, key string) (bool, bool) {
+	v, ok := m[key]
+	if !ok {
+		return false, false
+	}
+	switch t := v.(type) {
+	case bool:
+		return t, true
+	case string:
+		s := strings.ToLower(strings.TrimSpace(t))
+		switch s {
+		case "1", "true", "yes", "y", "on":
+			return true, true
+		case "0", "false", "no", "n", "off":
+			return false, true
+		default:
+			return false, false
+		}
+	default:
+		return false, false
 	}
 }
 
@@ -84,13 +115,41 @@ func normalizeComputeTallyRule(s string) string {
 		"inverse-borda",
 		"inverse-plurality",
 		"approval-2",
-		"approval-3":
+		"approval-3",
+		"threshold",
+		"practical-condorcet",
+		"strong-q-paretian-simple-majority",
+		"strong-q-paretian-plurality",
+		"strongest-q-paretian-simple-majority":
 		return v
 	case "anti-plurality":
 		return "inverse-plurality"
 	case "minimax", "minmax":
 		return "minmax"
+	case "condorcet-practical":
+		return "practical-condorcet"
 	default:
 		return ""
 	}
+}
+
+func resolveComputeTallyRule(raw string, approvalMaxChoices *int32) string {
+	n := normalizeComputeTallyRule(raw)
+	if n != "" {
+		return n
+	}
+
+	v := strings.ToLower(strings.TrimSpace(raw))
+	v = strings.ReplaceAll(v, "_", "-")
+
+	if v == "approval" && approvalMaxChoices != nil {
+		switch *approvalMaxChoices {
+		case 2:
+			return "approval-2"
+		case 3:
+			return "approval-3"
+		}
+	}
+
+	return ""
 }

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { api, ApiError } from "../../shared/api/client";
@@ -24,6 +24,15 @@ export function ProfilePage() {
   const { me, authed, token } = useAuth();
   const { unreadCount, items } = useNotifications();
 
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const [profileSubmitting, setProfileSubmitting] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [savedFullName, setSavedFullName] = useState("");
+  const [savedPhone, setSavedPhone] = useState("");
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -31,6 +40,15 @@ export function ProfilePage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string>("");
   const [formSuccess, setFormSuccess] = useState<string>("");
+
+  useEffect(() => {
+    const nextFullName = (me?.full_name || "").trim();
+    const nextPhone = (me?.phone || "").trim();
+    setFullName(nextFullName);
+    setPhone(nextPhone);
+    setSavedFullName(nextFullName);
+    setSavedPhone(nextPhone);
+  }, [me?.full_name, me?.phone]);
 
   const lastItems = items.slice(0, 5);
 
@@ -43,6 +61,60 @@ export function ProfilePage() {
       confirmPassword.trim().length > 0
     );
   }, [submitting, token, currentPassword, newPassword, confirmPassword]);
+
+  const canSaveProfile = useMemo(() => {
+    return (
+      !!token &&
+      !profileSubmitting &&
+      (fullName.trim() !== savedFullName || phone.trim() !== savedPhone)
+    );
+  }, [token, profileSubmitting, fullName, phone, savedFullName, savedPhone]);
+
+  async function onSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setProfileError("");
+    setProfileSuccess("");
+
+    if (!token) {
+      setProfileError("Сессия недействительна. Выполните вход заново.");
+      return;
+    }
+    if (fullName.trim().length > 120) {
+      setProfileError("Поле ФИО не должно превышать 120 символов.");
+      return;
+    }
+    if (phone.trim() && !/^\+?[0-9 ()-]{5,32}$/.test(phone.trim())) {
+      setProfileError("Укажите телефон в корректном формате.");
+      return;
+    }
+
+    setProfileSubmitting(true);
+    try {
+      const updated = await api.auth.updateProfile(token, fullName, phone);
+      const nextFullName = (updated.full_name || "").trim();
+      const nextPhone = (updated.phone || "").trim();
+
+      setFullName(nextFullName);
+      setPhone(nextPhone);
+      setSavedFullName(nextFullName);
+      setSavedPhone(nextPhone);
+      setProfileSuccess("Контактные данные успешно сохранены.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.code === "invalid_full_name") {
+          setProfileError("Поле ФИО не должно превышать 120 символов.");
+        } else if (err.code === "invalid_phone") {
+          setProfileError("Укажите телефон в корректном формате.");
+        } else {
+          setProfileError(err.message || "Не удалось сохранить контактные данные.");
+        }
+      } else {
+        setProfileError("Не удалось сохранить контактные данные. Повторите попытку позже.");
+      }
+    } finally {
+      setProfileSubmitting(false);
+    }
+  }
 
   async function onChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -108,8 +180,52 @@ export function ProfilePage() {
             { label: "ID пользователя", value: me?.id || "—" },
             { label: "Электронная почта", value: me?.email || "—" },
             { label: "Роль", value: roleLabel(me?.role) },
+            { label: "ФИО", value: savedFullName || "—" },
+            { label: "Телефон", value: savedPhone || "—" },
           ]}
         />
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>Контактные данные</h3>
+
+        <form onSubmit={onSaveProfile} style={{ display: "grid", gap: 10, maxWidth: 480 }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>ФИО</span>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              style={styles.input}
+              maxLength={120}
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Телефон</span>
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              style={styles.input}
+              placeholder="+7 (999) 000-00-00"
+            />
+          </label>
+
+          {profileError ? (
+            <div style={{ color: "#b91c1c", fontSize: 14 }}>{profileError}</div>
+          ) : profileSuccess ? (
+            <div style={{ color: "#15803d", fontSize: 14 }}>{profileSuccess}</div>
+          ) : (
+            <div style={styles.muted}>ФИО и телефон можно оставить пустыми.</div>
+          )}
+
+          <div>
+            <button type="submit" disabled={!canSaveProfile} style={styles.buttonPrimary}>
+              {profileSubmitting ? "Сохранение..." : "Сохранить контактные данные"}
+            </button>
+          </div>
+        </form>
       </div>
 
       <div style={styles.card}>

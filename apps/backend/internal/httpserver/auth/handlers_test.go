@@ -32,6 +32,12 @@ type fakeAuthService struct {
 	lastLogoutActor    *string
 
 	changePasswordFn func(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
+
+	getProfileRes  asvc.User
+	getProfileCode string
+	getProfileErr  error
+
+	updateProfileFn func(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error)
 }
 
 func (f *fakeAuthService) Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error) {
@@ -224,7 +230,15 @@ func TestMe_Unauthorized(t *testing.T) {
 }
 
 func TestMe_OK(t *testing.T) {
-	svc := &fakeAuthService{}
+	svc := &fakeAuthService{
+		getProfileRes: asvc.User{
+			ID:       "u1",
+			Email:    "voter1@example.com",
+			Role:     "voter",
+			FullName: func() *string { s := "Иван Иванов"; return &s }(),
+			Phone:    func() *string { s := "+79990000000"; return &s }(),
+		},
+	}
 	h := NewHandlers(svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil)
@@ -253,6 +267,12 @@ func TestMe_OK(t *testing.T) {
 	}
 	if got.ID != "u1" || got.Email != "voter1@example.com" || got.Role != "voter" {
 		t.Fatalf("unexpected response: %+v", got)
+	}
+	if got.FullName == nil || *got.FullName != "Иван Иванов" {
+		t.Fatalf("unexpected full_name: %+v", got.FullName)
+	}
+	if got.Phone == nil || *got.Phone != "+79990000000" {
+		t.Fatalf("unexpected phone: %+v", got.Phone)
 	}
 }
 
@@ -431,6 +451,159 @@ func TestChangePassword_OK(t *testing.T) {
 			ok:     true,
 		},
 		httputil.Wrap(h.ChangePassword),
+	)
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func (f *fakeAuthService) GetProfile(ctx context.Context, userID string) (asvc.User, string, error) {
+	return f.getProfileRes, f.getProfileCode, f.getProfileErr
+}
+
+func (f *fakeAuthService) UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error) {
+	if f.updateProfileFn != nil {
+		return f.updateProfileFn(ctx, userID, fullName, phone)
+	}
+	return asvc.User{}, "", nil
+}
+
+func TestUpdateProfile_Unauthorized(t *testing.T) {
+	svc := &fakeAuthService{}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/auth/profile",
+		strings.NewReader(`{"full_name":"Иван Иванов","phone":"+79990000000"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.UpdateProfile).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateProfile_InvalidJSON(t *testing.T) {
+	svc := &fakeAuthService{}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/auth/profile", strings.NewReader(`{"full_name":`))
+	req.Header.Set("Authorization", "Bearer token123")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := middleware.RequireAuth(
+		fakeTokenVerifier{
+			userID: "u1",
+			email:  "voter1@example.com",
+			role:   "voter",
+			ok:     true,
+		},
+		httputil.Wrap(h.UpdateProfile),
+	)
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestUpdateProfile_CodeMapping(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		want int
+	}{
+		{name: "invalid full name", code: "invalid_full_name", want: http.StatusBadRequest},
+		{name: "invalid phone", code: "invalid_phone", want: http.StatusBadRequest},
+		{name: "unauthorized", code: "unauthorized", want: http.StatusUnauthorized},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := &fakeAuthService{
+				updateProfileFn: func(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error) {
+					return asvc.User{}, tt.code, nil
+				},
+			}
+			h := NewHandlers(svc)
+
+			req := httptest.NewRequest(
+				http.MethodPatch,
+				"/api/v1/auth/profile",
+				strings.NewReader(`{"full_name":"Иван Иванов","phone":"+79990000000"}`),
+			)
+			req.Header.Set("Authorization", "Bearer token123")
+			req.Header.Set("Content-Type", "application/json")
+			rr := httptest.NewRecorder()
+
+			handler := middleware.RequireAuth(
+				fakeTokenVerifier{
+					userID: "u1",
+					email:  "voter1@example.com",
+					role:   "voter",
+					ok:     true,
+				},
+				httputil.Wrap(h.UpdateProfile),
+			)
+
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.want {
+				t.Fatalf("expected %d, got %d, body=%s", tt.want, rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestUpdateProfile_OK(t *testing.T) {
+	svc := &fakeAuthService{
+		updateProfileFn: func(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error) {
+			if userID != "u1" {
+				t.Fatalf("unexpected userID: %q", userID)
+			}
+			if fullName != "Иван Иванов" {
+				t.Fatalf("unexpected full_name: %q", fullName)
+			}
+			if phone != "+79990000000" {
+				t.Fatalf("unexpected phone: %q", phone)
+			}
+			return asvc.User{
+				ID:       "u1",
+				Email:    "voter1@example.com",
+				Role:     "voter",
+				FullName: func() *string { s := "Иван Иванов"; return &s }(),
+				Phone:    func() *string { s := "+79990000000"; return &s }(),
+			}, "", nil
+		},
+	}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/v1/auth/profile",
+		strings.NewReader(`{"full_name":"Иван Иванов","phone":"+79990000000"}`),
+	)
+	req.Header.Set("Authorization", "Bearer token123")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := middleware.RequireAuth(
+		fakeTokenVerifier{
+			userID: "u1",
+			email:  "voter1@example.com",
+			role:   "voter",
+			ok:     true,
+		},
+		httputil.Wrap(h.UpdateProfile),
 	)
 
 	handler.ServeHTTP(rr, req)

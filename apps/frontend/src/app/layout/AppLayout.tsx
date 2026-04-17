@@ -77,6 +77,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 </Link>
               ) : null}
 
+              {isAdmin ? (
+                <Link to="/admin/users" style={{ textDecoration: "none" }}>
+                  <button style={styles.btn}>Пользователи</button>
+                </Link>
+              ) : null}
+
               <Link to="/notifications" style={{ textDecoration: "none" }}>
                 <button style={styles.btn}>
                   Уведомления{unreadCount > 0 ? ` (${unreadCount})` : ""}
@@ -85,6 +91,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
               <Link to="/profile" style={{ textDecoration: "none" }}>
                 <button style={styles.btn}>Профиль</button>
+              </Link>
+
+              <Link to="/admin/settings" style={{ textDecoration: "none" }}>
+                <button style={styles.btn}>Настройки</button>
               </Link>
 
               <button

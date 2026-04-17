@@ -29,17 +29,14 @@ var handleElectionTallyExternalFn = func(w *Worker, ctx context.Context, job job
 
 func (w *Worker) handleTallyJob(ctx context.Context, job jobs.ClaimedJob) error {
 	if job.ElectionID == nil || strings.TrimSpace(*job.ElectionID) == "" {
-		return handleTallyLocalFn(w, ctx, job)
+		_ = markJobErrorFn(w, ctx, job.ID, "missing election_id in jobs row")
+		return nil
 	}
 
-	ballotFormat, tallyRule, err := loadElectionRouteMetaFn(w, ctx, strings.TrimSpace(*job.ElectionID))
+	_, _, err := loadElectionRouteMetaFn(w, ctx, strings.TrimSpace(*job.ElectionID))
 	if err != nil {
 		return err
 	}
 
-	if supportsExternalElectionTally(ballotFormat, tallyRule) {
-		return handleElectionTallyExternalFn(w, ctx, job)
-	}
-
-	return handleTallyLocalFn(w, ctx, job)
+	return handleElectionTallyExternalFn(w, ctx, job)
 }

@@ -107,6 +107,21 @@ func TestFromEnv_Defaults(t *testing.T) {
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("unexpected shutdown timeout: %v", cfg.ShutdownTimeout)
 	}
+	if cfg.AuthRateLimit != 10 {
+		t.Fatalf("unexpected AuthRateLimit: %d", cfg.AuthRateLimit)
+	}
+	if cfg.AuthRateLimitTTL != time.Minute {
+		t.Fatalf("unexpected AuthRateLimitTTL: %v", cfg.AuthRateLimitTTL)
+	}
+	if cfg.WriteRateLimit != 30 {
+		t.Fatalf("unexpected WriteRateLimit: %d", cfg.WriteRateLimit)
+	}
+	if cfg.WriteRateLimitTTL != time.Minute {
+		t.Fatalf("unexpected WriteRateLimitTTL: %v", cfg.WriteRateLimitTTL)
+	}
+	if len(cfg.AdminTrustedCIDRs) != 0 {
+		t.Fatalf("unexpected AdminTrustedCIDRs: %#v", cfg.AdminTrustedCIDRs)
+	}
 }
 
 func TestFromEnv_CustomValues(t *testing.T) {
@@ -132,6 +147,11 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "adminpass")
 	t.Setenv("BOOTSTRAP_RESEARCHER_EMAIL", "researcher@example.com")
 	t.Setenv("BOOTSTRAP_RESEARCHER_PASSWORD", "researcherpass")
+	t.Setenv("AUTH_RATE_LIMIT", "25")
+	t.Setenv("AUTH_RATE_LIMIT_TTL", "90s")
+	t.Setenv("WRITE_RATE_LIMIT", "40")
+	t.Setenv("WRITE_RATE_LIMIT_TTL", "75s")
+	t.Setenv("ADMIN_TRUSTED_CIDRS", "203.0.113.0/24, 10.0.0.0/8")
 
 	cfg := FromEnv()
 
@@ -180,6 +200,22 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	if cfg.BootstrapResearcherEmail != "researcher@example.com" || cfg.BootstrapResearcherPassword != "researcherpass" {
 		t.Fatalf("unexpected researcher bootstrap: %#v", cfg)
 	}
+	if cfg.AuthRateLimit != 25 {
+		t.Fatalf("unexpected AuthRateLimit: %d", cfg.AuthRateLimit)
+	}
+	if cfg.AuthRateLimitTTL != 90*time.Second {
+		t.Fatalf("unexpected AuthRateLimitTTL: %v", cfg.AuthRateLimitTTL)
+	}
+	if cfg.WriteRateLimit != 40 {
+		t.Fatalf("unexpected WriteRateLimit: %d", cfg.WriteRateLimit)
+	}
+	if cfg.WriteRateLimitTTL != 75*time.Second {
+		t.Fatalf("unexpected WriteRateLimitTTL: %v", cfg.WriteRateLimitTTL)
+	}
+	if !reflect.DeepEqual(cfg.AdminTrustedCIDRs, []string{"203.0.113.0/24", "10.0.0.0/8"}) {
+		t.Fatalf("unexpected AdminTrustedCIDRs: %#v", cfg.AdminTrustedCIDRs)
+	}
+
 }
 
 func TestFromEnv_InvalidValuesFallback(t *testing.T) {
@@ -188,6 +224,10 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	t.Setenv("MAX_UPLOAD_BYTES", "-1")
 	t.Setenv("WORKER_POLL_INTERVAL", "bad")
 	t.Setenv("COMPUTE_TLS", "0")
+	t.Setenv("AUTH_RATE_LIMIT", "0")
+	t.Setenv("AUTH_RATE_LIMIT_TTL", "bad")
+	t.Setenv("WRITE_RATE_LIMIT", "0")
+	t.Setenv("WRITE_RATE_LIMIT_TTL", "bad")
 
 	cfg := FromEnv()
 
@@ -205,5 +245,17 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	}
 	if cfg.ComputeTLS != false {
 		t.Fatalf("expected ComputeTLS=false with 0")
+	}
+	if cfg.AuthRateLimit != 10 {
+		t.Fatalf("unexpected AuthRateLimit fallback: %d", cfg.AuthRateLimit)
+	}
+	if cfg.AuthRateLimitTTL != time.Minute {
+		t.Fatalf("unexpected AuthRateLimitTTL fallback: %v", cfg.AuthRateLimitTTL)
+	}
+	if cfg.WriteRateLimit != 30 {
+		t.Fatalf("unexpected WriteRateLimit fallback: %d", cfg.WriteRateLimit)
+	}
+	if cfg.WriteRateLimitTTL != time.Minute {
+		t.Fatalf("unexpected WriteRateLimitTTL fallback: %v", cfg.WriteRateLimitTTL)
 	}
 }

@@ -46,13 +46,13 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 		return makeErrorResult(task.RunID, "grpc send header failed: "+err.Error())
 	}
 
-	sent, code, err := streamRankingBallots(rctx, mdb, cfg, task.DatasetID, stream)
+	sent, code, err := streamDatasetBallots(rctx, mdb, cfg, task.DatasetID, header.BallotFormat, stream)
 	if err != nil {
-		log.Printf("processExperimentRunTask: streamRankingBallots failed run_id=%s err=%v", task.RunID, err)
+		log.Printf("processExperimentRunTask: streamDatasetBallots failed run_id=%s err=%v", task.RunID, err)
 		return makeErrorResult(task.RunID, "stream ballots failed: "+err.Error())
 	}
 	if code != "" {
-		log.Printf("processExperimentRunTask: streamRankingBallots code run_id=%s code=%s", task.RunID, code)
+		log.Printf("processExperimentRunTask: streamDatasetBallots code run_id=%s code=%s", task.RunID, code)
 		return makeErrorResult(task.RunID, code)
 	}
 	log.Printf("processExperimentRunTask: streamed ballots run_id=%s count=%d", task.RunID, sent)
@@ -121,13 +121,13 @@ func processElectionTallyTask(ctx context.Context, db *pgxpool.Pool, cfg Config,
 		return makeElectionErrorResult(task, "grpc send header failed: "+err.Error())
 	}
 
-	sent, code, err := streamElectionRankingBallots(rctx, db, cfg, task.ElectionID, stream)
+	sent, code, err := streamElectionBallots(rctx, db, cfg, task.ElectionID, header.BallotFormat, stream)
 	if err != nil {
-		log.Printf("processElectionTallyTask: streamElectionRankingBallots failed job_id=%s err=%v", task.JobID, err)
+		log.Printf("processElectionTallyTask: streamElectionBallots failed job_id=%s err=%v", task.JobID, err)
 		return makeElectionErrorResult(task, "stream ballots failed: "+err.Error())
 	}
 	if code != "" {
-		log.Printf("processElectionTallyTask: streamElectionRankingBallots code job_id=%s code=%s", task.JobID, code)
+		log.Printf("processElectionTallyTask: streamElectionBallots code job_id=%s code=%s", task.JobID, code)
 		return makeElectionErrorResult(task, code)
 	}
 	log.Printf("processElectionTallyTask: streamed ballots job_id=%s count=%d", task.JobID, sent)

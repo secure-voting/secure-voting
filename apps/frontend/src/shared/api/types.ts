@@ -21,6 +21,70 @@ export type Me = {
   id?: string;
   email?: string;
   role?: "admin" | "voter" | "researcher" | string;
+  full_name?: string | null;
+  phone?: string | null;
+};
+
+export type NotificationKind = "info" | "success" | "warning" | "error";
+
+export type NotificationItem = {
+  id: string;
+  title: string;
+  message: string;
+  details?: string | null;
+  action_label?: string | null;
+  action_to?: string | null;
+  kind: NotificationKind;
+  created_at: string;
+  read: boolean;
+};
+
+export type NotificationCreateReq = {
+  title: string;
+  message: string;
+  details?: string;
+  action_label?: string;
+  action_to?: string;
+  kind?: NotificationKind;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: "admin" | "researcher" | "voter" | string;
+  full_name?: string | null;
+  phone?: string | null;
+  created_at: string;
+};
+
+export type AdminUserListResponse = {
+  items: AdminUser[];
+};
+
+export type AdminSettings = {
+  public_base_url?: string | null;
+  tls_mode: "disabled" | "lets_encrypt" | "custom" | string;
+  tls_domain?: string | null;
+  tls_contact_email?: string | null;
+  backup_enabled: boolean;
+  backup_schedule?: string | null;
+  backup_retention_days?: number | null;
+  database_host?: string | null;
+  database_name?: string | null;
+  updated_at?: string;
+  has_unsaved_warning?: boolean;
+};
+
+export type AdminSettingsUpdateRequest = {
+  public_base_url: string;
+  tls_mode: string;
+  tls_domain: string;
+  tls_contact_email: string;
+  backup_enabled: boolean;
+  backup_schedule: string;
+  backup_retention_days?: number | null;
+  database_host: string;
+  database_name: string;
 };
 
 export type Candidate = {

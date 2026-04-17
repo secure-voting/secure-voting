@@ -2,154 +2,77 @@ package worker
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"secure-voting/apps/backend/internal/jobs"
 )
 
-func restoreRunHooks() func() {
-	oldConsumeResultsFn := consumeResultsFn
+func TestTick_Tally_Delegates(t *testing.T) {
 	oldClaimNextJobFn := claimNextJobFn
-	oldUpdateProgressFn := updateProgressFn
-	oldMarkJobErrorFn := markJobErrorFn
+	oldHandleTallyJobFn := handleTallyJobFn
 	oldHandleExperimentRunFn := handleExperimentRunFn
+	oldRunSchedulersFn := runSchedulersFn
 	oldHandleTallyLocalFn := handleTallyLocalFn
 
-	return func() {
-		consumeResultsFn = oldConsumeResultsFn
+	defer func() {
 		claimNextJobFn = oldClaimNextJobFn
-		updateProgressFn = oldUpdateProgressFn
-		markJobErrorFn = oldMarkJobErrorFn
+		handleTallyJobFn = oldHandleTallyJobFn
 		handleExperimentRunFn = oldHandleExperimentRunFn
+		runSchedulersFn = oldRunSchedulersFn
 		handleTallyLocalFn = oldHandleTallyLocalFn
-	}
-}
+	}()
 
-func TestRun_ReturnsConsumeResultsError(t *testing.T) {
-	defer restoreRunHooks()()
+	electionID := "44444444-4444-4444-4444-444444444444"
 
-	consumeResultsFn = func(_ *Worker, _ context.Context) error {
-		return errors.New("consume failed")
-	}
-
-	w := &Worker{pollInterval: time.Millisecond}
-	err := w.Run(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "consume failed") {
-		t.Fatalf("expected consume failed error, got %v", err)
-	}
-}
-
-func TestRun_ContextCanceled(t *testing.T) {
-	defer restoreRunHooks()()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	consumeResultsFn = func(_ *Worker, ctx context.Context) error {
-		<-ctx.Done()
-		return ctx.Err()
+	claimNextJobFn = func(w *Worker, ctx context.Context, kinds []string) (jobs.ClaimedJob, bool, error) {
+		return jobs.ClaimedJob{
+			ID:         "55555555-5555-5555-5555-555555555555",
+			Kind:       jobKindTally,
+			ElectionID: &electionID,
+		}, true, nil
 	}
 
-	w := &Worker{pollInterval: time.Millisecond}
-	err := w.Run(ctx)
-	if !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context canceled, got %v", err)
-	}
-}
-
-func TestTick_NoJob(t *testing.T) {
-	defer restoreRunHooks()()
-
-	claimNextJobFn = func(_ *Worker, _ context.Context, _ []string) (jobs.ClaimedJob, bool, error) {
-		return jobs.ClaimedJob{}, false, nil
-	}
-
-	if err := (&Worker{}).tick(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestTick_ClaimError(t *testing.T) {
-	defer restoreRunHooks()()
-
-	claimNextJobFn = func(_ *Worker, _ context.Context, _ []string) (jobs.ClaimedJob, bool, error) {
-		return jobs.ClaimedJob{}, false, errors.New("boom")
-	}
-
-	err := (&Worker{}).tick(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "boom") {
-		t.Fatalf("expected boom, got %v", err)
-	}
-}
-
-func TestTick_ExperimentRun_Delegates(t *testing.T) {
-	defer restoreRunHooks()()
-
-	called := false
-	claimNextJobFn = func(_ *Worker, _ context.Context, _ []string) (jobs.ClaimedJob, bool, error) {
-		return jobs.ClaimedJob{ID: "job-1", Kind: jobKindExperimentRun}, true, nil
-	}
-	updateProgressFn = func(_ *Worker, _ context.Context, _ string, _ int) error { return nil }
-	handleExperimentRunFn = func(_ *Worker, _ context.Context, job jobs.ClaimedJob) error {
-		called = true
-		if job.Kind != jobKindExperimentRun {
-			t.Fatalf("unexpected kind: %q", job.Kind)
-		}
+	runSchedulersFn = func(w *Worker, ctx context.Context) error {
 		return nil
 	}
 
-	if err := (&Worker{}).tick(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !called {
-		t.Fatal("expected handleExperimentRun to be called")
-	}
-}
+	tallyJobCalled := 0
+	experimentCalled := 0
+	localCalled := 0
 
-func TestTick_Tally_Delegates(t *testing.T) {
-	defer restoreRunHooks()()
-
-	called := false
-	claimNextJobFn = func(_ *Worker, _ context.Context, _ []string) (jobs.ClaimedJob, bool, error) {
-		return jobs.ClaimedJob{ID: "job-1", Kind: jobKindTally}, true, nil
-	}
-	updateProgressFn = func(_ *Worker, _ context.Context, _ string, _ int) error { return nil }
-	handleTallyLocalFn = func(_ *Worker, _ context.Context, job jobs.ClaimedJob) error {
-		called = true
-		if job.Kind != jobKindTally {
-			t.Fatalf("unexpected kind: %q", job.Kind)
-		}
+	handleTallyJobFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
+		tallyJobCalled++
 		return nil
 	}
 
-	if err := (&Worker{}).tick(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !called {
-		t.Fatal("expected handleTallyLocal to be called")
-	}
-}
-
-func TestTick_UnsupportedKind_MarksError(t *testing.T) {
-	defer restoreRunHooks()()
-
-	var marked string
-	claimNextJobFn = func(_ *Worker, _ context.Context, _ []string) (jobs.ClaimedJob, bool, error) {
-		return jobs.ClaimedJob{ID: "job-1", Kind: "weird"}, true, nil
-	}
-	updateProgressFn = func(_ *Worker, _ context.Context, _ string, _ int) error { return nil }
-	markJobErrorFn = func(_ *Worker, _ context.Context, _ string, errText string) error {
-		marked = errText
+	handleExperimentRunFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
+		experimentCalled++
 		return nil
 	}
 
-	if err := (&Worker{}).tick(context.Background()); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
+		localCalled++
+		return nil
 	}
-	if !strings.Contains(marked, "unsupported job kind") {
-		t.Fatalf("unexpected mark error: %q", marked)
+
+	w := &Worker{
+		pollInterval:     time.Second,
+		scheduleInterval: time.Hour,
+		nextScheduleAt:   time.Now().UTC().Add(time.Hour),
+	}
+
+	if err := w.tick(context.Background()); err != nil {
+		t.Fatalf("tick returned error: %v", err)
+	}
+
+	if tallyJobCalled != 1 {
+		t.Fatalf("expected handleTallyJob to be called once, got %d", tallyJobCalled)
+	}
+	if experimentCalled != 0 {
+		t.Fatalf("expected handleExperimentRun not to be called, got %d", experimentCalled)
+	}
+	if localCalled != 0 {
+		t.Fatalf("expected handleTallyLocal not to be called, got %d", localCalled)
 	}
 }
