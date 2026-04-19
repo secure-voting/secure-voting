@@ -9,10 +9,34 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/db"
+	"secure-voting/apps/backend/internal/systemstatus"
 	"secure-voting/apps/backend/internal/worker"
 )
+
+func startWorkerHeartbeat(ctx context.Context, rdb *redis.Client, cfg config.Config) {
+	const heartbeatTTL = 20 * time.Second
+	const heartbeatInterval = 5 * time.Second
+
+	_ = systemstatus.PublishWorkerHeartbeat(ctx, rdb, cfg.WorkerPollInterval, heartbeatTTL)
+
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := systemstatus.PublishWorkerHeartbeat(ctx, rdb, cfg.WorkerPollInterval, heartbeatTTL); err != nil {
+				log.Printf("worker heartbeat publish failed: %v", err)
+			}
+		}
+	}
+}
 
 func run() error {
 	cfg := config.FromEnv()
@@ -27,6 +51,14 @@ func run() error {
 		return err
 	}
 	defer pg.Close()
+
+	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword)
+	if err != nil {
+		log.Printf("failed to init redis: %v", err)
+		cancel()
+		return err
+	}
+	defer rdb.Close()
 
 	mc, err := db.NewMongoClient(bootCtx, cfg.MongoURI)
 	if err != nil {
@@ -53,6 +85,8 @@ func run() error {
 
 	ctx, cancelRun := context.WithCancel(context.Background())
 	defer cancelRun()
+
+	go startWorkerHeartbeat(ctx, rdb, cfg)
 
 	errCh := make(chan error, 1)
 	go func() {

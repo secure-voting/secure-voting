@@ -2,7 +2,6 @@ package datasets
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"mime/multipart"
 	"strings"
@@ -27,15 +26,14 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 
 	var parsed importFile
 	parsedOK := false
-	if strings.Contains(strings.ToLower(mime), "json") {
-		if err := json.Unmarshal(b, &parsed); err == nil && strings.TrimSpace(parsed.Dataset.Format) != "" {
-			parsedOK = true
-			if name == "" {
-				name = strings.TrimSpace(parsed.Dataset.Name)
-			}
-			if format == "" {
-				format = normalizeFormat(parsed.Dataset.Format)
-			}
+	if p, ok := parseImportFile(b, fileHeader.Filename, mime); ok {
+		parsed = p
+		parsedOK = true
+		if name == "" {
+			name = strings.TrimSpace(parsed.Dataset.Name)
+		}
+		if format == "" {
+			format = normalizeFormat(parsed.Dataset.Format)
 		}
 	}
 

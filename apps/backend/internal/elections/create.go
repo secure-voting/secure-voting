@@ -106,15 +106,6 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		return "", code, nil
 	}
 
-	rules, err := s.capabilities.ListTallyRules(ctx)
-	if err != nil {
-		return "", "", err
-	}
-
-	if !validateKnownTallyRule(tally, rules) {
-		return "", "invalid_tally_rule", nil
-	}
-
 	params := map[string]any{
 		"committee_size":       committeeSize,
 		"quota_type":           quotaType,
@@ -125,13 +116,24 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		"score_step":           in.ScoreStep,
 	}
 
-	if err := validateRuleCompatibility(
-		tally,
-		format,
-		params,
-		rules,
-	); err != nil {
-		return "", err.Error(), nil
+	if s.capabilities != nil {
+		rules, err := s.capabilities.ListTallyRules(ctx)
+		if err != nil {
+			return "", "", err
+		}
+
+		if !validateKnownTallyRule(tally, rules) {
+			return "", "invalid_tally_rule", nil
+		}
+
+		if err := validateRuleCompatibility(
+			tally,
+			format,
+			params,
+			rules,
+		); err != nil {
+			return "", err.Error(), nil
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{})

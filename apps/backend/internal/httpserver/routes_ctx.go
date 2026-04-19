@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -61,6 +62,7 @@ type routeCtx struct {
 	notificationsH  *nh.Handlers
 	adminUsersH     *auusersh.Handlers
 	authRateLimiter *middleware.RateLimiter
+	redisClient *redis.Client
 
 	writeRateLimiter *middleware.RateLimiter
 	adminSettingsH   *ash.Handlers
@@ -71,14 +73,19 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 
 	ctx := context.Background()
 
-	computeClient, err := computeclient.New(ctx, computeclient.Config{
-		Addr:       cfg.ComputeGRPCAddr,
-		UseTLS:     cfg.ComputeTLS,
-		CACertPath: cfg.ComputeTLSCA,
-		ServerName: cfg.ComputeTLSServerName,
-	})
-	if err != nil {
-		panic(err)
+	var computeClient *computeclient.Client
+	if cfg.ComputeGRPCAddr != "" {
+		cc, err := computeclient.New(ctx, computeclient.Config{
+			Addr:       cfg.ComputeGRPCAddr,
+			UseTLS:     cfg.ComputeTLS,
+			CACertPath: cfg.ComputeTLSCA,
+			ServerName: cfg.ComputeTLSServerName,
+		})
+		if err != nil {
+			log.Printf("compute client unavailable: addr=%s tls=%v err=%v", cfg.ComputeGRPCAddr, cfg.ComputeTLS, err)
+		} else {
+			computeClient = cc
+		}
 	}
 
 	authSvc := asvc.NewService(db, cfg.TokenTTL)
@@ -137,6 +144,7 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 		authRateLimiter:  authRateLimiter,
 		writeRateLimiter: writeRateLimiter,
 		adminSettingsH:   ash.NewHandlers(adminSettingsSvc),
+		redisClient: rdb,
 	}
 }
 

@@ -1411,8 +1411,14 @@ func TestIntegration_AdminUsersSelfRoleChangeForbidden(t *testing.T) {
 	}
 
 	code := responseErrorCode(t, data)
-	if code != "self_role_change_forbidden" {
-		t.Fatalf("expected self_role_change_forbidden, got %q body=%s", code, string(raw))
+	if code != "bad_request" {
+		t.Fatalf("expected bad_request, got %q body=%s", code, string(raw))
+	}
+
+	errObj, _ := data["error"].(map[string]any)
+	msg, _ := errObj["message"].(string)
+	if msg != "cannot change own role" {
+		t.Fatalf("expected message %q, got %q body=%s", "cannot change own role", msg, string(raw))
 	}
 
 	dbRole := getUserRole(t, env.pg, adminEmail)

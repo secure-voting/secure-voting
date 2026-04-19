@@ -11,6 +11,7 @@ servers:
 
 tags:
   - name: System
+  - name: Capabilities
   - name: Auth
   - name: Admin
   - name: Elections
@@ -994,6 +995,10 @@ components:
     
     TallyRuleInfo:
       type: object
+      description: >
+        Capability metadata for one tally rule as reported by the compute service.
+        Used by admin and researcher forms to determine which ballot formats are allowed
+        and which rule-specific parameters are applicable.
       required:
         - id
         - label
@@ -1008,27 +1013,47 @@ components:
       properties:
         id:
           type: string
+          description: Canonical machine-readable tally-rule identifier.
+          example: plurality
         label:
           type: string
+          description: Human-readable rule label returned by the compute service.
+          example: Plurality
         ballot_formats:
           type: array
+          description: Ballot formats allowed for this rule.
           items:
             type: string
             enum: [approval, ranking, score]
+          example: [ranking]
         supports_election_tally:
           type: boolean
+          description: Whether the rule is available for election tally flows.
+          example: true
         supports_experiment_runs:
           type: boolean
+          description: Whether the rule is available for experiment runs.
+          example: true
         requires_committee_size:
           type: boolean
+          description: Whether committee_size must be provided for this rule.
+          example: true
         supports_quota_type:
           type: boolean
+          description: Whether quota_type is applicable for this rule.
+          example: false
         requires_approval_max_choices:
           type: boolean
+          description: Whether approval_max_choices is required for approval ballots.
+          example: false
         supports_ranking_top_k:
           type: boolean
+          description: Whether ranking_top_k may be used with this rule.
+          example: true
         requires_score_range:
           type: boolean
+          description: Whether score_min, score_max, and score_step are required.
+          example: false
 
     TallyRuleListResponse:
       type: object
@@ -1038,6 +1063,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TallyRuleInfo'
+      example:
+        items:
+          - id: plurality
+            label: Plurality
+            ballot_formats: [ranking]
+            supports_election_tally: true
+            supports_experiment_runs: true
+            requires_committee_size: true
+            supports_quota_type: false
+            requires_approval_max_choices: false
+            supports_ranking_top_k: true
+            requires_score_range: false
 
     JobListResponse:
       type: object
@@ -1092,11 +1129,13 @@ components:
 
     SystemStatusResponse:
       type: object
-      required: [backend, compute, checked_at]
+      required: [backend, compute, worker, checked_at]
       properties:
         backend:
           $ref: '#/components/schemas/SystemComponentStatus'
         compute:
+          $ref: '#/components/schemas/SystemComponentStatus'
+        worker:
           $ref: '#/components/schemas/SystemComponentStatus'
         checked_at:
           type: string
@@ -2358,7 +2397,7 @@ paths:
   
   /api/v1/capabilities/tally-rules:
     get:
-      tags: [System]
+      tags: [Capabilities]
       summary: List tally rules supported by the compute service
       description: >
         Returns the current tally-rule capability matrix reported by the compute service.
@@ -2918,7 +2957,7 @@ paths:
   /api/v1/system/status:
     get:
       tags: [System]
-      summary: Get backend and compute connectivity status
+      summary: Get backend, compute, and worker connectivity status
       security:
         - bearerAuth: []
       responses:

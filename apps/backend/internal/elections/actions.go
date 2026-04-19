@@ -99,15 +99,6 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return code, nil
 		}
 
-		rules, err := s.capabilities.ListTallyRules(ctx)
-		if err != nil {
-			return "", err
-		}
-
-		if !validateKnownTallyRule(tallyRule, rules) {
-			return "invalid_tally_rule", nil
-		}
-
 		params := map[string]any{
 			"committee_size":       committeeSize,
 			"quota_type":           quotaType,
@@ -119,13 +110,24 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			"score_allow_skip":     scoreAllowSkip,
 		}
 
-		if err := validateRuleCompatibility(
-			tallyRule,
-			ballotFormat,
-			params,
-			rules,
-		); err != nil {
-			return err.Error(), nil
+		if s.capabilities != nil {
+			rules, err := s.capabilities.ListTallyRules(ctx)
+			if err != nil {
+				return "", err
+			}
+
+			if !validateKnownTallyRule(tallyRule, rules) {
+				return "invalid_tally_rule", nil
+			}
+
+			if err := validateRuleCompatibility(
+				tallyRule,
+				ballotFormat,
+				params,
+				rules,
+			); err != nil {
+				return err.Error(), nil
+			}
 		}
 
 		next = "active"

@@ -147,8 +147,18 @@ func FromEnv() Config {
 		}
 	}
 
+	computeDisabled := false
+	if s := strings.TrimSpace(os.Getenv("DISABLE_COMPUTE")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			computeDisabled = true
+		}
+	}
+	if strings.TrimSpace(os.Getenv("SECURE_VOTING_INTEGRATION")) == "1" {
+		computeDisabled = true
+	}
+
 	computeAddr := os.Getenv("COMPUTE_GRPC_ADDR")
-	if computeAddr == "" {
+	if computeAddr == "" && !computeDisabled {
 		computeAddr = "rust-compute:50051"
 	}
 
@@ -158,15 +168,24 @@ func FromEnv() Config {
 			computeTLS = false
 		}
 	}
+	if computeDisabled {
+		computeTLS = false
+	}
 
 	computeCA := os.Getenv("COMPUTE_TLS_CA")
-	if computeCA == "" {
+	if computeCA == "" && !computeDisabled {
 		computeCA = "/certs/ca.pem"
+	}
+	if computeDisabled {
+		computeCA = ""
 	}
 
 	computeSN := os.Getenv("COMPUTE_TLS_SERVER_NAME")
-	if computeSN == "" {
+	if computeSN == "" && !computeDisabled {
 		computeSN = "rust-compute"
+	}
+	if computeDisabled {
+		computeSN = ""
 	}
 
 	bootstrapAdminEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
