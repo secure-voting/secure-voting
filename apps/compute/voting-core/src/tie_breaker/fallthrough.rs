@@ -37,11 +37,13 @@ impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
 
 #[cfg(test)]
 mod tests {
+    use crate::models::ranking::RankingBallot;
+
     use super::*;
 
     #[test]
     fn unique_winner_fallthrough() {
-        let fake_profile = (vec![vec![0]])
+        let fake_profile: Profile<RankingBallot> = (vec![vec![0]])
             .try_into()
             .expect("Profile is constructed incorrectly, revise test example.");
         let candidates = vec![CandidateId::new(0)];
@@ -56,7 +58,7 @@ mod tests {
 
     #[test]
     fn multiple_winner_fallthrough() {
-        let fake_profile = (vec![vec![0]])
+        let fake_profile: Profile<RankingBallot> = (vec![vec![0]])
             .try_into()
             .expect("Profile is constructed incorrectly, revise test example.");
         let candidates = vec![CandidateId::new(0), CandidateId::new(42)];
