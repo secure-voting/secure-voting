@@ -68,7 +68,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<2>,
     "Approval-2",
-    &["ranking"],
+    &["ranking", "approval"],
     false,
     true,
     true,
@@ -80,7 +80,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<3>,
     "Approval-3",
-    &["ranking"],
+    &["ranking", "approval"],
     false,
     true,
     true,
