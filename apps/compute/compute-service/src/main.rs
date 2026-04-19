@@ -1,10 +1,5 @@
-use std::{
-    ops::{Deref, DerefMut},
-    os::fd::OwnedFd,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
-use prost_types::ListValue;
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
@@ -148,7 +143,7 @@ impl Compute for ComputeService {
             }
         }
 
-        if header.ballot_format != "ranking" {
+        if header.ballot_format != "ranking" || header.ballot_format != "approval" {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
