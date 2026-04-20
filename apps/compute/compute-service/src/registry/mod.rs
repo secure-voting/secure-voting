@@ -3,6 +3,7 @@ use std::collections::HashMap;
 pub mod voting_rules;
 
 pub type MtError = String;
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AlgorithmError {
     InvalidBallotType(String),
     NoSuchAlgorithm,
@@ -13,10 +14,10 @@ pub enum AlgorithmError {
     InvalidArgument(MtError),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum BallotType {
-    Ranking,
     Approval,
+    Ranking,
     Scoring,
 }
 
@@ -117,5 +118,139 @@ impl Registry {
             .get(&alias.to_lowercase())
             .into_iter()
             .flat_map(|m| m.keys().copied())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::mock;
+
+    mock! {
+      #[derive(Debug)]
+      pub Algorithm {
+
+      }
+
+      impl Algorithm for Algorithm {
+        fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError>;
+        fn alias(&self) -> &'static str;
+        fn supports_election_tally(&self) -> bool;
+        fn supports_experiment_runs(&self) -> bool;
+        fn requires_committee_size(&self) -> bool;
+        fn supports_quota_type(&self) -> bool;
+        fn requires_approval_max_choices(&self) -> bool;
+        fn supports_ranking_top_k(&self) -> bool;
+        fn requires_score_range(&self) -> bool;
+      }
+    }
+
+    #[test]
+    fn executes_registered_algorithm() {
+        let mut registry = Registry::new();
+
+        let mut algo = MockAlgorithm::new();
+        algo.expect_alias().return_const_st("test");
+        algo.expect_run_election()
+            .return_const_st(Ok(vec!["A".into()]));
+
+        registry.add(algo, BallotType::Ranking);
+
+        let result = registry.execute(vec![vec!["A".into()]], "test", "ranking");
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn unknown_algorithm_returns_error() {
+        let registry = Registry::new();
+
+        let err = registry
+            .execute(vec![], "does_not_exist", "ranking")
+            .unwrap_err();
+
+        match err {
+            AlgorithmError::NoSuchAlgorithm => {}
+            _ => panic!("wrong error type"),
+        }
+    }
+
+    #[test]
+    fn unsupported_ballot_returns_error() {
+        let mut registry = Registry::new();
+
+        let mut algo = MockAlgorithm::new();
+        algo.expect_alias().return_const_st("test");
+
+        registry.add(algo, BallotType::Ranking);
+
+        let err = registry.execute(vec![], "test", "approval").unwrap_err();
+
+        match err {
+            AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot } => {
+                assert_eq!(algorithm, "test");
+                assert_eq!(ballot, BallotType::Approval);
+            }
+            _ => panic!("wrong error type"),
+        };
+    }
+
+    #[test]
+    fn invalid_ballot_string_returns_error() {
+        let registry = Registry::new();
+
+        let err = registry
+            .execute(vec![], "test", "not_a_ballot")
+            .unwrap_err();
+
+        match err {
+            AlgorithmError::InvalidBallotType(_) => {}
+            _ => panic!("wrong error type"),
+        }
+    }
+
+    #[test]
+    fn duplicate_registration_is_rejected() {
+        let mut registry = Registry::new();
+
+        let mut algo1 = MockAlgorithm::new();
+        algo1.expect_alias().return_const_st("test");
+
+        let mut algo2 = MockAlgorithm::new();
+        algo2.expect_alias().return_const_st("test");
+
+        let a = registry.add(algo1, BallotType::Ranking);
+        let b = registry.add(algo2, BallotType::Ranking);
+
+        assert!(a);
+        assert!(!b);
+    }
+
+    #[test]
+    fn supported_ballots_are_correct() {
+        let mut registry = Registry::new();
+
+        let mut algo1 = MockAlgorithm::new();
+        algo1.expect_alias().return_const_st("test");
+
+        let mut algo2 = MockAlgorithm::new();
+        algo2.expect_alias().return_const_st("test");
+
+        registry.add(algo1, BallotType::Approval);
+        registry.add(algo2, BallotType::Ranking);
+
+        let mut ballots: Vec<_> = registry.supported_ballots("test").collect();
+        ballots.sort_by_key(|b| *b as u8);
+
+        assert_eq!(ballots, vec![BallotType::Approval, BallotType::Ranking]);
+    }
+
+    #[test]
+    fn unknown_alias_returns_empty_supported_ballots() {
+        let registry = Registry::new();
+
+        let ballots: Vec<_> = registry.supported_ballots("missing").collect();
+
+        assert!(ballots.is_empty());
     }
 }
