@@ -133,6 +133,9 @@ impl Compute for ComputeService {
                     Payload::Ranking(ranking_ballot) => {
                         ballots.push(ranking_ballot.ranking);
                     }
+                    Payload::Approval(approval_ballot) => {
+                        ballots.push(approval_ballot.approvals);
+                    }
                     _ => {
                         return Ok(Response::new(create_error_type(
                             tonic::Code::Unimplemented,
