@@ -1,3 +1,12 @@
+//! Main computing service.
+//!
+//! Responds to requests for calulcation and the available algorithm list.
+//! Uses the voting-core library to calculate election results.
+
+#![warn(missing_docs)]
+#![warn(clippy::missing_docs_in_private_items)]
+#![forbid(unsafe_code)]
+
 use std::sync::{Arc, RwLock};
 
 use tonic::{
@@ -18,7 +27,11 @@ use crate::{
 #[allow(clippy::default_trait_access)]
 #[allow(clippy::doc_markdown)]
 #[allow(clippy::large_enum_variant)]
+#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::too_many_lines)]
+/// Generated proto-structs.
 pub mod securevoting {
+    #[allow(missing_docs)]
     pub mod compute {
         pub mod v1 {
             tonic::include_proto!("securevoting.compute.v1");
@@ -26,6 +39,9 @@ pub mod securevoting {
     }
 }
 
+/// Registry module.
+///
+/// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
 pub mod registry;
 
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
@@ -136,7 +152,7 @@ impl Compute for ComputeService {
                     Payload::Approval(approval_ballot) => {
                         ballots.push(approval_ballot.approvals);
                     }
-                    _ => {
+                    Payload::Score(_) => {
                         return Ok(Response::new(create_error_type(
                             tonic::Code::Unimplemented,
                             "not yet supported",
@@ -164,26 +180,19 @@ impl Compute for ComputeService {
                 tonic::Code::Unimplemented,
                 "No such algorithm",
             ))),
-            Err(AlgorithmError::InvalidArgument(e)) => Ok(Response::new(create_error_type(
-                tonic::Code::InvalidArgument,
-                e,
-            ))),
+            Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => Ok(
+                Response::new(create_error_type(tonic::Code::InvalidArgument, e)),
+            ),
             Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
                 Ok(Response::new(create_error_type(
                     tonic::Code::InvalidArgument,
-                    format!(
-                        "Algorithm {} does not support ballot type {}",
-                        algorithm, ballot
-                    ),
+                    format!("Algorithm {algorithm} does not support ballot type {ballot}"),
                 )))
             }
-            Err(AlgorithmError::InvalidBallotType(e)) => Ok(Response::new(create_error_type(
-                tonic::Code::InvalidArgument,
-                e,
-            ))),
         }
     }
 
+    #[allow(clippy::expect_used)]
     async fn list_tally_rules(
         &self,
         _request: tonic::Request<()>,
@@ -195,7 +204,7 @@ impl Compute for ComputeService {
                 .expect("RwLock is poisoned")
                 .algorithms()
                 .map(|algo| TallyRuleInfo {
-                    id: algo.alias().to_lowercase().replace(" ", "-"),
+                    id: algo.alias().to_lowercase().replace(' ', "-"),
                     label: algo.alias().to_owned(),
                     ballot_formats: self
                         .registry

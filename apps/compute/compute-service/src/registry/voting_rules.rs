@@ -179,6 +179,9 @@ impl_algorithm!(
     false
 );
 
+/// Return a registry with all the voting-core
+/// algorithms included for appropriate ballot types.
+#[must_use]
 pub fn get_core_registry() -> Registry {
     let mut registry = Registry::new();
     registry.add(BordaRule::default(), BallotType::Ranking);
