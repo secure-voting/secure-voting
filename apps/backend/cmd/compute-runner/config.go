@@ -29,6 +29,10 @@ type Config struct {
 	KafkaMaxWait         time.Duration
 	KafkaBatchTimeout    time.Duration
 	KafkaBallotBatchSize int
+
+	KafkaTLS           bool
+	KafkaTLSCA         string
+	KafkaTLSServerName string
 }
 
 func loadConfig() Config {
@@ -56,10 +60,17 @@ func loadConfig() Config {
 		KafkaMaxWait:         250 * time.Millisecond,
 		KafkaBatchTimeout:    50 * time.Millisecond,
 		KafkaBallotBatchSize: 500,
+
+		KafkaTLS:           parseBool(envOr("KAFKA_TLS", "false")),
+		KafkaTLSCA:         env("KAFKA_TLS_CA"),
+		KafkaTLSServerName: envOr("KAFKA_TLS_SERVER_NAME", "kafka"),
 	}
 
 	if cfg.UseTLS && strings.TrimSpace(cfg.CACertPath) == "" {
 		log.Fatalf("missing env COMPUTE_TLS_CA when COMPUTE_TLS=true")
+	}
+	if cfg.KafkaTLS && strings.TrimSpace(cfg.KafkaTLSCA) == "" {
+		log.Fatalf("missing env KAFKA_TLS_CA when KAFKA_TLS=true")
 	}
 
 	return cfg

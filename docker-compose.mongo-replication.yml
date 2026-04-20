@@ -1,0 +1,107 @@
+services:
+  mongo-primary:
+    image: mongo:8.0
+    container_name: mongo-primary
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+      - --port
+      - "27017"
+    networks:
+      - mongo_replication_network
+    volumes:
+      - mongo-primary-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mongo-secondary:
+    image: mongo:8.0
+    container_name: mongo-secondary
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+      - --port
+      - "27017"
+    networks:
+      - mongo_replication_network
+    volumes:
+      - mongo-secondary-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --host localhost --port 27017 --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  mongo-rs-init:
+    image: mongo:8.0
+    container_name: mongo-rs-init
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+      mongo-secondary:
+        condition: service_healthy
+    networks:
+      - mongo_replication_network
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          until mongosh --quiet --host mongo-primary --port 27017 --eval 'db.runCommand({ ping: 1 }).ok' | grep 1 >/dev/null; do
+            sleep 2
+          done
+          until mongosh --quiet --host mongo-secondary --port 27017 --eval 'db.runCommand({ ping: 1 }).ok' | grep 1 >/dev/null; do
+            sleep 2
+          done
+
+          mongosh --quiet --host mongo-primary --port 27017 <<'JS'
+          try {
+            const h = db.hello();
+            if (h.setName === "rs0") {
+              quit(0);
+            }
+          } catch (e) {}
+
+          rs.initiate({
+            _id: "rs0",
+            members: [
+              { _id: 0, host: "mongo-primary:27017", priority: 2 },
+              { _id: 1, host: "mongo-secondary:27017", priority: 1 }
+            ]
+          })
+
+          let ready = false
+          for (let i = 0; i < 60; i++) {
+            try {
+              const primaryHello = db.hello()
+              const secondaryHello = new Mongo("mongodb://mongo-secondary:27017").getDB("admin").hello()
+              if (primaryHello.isWritablePrimary === true && secondaryHello.secondary === true) {
+                ready = true
+                break
+              }
+            } catch (e) {}
+            sleep(2000)
+          }
+
+          if (!ready) {
+            throw new Error("replica set did not become ready")
+          }
+          JS
+    restart: "no"
+
+networks:
+  mongo_replication_network:
+    driver: bridge
+
+volumes:
+  mongo-primary-data:
+    driver: local
+  mongo-secondary-data:
+    driver: local

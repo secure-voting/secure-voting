@@ -259,24 +259,38 @@ export function AdminCreateElectionPage() {
     [availableRules, tallyRule]
   );
 
-  const allowedBallotFormats = useMemo(
-    () =>
-      (currentRule?.ballot_formats ?? []).filter(
-        (f): f is "approval" | "ranking" | "score" =>
-          f === "approval" || f === "ranking" || f === "score"
-      ),
-    [currentRule]
+  const allowedBallotFormats = useMemo(() => {
+    const formats = new Set<"approval" | "ranking" | "score">();
+
+    for (const rule of availableRules) {
+      for (const format of rule.ballot_formats ?? []) {
+        if (format === "approval" || format === "ranking" || format === "score") {
+          formats.add(format);
+        }
+      }
+    }
+
+    return Array.from(formats);
+  }, [availableRules]);
+
+  const rulesForSelectedBallotFormat = useMemo(
+    () => availableRules.filter((rule) => supportsBallotFormat(rule, ballotFormat)),
+    [availableRules, ballotFormat]
   );
 
   useEffect(() => {
-    if (!currentRule) return;
-    if (!supportsBallotFormat(currentRule, ballotFormat)) {
-      const nextFormat = allowedBallotFormats[0];
-      if (nextFormat) {
-        setBallotFormat(nextFormat);
-      }
+    if (allowedBallotFormats.length === 0) return;
+    if (!allowedBallotFormats.includes(ballotFormat)) {
+      setBallotFormat(allowedBallotFormats[0]);
     }
-  }, [currentRule, ballotFormat, allowedBallotFormats]);
+  }, [allowedBallotFormats, ballotFormat]);
+
+  useEffect(() => {
+    if (rulesForSelectedBallotFormat.length === 0) return;
+    if (!rulesForSelectedBallotFormat.some((rule) => rule.id === tallyRule)) {
+      setTallyRule(rulesForSelectedBallotFormat[0].id);
+    }
+  }, [rulesForSelectedBallotFormat, tallyRule]);
 
   useEffect(() => {
     if (!currentRule) return;
@@ -445,6 +459,9 @@ export function AdminCreateElectionPage() {
       }
       if (availableRules.length === 0) {
         return "Нет доступных правил подсчёта";
+      }
+      if (rulesForSelectedBallotFormat.length === 0) {
+        return "Для выбранного формата бюллетеня нет доступных правил подсчёта";
       }
       if (!currentRule) {
         return "Выберите допустимое правило подсчёта";
@@ -831,7 +848,7 @@ export function AdminCreateElectionPage() {
                     <option
                       key={format}
                       value={format}
-                      disabled={!supportsBallotFormat(currentRule, format)}
+                      disabled={!allowedBallotFormats.includes(format)}
                     >
                       {format}
                     </option>
@@ -849,7 +866,7 @@ export function AdminCreateElectionPage() {
                   value={tallyRule}
                   onChange={(e) => setTallyRule(e.target.value)}
                 >
-                  {availableRules.map((rule) => (
+                  {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
                       {rule.label}
                     </option>

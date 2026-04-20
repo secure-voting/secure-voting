@@ -14,6 +14,7 @@ export type SystemComponentStatus = {
 export type SystemStatusResponse = {
   backend: SystemComponentStatus;
   compute: SystemComponentStatus;
+  worker: SystemComponentStatus;
   checked_at: string;
 };
 

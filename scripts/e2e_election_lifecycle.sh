@@ -2,9 +2,13 @@
 set -euo pipefail
 
 BACKEND_BASE="${BACKEND_BASE:-http://127.0.0.1:3001}"
-FRONTEND_BASE="${FRONTEND_BASE:-http://127.0.0.1:8080}"
+FRONTEND_BASE="${FRONTEND_BASE:-https://127.0.0.1:8080}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TLS_CA_CERT="${TLS_CA_CERT:-$ROOT_DIR/scripts/certs/out/ca.pem}"
 API_BASE="${API_BASE:-}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-60}"
+START_AT="$(date -u -d '+10 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+END_AT="$(date -u -d '+2 days' +%Y-%m-%dT%H:%M:%SZ)"
 
 : "${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}"
 : "${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}"
@@ -27,7 +31,7 @@ do_curl() {
   local url="$1"; shift
   local tmp
   tmp="$(mktemp)"
-  HTTP_CODE="$(curl -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
+  HTTP_CODE="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
   HTTP_BODY="$(cat "$tmp" || true)"
   rm -f "$tmp"
 }
@@ -109,16 +113,10 @@ assert_code() {
 }
 
 detect_api_base() {
-  if curl -4fsS "$BACKEND_BASE/health" >/dev/null 2>&1; then
-    API_BASE="$BACKEND_BASE/api/v1"
-    echo "API detected via backend: $API_BASE"
-    return 0
-  fi
-
   local tmp
   tmp="$(mktemp)"
   local code
-  code="$(curl -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
+  code="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
   local body
   body="$(cat "$tmp" || true)"
   rm -f "$tmp"
@@ -129,9 +127,15 @@ detect_api_base() {
     return 0
   fi
 
+  if curl -4fsS "$BACKEND_BASE/health" >/dev/null 2>&1; then
+    API_BASE="$BACKEND_BASE/api/v1"
+    echo "API detected via backend: $API_BASE"
+    return 0
+  fi
+
   echo "Cannot detect API base." >&2
-  echo "Tried backend:  $BACKEND_BASE" >&2
   echo "Tried frontend: $FRONTEND_BASE" >&2
+  echo "Tried backend:  $BACKEND_BASE" >&2
   echo "Last frontend probe code=$code body=$body" >&2
   exit 1
 }
@@ -224,8 +228,8 @@ do_curl POST "$API_BASE/elections" \
   -d "{
     \"title\":\"E2E election lifecycle $SFX\",
     \"description\":\"user-flow e2e\",
-    \"start_at\":\"2026-03-20T10:00:00Z\",
-    \"end_at\":\"2026-03-21T10:00:00Z\",
+    \"start_at\":\"$START_AT\",
+    \"end_at\":\"$END_AT\",
     \"tally_rule\":\"plurality\",
     \"ballot_format\":\"ranking\",
     \"access_mode\":\"open\",

@@ -52,7 +52,7 @@ func run() error {
 	}
 	defer pg.Close()
 
-	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword)
+	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS, cfg.RedisTLSCA)
 	if err != nil {
 		log.Printf("failed to init redis: %v", err)
 		cancel()
@@ -77,6 +77,10 @@ func run() error {
 		ResultsTopic:     cfg.KafkaResultsTopic,
 		GroupID:          cfg.KafkaGroupID,
 		Brokers:          cfg.KafkaBrokers,
+
+		KafkaTLS:           cfg.KafkaTLS,
+		KafkaTLSCA:         cfg.KafkaTLSCA,
+		KafkaTLSServerName: cfg.KafkaTLSServerName,
 	})
 	defer w.Close()
 

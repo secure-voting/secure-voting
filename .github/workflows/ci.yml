@@ -38,6 +38,15 @@ jobs:
       - name: Run go vet
         run: go vet ./...
 
+      - name: Run system status handler tests
+        run: go test ./internal/httpserver -run TestSystemStatus
+
+      - name: Run elections rule matrix contract tests
+        run: go test ./internal/elections -run 'Test(BuildRuleMatrix|ValidateRuleCompatibility)'
+
+      - name: Run capabilities handler tests
+        run: go test ./internal/httpserver/capabilities
+        
       - name: Build backend binaries
         run: |
           go build ./cmd/api
@@ -86,16 +95,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/ci/*.sh scripts/*.sh
 
-      - name: Install validator
-        run: python3 -m pip install --upgrade pip openapi-spec-validator PyYAML
-
-      - name: Validate OpenAPI spec
-        run: python3 -c "from openapi_spec_validator import validate_spec; import yaml; spec=yaml.safe_load(open('apps/backend/openapi/openapi.yaml', 'r', encoding='utf-8')); validate_spec(spec); print('OpenAPI spec is valid')"
+      - name: Check capabilities OpenAPI contract
+        run: bash scripts/ci/check_openapi_capabilities.sh
 
   integration-tests:
     name: integration tests
@@ -161,6 +165,7 @@ jobs:
       - openapi-validate
     env:
       RUN_EXPERIMENT_E2E: "1"
+      RUN_OPTIONAL_VOTE_FORMATS_E2E: "0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4

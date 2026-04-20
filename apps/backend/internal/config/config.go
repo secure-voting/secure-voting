@@ -18,6 +18,10 @@ type Config struct {
 	RedisPassword  string
 	IdempotencyTTL time.Duration
 
+	AdminTrustedCIDRs []string
+	RedisTLS   bool
+	RedisTLSCA string
+
 	MongoURI    string
 	MongoDBName string
 
@@ -29,6 +33,9 @@ type Config struct {
 	KafkaGroupID           string
 	WorkerPollInterval     time.Duration
 	WorkerScheduleInterval time.Duration
+	KafkaTLS           bool
+	KafkaTLSCA         string
+	KafkaTLSServerName string
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
@@ -45,8 +52,6 @@ type Config struct {
 
 	WriteRateLimit    int
 	WriteRateLimitTTL time.Duration
-
-	AdminTrustedCIDRs []string
 }
 
 func FromEnv() Config {
@@ -79,6 +84,18 @@ func FromEnv() Config {
 	redisPass := os.Getenv("REDIS_PASSWORD")
 	if redisPass == "" {
 		redisPass = "redis_dev_pass"
+	}
+
+	redisTLS := false
+	if s := strings.TrimSpace(os.Getenv("REDIS_TLS")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			redisTLS = true
+		}
+	}
+
+	redisTLSCA := strings.TrimSpace(os.Getenv("REDIS_TLS_CA"))
+	if redisTLS && redisTLSCA == "" {
+		redisTLSCA = "/certs/ca.pem"
 	}
 
 	idemTTL := 24 * time.Hour
@@ -131,6 +148,23 @@ func FromEnv() Config {
 	groupID := os.Getenv("KAFKA_GROUP_ID")
 	if groupID == "" {
 		groupID = "secure-voting-backend-worker"
+	}
+
+	kafkaTLS := false
+	if s := strings.TrimSpace(os.Getenv("KAFKA_TLS")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			kafkaTLS = true
+		}
+	}
+
+	kafkaTLSCA := strings.TrimSpace(os.Getenv("KAFKA_TLS_CA"))
+	if kafkaTLS && kafkaTLSCA == "" {
+		kafkaTLSCA = "/certs/ca.pem"
+	}
+
+	kafkaTLSServerName := strings.TrimSpace(os.Getenv("KAFKA_TLS_SERVER_NAME"))
+	if kafkaTLS && kafkaTLSServerName == "" {
+		kafkaTLSServerName = "kafka"
 	}
 
 	poll := 1 * time.Second
@@ -230,6 +264,8 @@ func FromEnv() Config {
 
 		RedisAddr:      redisAddr,
 		RedisPassword:  redisPass,
+		RedisTLS:       redisTLS,
+		RedisTLSCA:     redisTLSCA,
 		IdempotencyTTL: idemTTL,
 
 		MongoURI:    mongoURI,
@@ -243,6 +279,9 @@ func FromEnv() Config {
 		KafkaGroupID:           groupID,
 		WorkerPollInterval:     poll,
 		WorkerScheduleInterval: schedulePoll,
+		KafkaTLS:           kafkaTLS,
+		KafkaTLSCA:         kafkaTLSCA,
+		KafkaTLSServerName: kafkaTLSServerName,
 
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,

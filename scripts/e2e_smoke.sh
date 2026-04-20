@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API_BASE_URL="${API_BASE_URL:-http://localhost:3001/api/v1}"
-HEALTH_URL="${HEALTH_URL:-http://localhost:3001/health}"
+API_BASE_URL="${API_BASE_URL:-http://127.0.0.1:3001/api/v1}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3001/health}"
 
 assert_http_code() {
   local expected="$1"
   local url="$2"
   local actual
-  actual="$(curl -s -o /tmp/secure_voting_resp.txt -w '%{http_code}' "$url" || true)"
+  actual="$(curl --cacert "$TLS_CA_CERT" -s -o /tmp/secure_voting_resp.txt -w '%{http_code}' "$url" || true)"
   if [[ "$actual" != "$expected" ]]; then
     echo "ASSERT FAIL: expected HTTP $expected, got $actual"
     cat /tmp/secure_voting_resp.txt || true
@@ -19,8 +19,10 @@ assert_http_code() {
 echo "== smoke: backend health =="
 assert_http_code 200 "$HEALTH_URL"
 
-BACKEND_BASE="${BACKEND_BASE:-http://localhost:3001}"
-FRONTEND_BASE="${FRONTEND_BASE:-http://localhost:8080}"
+BACKEND_BASE="${BACKEND_BASE:-http://127.0.0.1:3001}"
+FRONTEND_BASE="${FRONTEND_BASE:-https://127.0.0.1:8080}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TLS_CA_CERT="${TLS_CA_CERT:-$ROOT_DIR/scripts/certs/out/ca.pem}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-20}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing command: $1" >&2; exit 1; }; }
@@ -36,13 +38,13 @@ do_curl() {
   local url="$1"; shift
   local tmp
   tmp="$(mktemp)"
-  HTTP_CODE="$(curl -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
+  HTTP_CODE="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
   HTTP_BODY="$(cat "$tmp" || true)"
   rm -f "$tmp"
 }
 
 do_curl_headers() {
-  curl -4sS -D - -o /dev/null "$@" || true
+  curl --cacert "$TLS_CA_CERT" -4sS -D - -o /dev/null "$@" || true
 }
 
 extract_token() {
@@ -218,6 +220,17 @@ assert_code 200
 START_AT="$(date -u -d '+10 minutes' +%Y-%m-%dT%H:%M:%SZ)"
 END_AT="$(date -u -d '+2 days' +%Y-%m-%dT%H:%M:%SZ)"
 
+echo "[smoke] check system status"
+SYSTEM_STATUS="$(curl -fsS \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://127.0.0.1:3001/api/v1/system/status)"
+
+echo "$SYSTEM_STATUS" | jq .
+
+echo "$SYSTEM_STATUS" | jq -e '.backend.status == "ready"' >/dev/null
+echo "$SYSTEM_STATUS" | jq -e '.compute.status | type == "string"' >/dev/null
+echo "$SYSTEM_STATUS" | jq -e '.worker.status | type == "string"' >/dev/null
+echo "$SYSTEM_STATUS" | jq -e '.checked_at | type == "string"' >/dev/null
 
 echo "== suite A: state machine + pause/resume + publish gating =="
 do_curl POST "$API_BASE/api/v1/elections" -H 'content-type: application/json' -H "$AUTH" -d "{

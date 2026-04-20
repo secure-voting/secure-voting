@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -23,7 +27,34 @@ type taskEnvelope struct {
 	Kind string `json:"kind"`
 }
 
+func mustKafkaTLSConfig(enabled bool, caPath, serverName string) *tls.Config {
+	if !enabled {
+		return nil
+	}
+	if caPath == "" {
+		panic("kafka tls enabled but ca path is empty")
+	}
+
+	caPEM, err := os.ReadFile(caPath)
+	if err != nil {
+		panic(fmt.Sprintf("read kafka ca failed: %v", err))
+	}
+
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		panic("append kafka ca failed")
+	}
+
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		RootCAs:    pool,
+		ServerName: serverName,
+	}
+}
+
 func newTaskReader(cfg Config) *kafka.Reader {
+	tlsCfg := mustKafkaTLSConfig(cfg.KafkaTLS, cfg.KafkaTLSCA, cfg.KafkaTLSServerName)
+
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:     cfg.Brokers,
 		GroupID:     cfg.GroupID,
@@ -32,16 +63,26 @@ func newTaskReader(cfg Config) *kafka.Reader {
 		MaxBytes:    cfg.KafkaMaxBytes,
 		MaxWait:     cfg.KafkaMaxWait,
 		StartOffset: kafka.FirstOffset,
+		Dialer: &kafka.Dialer{
+			Timeout:   10 * time.Second,
+			DualStack: true,
+			TLS:       tlsCfg,
+		},
 	})
 }
 
 func newResultWriter(cfg Config) *kafka.Writer {
+	tlsCfg := mustKafkaTLSConfig(cfg.KafkaTLS, cfg.KafkaTLSCA, cfg.KafkaTLSServerName)
+
 	return &kafka.Writer{
 		Addr:         kafka.TCP(cfg.Brokers...),
 		Topic:        cfg.ResultsTopic,
 		RequiredAcks: kafka.RequireAll,
 		Balancer:     &kafka.LeastBytes{},
 		BatchTimeout: cfg.KafkaBatchTimeout,
+		Transport: &kafka.Transport{
+			TLS: tlsCfg,
+		},
 	}
 }
 

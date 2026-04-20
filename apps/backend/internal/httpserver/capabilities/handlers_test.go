@@ -123,3 +123,24 @@ func TestListTallyRules_InternalError_MapsTo500(t *testing.T) {
 		t.Fatalf("unexpected error message: %+v", er)
 	}
 }
+
+func TestListTallyRules_NilService_MapsTo500(t *testing.T) {
+	h := NewHandlers(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "http://example/api/v1/capabilities/tally-rules", nil)
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.ListTallyRules).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	er := decodeErr(t, rr)
+	if er.Error.Code != "internal_error" {
+		t.Fatalf("unexpected error code: %+v", er)
+	}
+	if er.Error.Message != "list tally rules failed" {
+		t.Fatalf("unexpected error message: %+v", er)
+	}
+}

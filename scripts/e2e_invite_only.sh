@@ -2,7 +2,9 @@
 set -euo pipefail
 
 BACKEND_BASE="${BACKEND_BASE:-http://127.0.0.1:3001}"
-FRONTEND_BASE="${FRONTEND_BASE:-http://127.0.0.1:8080}"
+FRONTEND_BASE="${FRONTEND_BASE:-https://127.0.0.1:8080}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TLS_CA_CERT="${TLS_CA_CERT:-$ROOT_DIR/scripts/certs/out/ca.pem}"
 API_BASE="${API_BASE:-}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-60}"
 
@@ -27,7 +29,7 @@ do_curl() {
   local url="$1"; shift
   local tmp
   tmp="$(mktemp)"
-  HTTP_CODE="$(curl -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
+  HTTP_CODE="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
   HTTP_BODY="$(cat "$tmp" || true)"
   rm -f "$tmp"
 }
@@ -51,7 +53,7 @@ detect_api_base() {
   local tmp
   tmp="$(mktemp)"
   local code
-  code="$(curl -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
+  code="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
   local body
   body="$(cat "$tmp" || true)"
   rm -f "$tmp"

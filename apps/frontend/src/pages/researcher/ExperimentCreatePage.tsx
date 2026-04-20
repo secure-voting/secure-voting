@@ -134,6 +134,26 @@ export function ExperimentCreatePage() {
     [availableRules, tallyRule]
   );
 
+
+  const allowedBallotFormats = useMemo(() => {
+    const formats = new Set<"approval" | "ranking" | "score">();
+
+    for (const rule of availableRules) {
+      for (const format of rule.ballot_formats ?? []) {
+        if (format === "approval" || format === "ranking" || format === "score") {
+          formats.add(format);
+        }
+      }
+    }
+
+    return Array.from(formats);
+  }, [availableRules]);
+
+  const rulesForSelectedBallotFormat = useMemo(
+    () => availableRules.filter((rule) => supportsBallotFormat(rule, ballotFormat)),
+    [availableRules, ballotFormat]
+  );
+
   const [rulesLoading, setRulesLoading] = useState(false);
 
   useEffect(() => {
@@ -167,17 +187,21 @@ export function ExperimentCreatePage() {
   }, [token, setToken, tallyRule]);
 
   useEffect(() => {
-    if (!currentRule) return;
-
-    if (!supportsBallotFormat(currentRule, ballotFormat)) {
-      const nextFormat = currentRule.ballot_formats.find(
-        (f): f is "approval" | "ranking" | "score" =>
-          f === "approval" || f === "ranking" || f === "score"
-      );
-      if (nextFormat) {
-        setBallotFormat(nextFormat);
-      }
+    if (allowedBallotFormats.length === 0) return;
+    if (!allowedBallotFormats.includes(ballotFormat)) {
+      setBallotFormat(allowedBallotFormats[0]);
     }
+  }, [allowedBallotFormats, ballotFormat]);
+
+  useEffect(() => {
+    if (rulesForSelectedBallotFormat.length === 0) return;
+    if (!rulesForSelectedBallotFormat.some((rule) => rule.id === tallyRule)) {
+      setTallyRule(rulesForSelectedBallotFormat[0].id);
+    }
+  }, [rulesForSelectedBallotFormat, tallyRule]);
+
+  useEffect(() => {
+    if (!currentRule) return;
 
     if (!currentRule.supports_ranking_top_k && ballotFormat === "ranking") {
       setRankingTopK(1);
@@ -288,6 +312,9 @@ export function ExperimentCreatePage() {
       }
       if (!type.trim()) return "Выберите тип эксперимента";
       if (!tallyRule.trim()) return "Выберите правило подсчёта";
+      if (rulesForSelectedBallotFormat.length === 0) {
+        return "Для выбранного формата бюллетеня нет доступных правил для экспериментальных запусков";
+      }
       if (!currentRule) return "Выберите допустимое правило подсчёта";
       if (!currentRule.supports_experiment_runs) {
         return "Выбранное правило недоступно для экспериментальных запусков";
@@ -489,7 +516,11 @@ export function ExperimentCreatePage() {
                   onChange={(e) => setBallotFormat(e.target.value as "approval" | "ranking" | "score")}
                 >
                   {BALLOT_FORMATS.map((item) => (
-                    <option key={item.value} value={item.value} disabled={!supportsBallotFormat(currentRule, item.value)}>
+                    <option
+                      key={item.value}
+                      value={item.value}
+                      disabled={!allowedBallotFormats.includes(item.value)}
+                    >
                       {item.label}
                     </option>
                   ))}
@@ -503,7 +534,7 @@ export function ExperimentCreatePage() {
                   value={tallyRule}
                   onChange={(e) => setTallyRule(e.target.value)}
                 >
-                  {availableRules.map((rule) => (
+                  {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
                       {rule.label}
                     </option>

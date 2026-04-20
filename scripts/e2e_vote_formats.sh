@@ -2,9 +2,11 @@
 set -euo pipefail
 
 BACKEND_BASE="${BACKEND_BASE:-http://127.0.0.1:3001}"
-FRONTEND_BASE="${FRONTEND_BASE:-http://127.0.0.1:8080}"
+FRONTEND_BASE="${FRONTEND_BASE:-https://127.0.0.1:8080}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TLS_CA_CERT="${TLS_CA_CERT:-$ROOT_DIR/scripts/certs/out/ca.pem}"
 API_BASE="${API_BASE:-}"
-TIMEOUT_SEC="${TIMEOUT_SEC:-60}"
+TIMEOUT_SEC="${TIMEOUT_SEC:-90}"
 
 : "${BOOTSTRAP_ADMIN_EMAIL:?BOOTSTRAP_ADMIN_EMAIL is required}"
 : "${BOOTSTRAP_ADMIN_PASSWORD:?BOOTSTRAP_ADMIN_PASSWORD is required}"
@@ -27,7 +29,7 @@ do_curl() {
   local url="$1"; shift
   local tmp
   tmp="$(mktemp)"
-  HTTP_CODE="$(curl -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
+  HTTP_CODE="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" -X "$method" "$url" "$@" || true)"
   HTTP_BODY="$(cat "$tmp" || true)"
   rm -f "$tmp"
 }
@@ -51,7 +53,7 @@ detect_api_base() {
   local tmp
   tmp="$(mktemp)"
   local code
-  code="$(curl -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
+  code="$(curl --cacert "$TLS_CA_CERT" -4sS -o "$tmp" -w "%{http_code}" "$FRONTEND_BASE/api/v1/auth/me" || true)"
   local body
   body="$(cat "$tmp" || true)"
   rm -f "$tmp"
@@ -136,6 +138,32 @@ print("")
 ' "${1:-}"
 }
 
+response_error_code() {
+  python3 -c '
+import json
+import sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else ""
+
+try:
+    obj = json.loads(raw)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+err = obj.get("error")
+if not isinstance(err, dict):
+    print("")
+    raise SystemExit(0)
+
+code = err.get("code")
+if isinstance(code, str):
+    print(code)
+else:
+    print("")
+' "${1:-}"
+}
+
 rand_suffix() {
   python3 - <<'PY'
 import uuid
@@ -150,10 +178,62 @@ print(uuid.uuid4())
 PY
 }
 
+rfc3339_after_hours() {
+  local hours="$1"
+  python3 - "$hours" <<'PY'
+from datetime import datetime, timedelta, timezone
+import sys
+hours = int(sys.argv[1])
+print((datetime.now(timezone.utc) + timedelta(hours=hours)).replace(microsecond=0).isoformat().replace("+00:00", "Z"))
+PY
+}
+
+find_rule_for_format() {
+  local format="$1"
+
+  do_curl GET "$API_BASE/capabilities/tally-rules" -H "$ADMIN_AUTH"
+  assert_code 200
+
+  python3 - "$format" "$HTTP_BODY" <<'PY'
+import json
+import sys
+
+wanted = sys.argv[1]
+raw = sys.argv[2] if len(sys.argv) > 2 else ""
+
+try:
+    obj = json.loads(raw)
+except Exception:
+    print("")
+    raise SystemExit(0)
+
+items = obj.get("items") or []
+for item in items:
+    if not isinstance(item, dict):
+        continue
+    if not item.get("supports_election_tally"):
+        continue
+    formats = item.get("ballot_formats") or []
+    if wanted in formats:
+        rid = item.get("id") or ""
+        if isinstance(rid, str) and rid.strip():
+            print(rid.strip())
+            raise SystemExit(0)
+
+print("")
+PY
+}
+
 create_and_open_election() {
   local title="$1"
   local ballot_format="$2"
-  local extra_json="$3"
+  local tally_rule="$3"
+  local extra_json="$4"
+
+  local start_at
+  local end_at
+  start_at="$(rfc3339_after_hours 1)"
+  end_at="$(rfc3339_after_hours 2)"
 
   do_curl POST "$API_BASE/elections" \
     -H 'Content-Type: application/json' \
@@ -161,9 +241,9 @@ create_and_open_election() {
     -d "{
       \"title\":\"$title\",
       \"description\":\"vote formats e2e\",
-      \"start_at\":\"2026-03-20T10:00:00Z\",
-      \"end_at\":\"2026-03-21T10:00:00Z\",
-      \"tally_rule\":\"plurality\",
+      \"start_at\":\"$start_at\",
+      \"end_at\":\"$end_at\",
+      \"tally_rule\":\"$tally_rule\",
       \"ballot_format\":\"$ballot_format\",
       \"access_mode\":\"open\",
       \"show_aggregates\":true,
@@ -226,6 +306,68 @@ assert_my_ballot_ok() {
   fi
 }
 
+assert_results_hidden_before_publish() {
+  local election_id="$1"
+
+  do_curl GET "$API_BASE/elections/$election_id/results" -H "$VOTER_AUTH"
+  if [[ "$HTTP_CODE" != "403" ]]; then
+    echo "expected results to be hidden before publish, got HTTP $HTTP_CODE" >&2
+    echo "$HTTP_BODY" >&2
+    exit 1
+  fi
+
+  local code
+  code="$(response_error_code "$HTTP_BODY")"
+  if [[ "$code" != "not_published" ]]; then
+    echo "expected error.code=not_published, got $code" >&2
+    echo "$HTTP_BODY" >&2
+    exit 1
+  fi
+}
+
+wait_publish_and_assert_results() {
+  local election_id="$1"
+
+  local deadline
+  deadline=$(( $(date +%s) + TIMEOUT_SEC ))
+
+  while true; do
+    do_curl POST "$API_BASE/elections/$election_id/actions/publish" -H "$ADMIN_AUTH"
+    if [[ "$HTTP_CODE" == "200" ]]; then
+      break
+    fi
+
+    if (( $(date +%s) >= deadline )); then
+      echo "publish did not become available in time for election $election_id" >&2
+      echo "$HTTP_BODY" >&2
+      exit 1
+    fi
+
+    sleep 2
+  done
+
+  do_curl GET "$API_BASE/elections/$election_id/results" -H "$VOTER_AUTH"
+  assert_code 200
+
+  local winner0
+  winner0="$(json_get winners.0)"
+  if [[ -z "$winner0" ]]; then
+    echo "missing winners in published results" >&2
+    echo "$HTTP_BODY" >&2
+    exit 1
+  fi
+}
+
+close_publish_and_assert_results() {
+  local election_id="$1"
+
+  do_curl POST "$API_BASE/elections/$election_id/actions/close" -H "$ADMIN_AUTH"
+  assert_code 200
+
+  assert_results_hidden_before_publish "$election_id"
+  wait_publish_and_assert_results "$election_id"
+}
+
 echo "== detect api base =="
 detect_api_base
 
@@ -241,7 +383,29 @@ if [[ -z "$ADMIN_TOKEN" ]]; then
   echo "$HTTP_BODY" >&2
   exit 1
 fi
+
 ADMIN_AUTH="Authorization: Bearer $ADMIN_TOKEN"
+
+APPROVAL_RULE="$(find_rule_for_format approval)"
+RANKING_RULE="$(find_rule_for_format ranking)"
+SCORE_RULE="$(find_rule_for_format score)"
+
+if [[ -z "$APPROVAL_RULE" ]]; then
+  echo "no election tally rule supports ballot_format=approval" >&2
+  exit 1
+fi
+if [[ -z "$RANKING_RULE" ]]; then
+  echo "no election tally rule supports ballot_format=ranking" >&2
+  exit 1
+fi
+if [[ -z "$SCORE_RULE" ]]; then
+  echo "no election tally rule supports ballot_format=score" >&2
+  exit 1
+fi
+
+echo "approval_rule=$APPROVAL_RULE"
+echo "ranking_rule=$RANKING_RULE"
+echo "score_rule=$SCORE_RULE"
 
 echo "== register voter =="
 SFX="$(rand_suffix)"
@@ -262,7 +426,7 @@ fi
 VOTER_AUTH="Authorization: Bearer $VOTER_TOKEN"
 
 echo "== approval election =="
-APPROVAL_ELECTION_ID="$(create_and_open_election "E2E approval $SFX" "approval" "\"approval_max_choices\":2,")"
+APPROVAL_ELECTION_ID="$(create_and_open_election "E2E approval $SFX" "approval" "$APPROVAL_RULE" "\"approval_max_choices\":2,")"
 get_candidate_ids "$APPROVAL_ELECTION_ID"
 
 do_curl POST "$API_BASE/elections/$APPROVAL_ELECTION_ID/ballots/submit" \
@@ -273,9 +437,10 @@ do_curl POST "$API_BASE/elections/$APPROVAL_ELECTION_ID/ballots/submit" \
 assert_code 200
 
 assert_my_ballot_ok "$APPROVAL_ELECTION_ID"
+close_publish_and_assert_results "$APPROVAL_ELECTION_ID"
 
 echo "== ranking election =="
-RANKING_ELECTION_ID="$(create_and_open_election "E2E ranking $SFX" "ranking" "\"ranking_top_k\":3,")"
+RANKING_ELECTION_ID="$(create_and_open_election "E2E ranking $SFX" "ranking" "$RANKING_RULE" "\"ranking_top_k\":3,")"
 get_candidate_ids "$RANKING_ELECTION_ID"
 
 do_curl POST "$API_BASE/elections/$RANKING_ELECTION_ID/ballots/submit" \
@@ -286,9 +451,10 @@ do_curl POST "$API_BASE/elections/$RANKING_ELECTION_ID/ballots/submit" \
 assert_code 200
 
 assert_my_ballot_ok "$RANKING_ELECTION_ID"
+close_publish_and_assert_results "$RANKING_ELECTION_ID"
 
 echo "== score election =="
-SCORE_ELECTION_ID="$(create_and_open_election "E2E score $SFX" "score" "\"score_min\":0,\"score_max\":5,\"score_step\":1,\"score_allow_skip\":false,")"
+SCORE_ELECTION_ID="$(create_and_open_election "E2E score $SFX" "score" "$SCORE_RULE" "\"score_min\":0,\"score_max\":5,\"score_step\":1,\"score_allow_skip\":false,")"
 get_candidate_ids "$SCORE_ELECTION_ID"
 
 do_curl POST "$API_BASE/elections/$SCORE_ELECTION_ID/ballots/submit" \
@@ -299,6 +465,7 @@ do_curl POST "$API_BASE/elections/$SCORE_ELECTION_ID/ballots/submit" \
 assert_code 200
 
 assert_my_ballot_ok "$SCORE_ELECTION_ID"
+close_publish_and_assert_results "$SCORE_ELECTION_ID"
 
 echo
-echo "E2E vote formats: PASS"
+echo "E2E vote formats with publish/results: PASS"

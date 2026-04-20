@@ -1,0 +1,138 @@
+services:
+  pg-primary:
+    image: postgres:18.1
+    container_name: pg-primary
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=secure-voting
+      - PGDATA=/var/lib/postgresql/data
+    networks:
+      - pg_replication_network
+    volumes:
+      - pg-primary-data:/var/lib/postgresql
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - hot_standby=on
+      - -c
+      - listen_addresses=*
+      - -c
+      - ssl=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  pg-primary-init:
+    image: postgres:18.1
+    container_name: pg-primary-init
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+      - REPLICATION_USER=replicator
+      - REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+      - PGDATA=/var/lib/postgresql/data
+    networks:
+      - pg_replication_network
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          until pg_isready -h pg-primary -U admin -d secure-voting >/dev/null 2>&1; do
+            sleep 2
+          done
+          psql -h pg-primary -U admin -d secure-voting -v ON_ERROR_STOP=1 <<SQL
+          DO \$\$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$${REPLICATION_USER}') THEN
+              EXECUTE format('CREATE ROLE %I WITH REPLICATION LOGIN PASSWORD %L', '$${REPLICATION_USER}', '$${REPLICATION_PASSWORD}');
+            ELSE
+              EXECUTE format('ALTER ROLE %I WITH REPLICATION LOGIN PASSWORD %L', '$${REPLICATION_USER}', '$${REPLICATION_PASSWORD}');
+            END IF;
+          END
+          \$\$;
+          SQL
+          if ! grep -qE "^host[[:space:]]+replication[[:space:]]+$${REPLICATION_USER}[[:space:]]+0\\.0\\.0\\.0/0[[:space:]]+scram-sha-256$" /var/lib/postgresql/data/pg_hba.conf; then
+            printf '\nhost replication %s 0.0.0.0/0 scram-sha-256\nhost replication %s ::/0 scram-sha-256\n' \
+              "$${REPLICATION_USER}" "$${REPLICATION_USER}" >> /var/lib/postgresql/data/pg_hba.conf
+            psql -h pg-primary -U admin -d secure-voting -c "SELECT pg_reload_conf();"
+          fi
+    volumes:
+      - pg-primary-data:/var/lib/postgresql
+    restart: "no"
+
+  pg-replica:
+    image: postgres:18.1
+    container_name: pg-replica
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+      pg-primary-init:
+        condition: service_completed_successfully
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REPLICATION_USER=replicator
+      - REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+      - PGPASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+    networks:
+      - pg_replication_network
+    volumes:
+      - pg-replica-data:/var/lib/postgresql
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          mkdir -p /var/lib/postgresql/data
+          chown -R postgres:postgres /var/lib/postgresql
+          chmod 0700 /var/lib/postgresql/data
+
+          if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+            rm -rf /var/lib/postgresql/data/*
+            export PGPASSWORD="$${REPLICATION_PASSWORD}"
+            until pg_isready -h pg-primary -U "$${REPLICATION_USER}" -d postgres >/dev/null 2>&1; do
+              sleep 2
+            done
+            gosu postgres pg_basebackup \
+              -h pg-primary \
+              -U "$${REPLICATION_USER}" \
+              -D /var/lib/postgresql/data \
+              -Fp \
+              -Xs \
+              -P \
+              -R
+          fi
+
+          exec gosu postgres /usr/lib/postgresql/18/bin/postgres \
+            -D /var/lib/postgresql/data \
+            -c hot_standby=on \
+            -c listen_addresses='*' \
+            -c ssl=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+networks:
+  pg_replication_network:
+    driver: bridge
+
+volumes:
+  pg-primary-data:
+    driver: local
+  pg-replica-data:
+    driver: local

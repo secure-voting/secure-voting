@@ -31,6 +31,10 @@ type Config struct {
 	ResultsTopic string
 	GroupID      string
 	Brokers      []string
+
+	KafkaTLS           bool
+	KafkaTLSCA         string
+	KafkaTLSServerName string
 }
 
 func New(db *pgxpool.Pool, mdb *mongo.Database, cfg Config) *Worker {

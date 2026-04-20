@@ -69,7 +69,7 @@ func newIntegrationEnv(t *testing.T) *integrationEnv {
 		t.Fatalf("postgres: %v", err)
 	}
 
-	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword)
+	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS, cfg.RedisTLSCA)
 	if err != nil {
 		pg.Close()
 		t.Fatalf("redis: %v", err)
@@ -1800,5 +1800,41 @@ func TestIntegration_AdminSettingsForbiddenForNonAdmin(t *testing.T) {
 	)
 	if status != http.StatusForbidden {
 		t.Fatalf("non-admin settings update should be forbidden; status=%d body=%s", status, string(raw))
+	}
+}
+
+func TestIntegration_CapabilitiesTallyRules_ComputeUnavailable(t *testing.T) {
+	env := newIntegrationEnv(t)
+
+	email := uniqueEmail("capabilities_user")
+	password := "StrongPass123!"
+	upsertUser(t, env.pg, email, password, "voter")
+	token := loginAndGetToken(t, env, email, password)
+
+	status, data, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodGet,
+		env.server.URL+"/api/v1/capabilities/tally-rules",
+		token,
+		nil,
+	)
+	if status != http.StatusInternalServerError {
+		t.Fatalf("capabilities tally-rules expected 500 when compute is disabled; status=%d body=%s", status, string(raw))
+	}
+
+	code := responseErrorCode(t, data)
+	if code != "internal_error" {
+		t.Fatalf("expected internal_error, got %q body=%s", code, string(raw))
+	}
+
+	errObj, ok := data["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing error object body=%s", string(raw))
+	}
+
+	msg, _ := errObj["message"].(string)
+	if msg != "list tally rules failed" {
+		t.Fatalf("expected message %q, got %q body=%s", "list tally rules failed", msg, string(raw))
 	}
 }

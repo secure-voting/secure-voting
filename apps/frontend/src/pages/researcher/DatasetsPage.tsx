@@ -551,6 +551,9 @@ export function DatasetsPage() {
             <option value="ranking">ranking</option>
             <option value="score">score</option>
           </select>
+          <div style={{ marginTop: 8, ...styles.muted }}>
+            Для JSON формат задается вручную. Для PrefLib/Pabulib он может быть определен содержимым файла.
+          </div>
 
           <div style={{ height: 10 }} />
 
@@ -558,8 +561,25 @@ export function DatasetsPage() {
           <input
             style={styles.input}
             type="file"
-            onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            accept=".json,.soc,.soi,.pb"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              setImportFile(file);
+
+              const name = file?.name?.toLowerCase() ?? "";
+              if (name.endsWith(".soc") || name.endsWith(".soi")) {
+                setImportFormat("ranking");
+              }
+            }}
           />
+
+          <div style={{ marginTop: 8, ...styles.muted }}>
+            Поддерживаются JSON, PrefLib (.soc, .soi), Pabulib (.pb)
+          </div>
+
+          <div style={{ marginTop: 6, ...styles.muted }}>
+            Для файлов .soc/.soi формат будет ranking. Для .pb формат определяется сервером по vote_type.
+          </div>
 
           {importFile ? (
             <div style={{ marginTop: 8, ...styles.muted }}>

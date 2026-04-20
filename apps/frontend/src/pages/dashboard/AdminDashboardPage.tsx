@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { AuditLogItem, ElectionSummary, JobItem } from "../../shared/api/types";
+import type { AuditLogItem, ElectionSummary, JobItem, SystemStatusResponse } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -21,6 +21,7 @@ export function AdminDashboardPage() {
   const [elections, setElections] = useState<ElectionSummary[]>([]);
   const [jobs, setJobs] = useState<JobItem[]>([]);
   const [audit, setAudit] = useState<AuditLogItem[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatusResponse | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -38,15 +39,17 @@ export function AdminDashboardPage() {
     setErr(null);
 
     try {
-      const [electionList, jobsList, auditList] = await Promise.all([
+      const [electionList, jobsList, auditList, status] = await Promise.all([
         api.elections.list(token, ac.signal),
         api.jobs.list(token, { limit: 5, offset: 0 }, ac.signal),
         api.audit.list(token, { limit: 5, offset: 0 }, ac.signal),
+        api.system.status(token, ac.signal),
       ]);
 
       setElections(electionList);
       setJobs(jobsList);
       setAudit(auditList);
+      setSystemStatus(status);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (e?.status === 401) {
@@ -57,6 +60,7 @@ export function AdminDashboardPage() {
       setElections([]);
       setJobs([]);
       setAudit([]);
+      setSystemStatus(null);
     } finally {
       setLoading(false);
     }
@@ -87,6 +91,9 @@ export function AdminDashboardPage() {
           <Badge text={`elections: ${elections.length}`} />
           <Badge text={`jobs: ${jobs.length}`} />
           <Badge text={`audit: ${audit.length}`} />
+          <Badge text={`backend: ${systemStatus?.backend?.status ?? "unknown"}`} />
+          <Badge text={`compute: ${systemStatus?.compute?.status ?? "unknown"}`} />
+          <Badge text={`worker: ${systemStatus?.worker?.status ?? "unknown"}`} />
           <button style={styles.btn} onClick={load} disabled={loading}>
             Обновить
           </button>
@@ -153,6 +160,45 @@ export function AdminDashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>Состояние компонентов</h3>
+        {!systemStatus ? (
+          <div style={styles.muted}>Нет данных</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {[
+              { name: "backend", item: systemStatus.backend },
+              { name: "compute", item: systemStatus.compute },
+              { name: "worker", item: systemStatus.worker },
+            ].map(({ name, item }) => (
+              <div key={name} style={{ ...styles.card, padding: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <strong>{name}</strong>
+                  <Badge text={String(item.status)} />
+                </div>
+                <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
+                  ok: {String(item.ok)}
+                </div>
+                {item.details ? (
+                  <pre
+                    style={{
+                      marginTop: 8,
+                      padding: 8,
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                      overflowX: "auto",
+                      fontSize: 12,
+                    }}
+                  >
+                    {JSON.stringify(item.details, null, 2)}
+                  </pre>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={styles.grid2}>

@@ -26,5 +26,5 @@ RUN if [ -d /app/dist ]; then mv /app/dist /app/out; \
 FROM nginx:1.27-alpine
 COPY --from=builder /app/out/ /usr/share/nginx/html/
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
+EXPOSE 80 443
 CMD ["nginx", "-g", "daemon off;"]

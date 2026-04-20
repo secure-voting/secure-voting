@@ -3,14 +3,16 @@ services:
     build: apps/frontend
     container_name: ts-frontend
     ports:
-      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8080:443"
     networks:
       - app_network
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     restart: unless-stopped
     depends_on:
       - backend
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:80 >/dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O - https://127.0.0.1:443/ >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,18 +30,22 @@ services:
       - db_network
       - kafka_network
       - redis_network
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     environment:
       - HTTP_ADDR=:3001
       - TOKEN_TTL=720h
       - MAX_UPLOAD_BYTES=10485760
 
-      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=verify-full&sslrootcert=/certs/ca.pem
 
-      - REDIS_ADDR=cache:6379
+      - REDIS_ADDR=cache:6380
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_TLS=true
+      - REDIS_TLS_CA=/certs/ca.pem
       - IDEMPOTENCY_TTL=24h
 
-      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
 
       - KAFKA_BROKERS=kafka:29092
@@ -52,6 +58,11 @@ services:
       - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
       - BOOTSTRAP_RESEARCHER_EMAIL=${BOOTSTRAP_RESEARCHER_EMAIL}
       - BOOTSTRAP_RESEARCHER_PASSWORD=${BOOTSTRAP_RESEARCHER_PASSWORD}
+      
+      - COMPUTE_GRPC_ADDR=rust-compute:50051
+      - COMPUTE_TLS=true
+      - COMPUTE_TLS_CA=/certs/ca.pem
+      - COMPUTE_TLS_SERVER_NAME=rust-compute
 
     restart: unless-stopped
     depends_on:
@@ -81,21 +92,30 @@ services:
       - db_network
       - rpc_network
       - kafka_network
+      - redis_network
     environment:
-      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
-      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
       - WORKER_POLL_INTERVAL=1s
       - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
+      - REDIS_ADDR=cache:6380
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - REDIS_TLS=true
+      - REDIS_TLS_CA=/certs/ca.pem
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     depends_on:
       db:
         condition: service_healthy
       mongo:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      cache:
         condition: service_healthy
     restart: unless-stopped
     entrypoint: ["/app/worker"]
@@ -114,9 +134,27 @@ services:
     volumes:
       - db-data:/var/lib/postgresql
       - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          export PATH="/usr/lib/postgresql/18/bin:$PATH"
+          mkdir -p /tmp/pg-certs
+          cp /certs/ca.pem /tmp/pg-certs/root.crt
+          cp /certs/db.pem /tmp/pg-certs/server.crt
+          cp /certs/db.key /tmp/pg-certs/server.key
+          chown postgres:postgres /tmp/pg-certs/root.crt /tmp/pg-certs/server.crt /tmp/pg-certs/server.key
+          chmod 644 /tmp/pg-certs/root.crt /tmp/pg-certs/server.crt
+          chmod 600 /tmp/pg-certs/server.key
+          exec /usr/local/bin/docker-entrypoint.sh postgres \
+            -c ssl=on \
+            -c ssl_cert_file=/tmp/pg-certs/server.crt \
+            -c ssl_key_file=/tmp/pg-certs/server.key \
+            -c ssl_ca_file=/tmp/pg-certs/root.crt
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d secure-voting"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U admin -d secure-voting"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -155,12 +193,22 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: >
-      sh -c 'redis-server --save 20 1 --loglevel warning --requirepass "$$REDIS_PASSWORD"'
+      sh -c 'redis-server
+      --save 20 1
+      --loglevel warning
+      --requirepass "$$REDIS_PASSWORD"
+      --port 0
+      --tls-port 6380
+      --tls-cert-file /certs/redis.pem
+      --tls-key-file /certs/redis.key
+      --tls-ca-cert-file /certs/ca.pem
+      --tls-auth-clients no'
     volumes:
       - redis-data:/data
+      - ./scripts/certs/out:/certs:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      test: ["CMD-SHELL", "redis-cli --tls --cacert /certs/ca.pem -h 127.0.0.1 -p 6380 -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -192,23 +240,40 @@ services:
       - db_network
     volumes:
       - mongo-data:/data/db
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          mkdir -p /tmp/mongo-certs
+          cp /certs/ca.pem /tmp/mongo-certs/ca.pem
+          cp /certs/mongo.server.pem /tmp/mongo-certs/mongo.server.pem
+          chmod 644 /tmp/mongo-certs/ca.pem /tmp/mongo-certs/mongo.server.pem
+          exec /usr/local/bin/docker-entrypoint.sh mongod \
+            --bind_ip_all \
+            --tlsMode requireTLS \
+            --tlsCAFile /tmp/mongo-certs/ca.pem \
+            --tlsCertificateKeyFile /tmp/mongo-certs/mongo.server.pem \
+            --tlsAllowConnectionsWithoutCertificates
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --username root --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand(\"ping\")' > /dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --tls --tlsCAFile /tmp/mongo-certs/ca.pem --tlsAllowInvalidHostnames --host localhost --port 27017 --username root --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1"
+        ]
       interval: 5s
-      timeout: 5s
-      retries: 10
-    profiles:
-      - db
-      - prod
+      timeout: 10s
+      retries: 20
+      start_period: 30s
 
   mongodb-webui:
     image: mongo-express:1.0.2-20-alpine3.19
     container_name: mongodb-webui
     environment:
-      - ME_CONFIG_MONGODB_SERVER=mongo
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=root
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - ME_CONFIG_MONGODB_URL=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     ports:
       - "127.0.0.1:8082:8081"
     networks:
@@ -232,11 +297,6 @@ services:
       - GRPC_ADDR=0.0.0.0:50051
       - TLS_CERT=/scripts/certs/out/compute.pem
       - TLS_KEY=/scripts/certs/out/compute.key
-
-      - KAFKA_BROKERS=kafka:29092
-      - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
-      - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
-      - KAFKA_GROUP_ID=secure-voting-compute
       
     volumes:
       - ./scripts/certs/out:/scripts/certs/out:ro
@@ -258,13 +318,13 @@ services:
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute-runner
-      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin
+      - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
       - COMPUTE_GRPC_ADDR=rust-compute:50051
       - COMPUTE_TLS=true
       - COMPUTE_TLS_CA=/certs/ca.pem
       - COMPUTE_TLS_SERVER_NAME=rust-compute
-      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=disable
+      - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=verify-full&sslrootcert=/certs/ca.pem
     volumes:
       - ./scripts/certs/out:/certs:ro
     depends_on:
@@ -335,6 +395,8 @@ services:
     container_name: kafka-init
     networks:
       - kafka_network
+    volumes:
+      - ./scripts/certs/out:/certs:ro
     depends_on:
       kafka:
         condition: service_healthy
@@ -343,13 +405,19 @@ services:
       - -lc
       - |
           set -eu
-          until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
+          cat > /tmp/client.properties <<'EOF'
+          security.protocol=SSL
+          ssl.truststore.type=PKCS12
+          ssl.truststore.location=/certs/kafka.truststore.p12
+          ssl.truststore.password=changeit
+          EOF
+          until kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --list >/dev/null 2>&1; do
             echo "waiting for kafka topics api..."
             sleep 2
           done
-          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --list | sort
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --list | sort
           echo "kafka-init done"
     restart: "no"
     profiles:
