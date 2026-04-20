@@ -151,18 +151,30 @@ impl Compute for ComputeService {
         }
 
         #[allow(clippy::expect_used)]
-        match self
-            .registry
-            .read()
-            .expect("RwLock is poisoned")
-            .execute(ballots, header.tally_rule.as_str())
-        {
+        match self.registry.read().expect("RwLock is poisoned").execute(
+            ballots,
+            header.tally_rule.as_str(),
+            &header.ballot_format,
+        ) {
             Ok(result) => Ok(Response::new(create_winner_response(result))),
             Err(AlgorithmError::NoSuchAlgorithm) => Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "No such algorithm",
             ))),
             Err(AlgorithmError::InvalidArgument(e)) => Ok(Response::new(create_error_type(
+                tonic::Code::InvalidArgument,
+                e,
+            ))),
+            Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
+                Ok(Response::new(create_error_type(
+                    tonic::Code::InvalidArgument,
+                    format!(
+                        "Algorithm {} does not support ballot type {}",
+                        algorithm, ballot
+                    ),
+                )))
+            }
+            Err(AlgorithmError::InvalidBallotType(e)) => Ok(Response::new(create_error_type(
                 tonic::Code::InvalidArgument,
                 e,
             ))),
@@ -179,14 +191,15 @@ impl Compute for ComputeService {
                 .read()
                 .expect("RwLock is poisoned")
                 .algorithms()
-                .iter()
                 .map(|algo| TallyRuleInfo {
                     id: algo.alias().to_lowercase().replace(" ", "-"),
                     label: algo.alias().to_owned(),
-                    ballot_formats: algo
-                        .ballot_formats()
-                        .iter()
-                        .map(ToString::to_string)
+                    ballot_formats: self
+                        .registry
+                        .read()
+                        .expect("RwLock is poisoned")
+                        .supported_ballots(algo.alias())
+                        .map(|x| x.to_string())
                         .collect(),
                     supports_election_tally: algo.supports_election_tally(),
                     supports_experiment_runs: algo.supports_experiment_runs(),
