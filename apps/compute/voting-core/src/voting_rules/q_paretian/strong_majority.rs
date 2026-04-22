@@ -7,9 +7,10 @@ use rayon::prelude::*;
 
 use crate::{
     models::{profile::Profile, ranking::RankingBallot},
+    prelude::CandidateId,
     tie_breaker::RuleOutcome,
     voting_rules::{
-        VotingRuleExec,
+        Final, Kind, Metrics, Protocol, Step, Summary, VotingRuleExec,
         q_paretian::{QParetianError, build_pos, t_i_q_intersection},
     },
 };
@@ -23,7 +24,10 @@ pub struct SimpleMajorityRule<const LIMIT: usize>;
 impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LIMIT> {
     type Error = QParetianError;
 
-    fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         let n = profile.n_voters();
         let m = profile.n_candidates();
         let r = n / 2 + 1;
@@ -53,7 +57,42 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
             result.sort_unstable();
             result.dedup();
             if !result.is_empty() {
-                return Ok(RuleOutcome::from(result));
+                let winner_count = result.len();
+                let winners: Vec<CandidateId> = result
+                    .iter()
+                    .map(|&i| profile.active_candidates()[i])
+                    .collect();
+                return Ok((
+                    RuleOutcome::from(winners.clone()),
+                    Metrics::builder()
+                        .summary(
+                            Summary::builder()
+                                .total_ballots(n)
+                                .valid_ballots(n)
+                                .invalid_ballots(0)
+                                .candidates_count(m)
+                                .winner_count(winner_count)
+                                .committee_size(0)
+                                .rounds_count(1)
+                                .build(),
+                        )
+                        .build(),
+                    Protocol::builder()
+                        .kind(Kind::SingleStep)
+                        .steps(vec![
+                            Step::builder()
+                                .step(1)
+                                .title("Round 1".to_owned())
+                                .action("declare_winner".to_owned())
+                                .build(),
+                        ])
+                        .r#final(
+                            Final::builder()
+                                .winner_ids(winners.iter().map(ToString::to_string).collect())
+                                .build(),
+                        )
+                        .build(),
+                ));
             }
         }
         unreachable!("Q being m will always produce at least 1 candidate")
