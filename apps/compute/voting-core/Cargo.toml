@@ -19,6 +19,7 @@ version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.100"
+bon = "3.9.1"
 itertools = "0.14.0"
 rayon = "1.11.0"
 serde = { version = "1.0.228", optional = true, features = ["serde_derive"] }
