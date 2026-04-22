@@ -13,10 +13,10 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct MajorityStop;
 
-impl EliminationStopCondition<Vec<usize>, RankingBallot> for MajorityStop {
+impl EliminationStopCondition<usize, RankingBallot> for MajorityStop {
     fn should_stop(
         &self,
-        scores: &Score<Vec<usize>>,
+        scores: &Score<usize>,
         _: &RuleOutcome,
         profile: &Profile<RankingBallot>,
     ) -> bool {

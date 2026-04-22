@@ -4,7 +4,11 @@ use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{
+    prelude::Profile,
+    tie_breaker::RuleOutcome,
+    voting_rules::{Metrics, Protocol, VotingRuleExec},
+};
 
 /// A fallback adaptor.
 ///
@@ -57,13 +61,16 @@ where
     type Error = FallbackError<R1::Error, R2::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         match self.primary.execute(profile) {
-            Ok(RuleOutcome::UniqueWinner(winner)) => {
+            Ok(outcome @ (RuleOutcome::UniqueWinner(_), _, _)) => {
                 tracing::debug!("Primary rule returned a unique winner");
-                Ok(RuleOutcome::UniqueWinner(winner))
+                Ok(outcome)
             }
-            Ok(RuleOutcome::MultipleWinners(_)) => {
+            Ok((RuleOutcome::MultipleWinners(_), _, _)) => {
                 tracing::debug!("Primary rule can't decide winner, running fallback");
                 self.fallback
                     .execute(profile)
@@ -111,7 +118,7 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = &'static str;
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }

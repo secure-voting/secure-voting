@@ -5,7 +5,11 @@ use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{models::profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{
+    models::profile::Profile,
+    tie_breaker::RuleOutcome,
+    voting_rules::{Metrics, Protocol, VotingRuleExec},
+};
 
 /// Require unique adaptor.
 ///
@@ -48,13 +52,16 @@ impl<R: VotingRuleExec<Ballot>, Ballot> VotingRuleExec<Ballot> for RequireUnique
     type Error = RequireUniqueError<R::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         match self.rule.execute(profile)? {
-            outcome @ RuleOutcome::UniqueWinner(_) => {
+            outcome @ (RuleOutcome::UniqueWinner(_), _, _) => {
                 tracing::debug!("Rule returned a unique winner");
                 Ok(outcome)
             }
-            RuleOutcome::MultipleWinners(_) => {
+            (RuleOutcome::MultipleWinners(_), _, _) => {
                 tracing::error!("Multiple winners detected, returning error");
                 Err(RequireUniqueError::NotUnique)
             }

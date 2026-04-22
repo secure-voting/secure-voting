@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::models::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
-use crate::voting_rules::VotingRuleExec;
+use crate::voting_rules::{Metrics, Protocol, VotingRuleExec};
 
 /// `AcceptIf` adaptor.
 ///
@@ -38,11 +38,14 @@ where
     type Error = V::Error;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         let outcome = self.voting_rule.execute(profile)?;
         tracing::debug!(?outcome, "Calculated outcome");
 
-        if (self.predicate)(&outcome) {
+        if (self.predicate)(&outcome.0) {
             tracing::debug!("Predicate is true, accepting outcome");
             Ok(outcome)
         } else {

@@ -16,7 +16,7 @@ use crate::{
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
-        VotingRuleExec,
+        Metrics, Protocol, VotingRuleExec,
         elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
     },
 };
@@ -87,11 +87,15 @@ where
     D: Decider,
     T: TieBreaker<RankingBallot>,
     Stop: EliminationStopCondition<S::Output, RankingBallot>,
+    <D as Decider>::Input: PartialOrd + Ord + Clone + Into<f64>,
 {
     type Error = EliminationRuleError<S::Error, D::Error, T::Error, CandidateRemovalError>;
 
     #[instrument(skip(self, profile), ret)]
-    fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         let mut current_profile = profile.clone();
 
         loop {

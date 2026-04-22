@@ -9,7 +9,7 @@ use crate::{
 pub struct BelowAverageElimination;
 
 impl EliminationCriterion for BelowAverageElimination {
-    type Score = Vec<usize>;
+    type Score = usize;
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         let score_len = scores.score().len();

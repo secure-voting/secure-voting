@@ -18,57 +18,18 @@ pub struct ZipSelector<const I: usize, A, T1, T2> {
     _marker: PhantomData<(T1, T2)>,
 }
 
-impl<A: Decider<Input = T1>, T1: Clone, T2> Decider for ZipSelector<0, A, T1, T2> {
-    type Input = (T1, T2);
-
-    type Error = A::Error;
-
-    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        let new_score = scores.score().0.clone();
-        let new_candidates = scores.candidates();
-
-        self.action.decide(&Score::new(new_score, new_candidates))
-    }
-
-    fn new() -> Self {
-        Self {
-            action: A::new(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<A: Decider<Input = T2>, T1, T2: Clone> Decider for ZipSelector<1, A, T1, T2> {
-    type Input = (T1, T2);
-
-    type Error = A::Error;
-
-    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        let new_score = scores.score().1.clone();
-        let new_candidates = scores.candidates();
-
-        self.action.decide(&Score::new(new_score, new_candidates))
-    }
-
-    fn new() -> Self {
-        Self {
-            action: A::new(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<A: EliminationCriterion<Score = T1>, T1: Clone, T2> EliminationCriterion
+impl<A: Decider<Input = T1>, T1: Clone + PartialOrd + Ord, T2: Clone + PartialOrd + Ord> Decider
     for ZipSelector<0, A, T1, T2>
 {
-    type Score = (T1, T2);
+    type Input = (T1, T2);
 
-    fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
-        let new_score = scores.score().0.clone();
+    type Error = A::Error;
+
+    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
+        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
         let new_candidates = scores.candidates();
 
-        self.action
-            .eliminate(&Score::new(new_score, new_candidates))
+        self.action.decide(&Score::new(new_score, new_candidates))
     }
 
     fn new() -> Self {
@@ -79,13 +40,38 @@ impl<A: EliminationCriterion<Score = T1>, T1: Clone, T2> EliminationCriterion
     }
 }
 
-impl<A: EliminationCriterion<Score = T2>, T1, T2: Clone> EliminationCriterion
+impl<A: Decider<Input = T2>, T1: Clone + PartialOrd + Ord, T2: Clone + PartialOrd + Ord> Decider
     for ZipSelector<1, A, T1, T2>
+{
+    type Input = (T1, T2);
+
+    type Error = A::Error;
+
+    fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
+        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
+        let new_candidates = scores.candidates();
+
+        self.action.decide(&Score::new(new_score, new_candidates))
+    }
+
+    fn new() -> Self {
+        Self {
+            action: A::new(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<
+    A: EliminationCriterion<Score = T1>,
+    T1: Clone + PartialOrd + Ord,
+    T2: Clone + PartialOrd + Ord,
+> EliminationCriterion for ZipSelector<0, A, T1, T2>
 {
     type Score = (T1, T2);
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
-        let new_score = scores.score().1.clone();
+        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
         let new_candidates = scores.candidates();
 
         self.action
@@ -100,8 +86,36 @@ impl<A: EliminationCriterion<Score = T2>, T1, T2: Clone> EliminationCriterion
     }
 }
 
-impl<Ballot, A: EliminationStopCondition<T1, Ballot>, T1: Clone, T2>
-    EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<0, A, T1, T2>
+impl<
+    A: EliminationCriterion<Score = T2>,
+    T1: Clone + PartialOrd + Ord,
+    T2: Clone + PartialOrd + Ord,
+> EliminationCriterion for ZipSelector<1, A, T1, T2>
+{
+    type Score = (T1, T2);
+
+    fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
+        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
+        let new_candidates = scores.candidates();
+
+        self.action
+            .eliminate(&Score::new(new_score, new_candidates))
+    }
+
+    fn new() -> Self {
+        Self {
+            action: A::new(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<
+    Ballot,
+    A: EliminationStopCondition<T1, Ballot>,
+    T1: Clone + PartialOrd + Ord,
+    T2: Clone + PartialOrd + Ord,
+> EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<0, A, T1, T2>
 {
     fn should_stop(
         &self,
@@ -109,7 +123,7 @@ impl<Ballot, A: EliminationStopCondition<T1, Ballot>, T1: Clone, T2>
         outcome: &RuleOutcome,
         profile: &Profile<Ballot>,
     ) -> bool {
-        let new_score = scores.score().0.clone();
+        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
         let new_candidates = scores.candidates();
 
         self.action
@@ -124,8 +138,12 @@ impl<Ballot, A: EliminationStopCondition<T1, Ballot>, T1: Clone, T2>
     }
 }
 
-impl<Ballot, A: EliminationStopCondition<T2, Ballot>, T1, T2: Clone>
-    EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<1, A, T1, T2>
+impl<
+    Ballot,
+    A: EliminationStopCondition<T2, Ballot>,
+    T1: Clone + PartialOrd + Ord,
+    T2: Clone + PartialOrd + Ord,
+> EliminationStopCondition<(T1, T2), Ballot> for ZipSelector<1, A, T1, T2>
 {
     fn should_stop(
         &self,
@@ -133,7 +151,7 @@ impl<Ballot, A: EliminationStopCondition<T2, Ballot>, T1, T2: Clone>
         outcome: &RuleOutcome,
         profile: &Profile<Ballot>,
     ) -> bool {
-        let new_score = scores.score().1.clone();
+        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
         let new_candidates = scores.candidates();
 
         self.action
