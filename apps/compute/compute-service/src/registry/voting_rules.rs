@@ -1,9 +1,12 @@
-use voting_core::prelude::*;
+use voting_core::{
+    models::approval::ApprovalBallot, prelude::*, tie_breaker::fallthrough::FallthroughTieBreaker,
+    voting_rules::approval::ApprovalRuleWith,
+};
 
-use crate::registry::{Algorithm, AlgorithmError, Registry};
+use crate::registry::{Algorithm, AlgorithmError, BallotType, Registry};
 
 macro_rules! impl_algorithm {
-    ($ty:path, $alias:expr, $ballots: expr, $tally:literal, $runs:literal, $size:literal, $type:literal, $choices:literal, $top_k:literal, $range: literal) => {
+    ($ty:path, $alias:expr, $tally:literal, $runs:literal, $size:literal, $type:literal, $choices:literal, $top_k:literal, $range: literal) => {
         impl Algorithm for $ty {
             fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError> {
                 run_election(input, &Self::default())
@@ -12,9 +15,6 @@ macro_rules! impl_algorithm {
 
             fn alias(&self) -> &'static str {
                 $alias
-            }
-            fn ballot_formats(&self) -> &[&'static str] {
-                $ballots
             }
             fn supports_election_tally(&self) -> bool {
                 $tally
@@ -42,21 +42,11 @@ macro_rules! impl_algorithm {
 }
 
 impl_algorithm!(
-    BordaRule,
-    "Borda",
-    &["ranking"],
-    true,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false
+    BordaRule, "Borda", true, true, true, false, false, true, false
 );
 impl_algorithm!(
     PluralityRule,
     "Plurality",
-    &["ranking"],
     true,
     true,
     true,
@@ -68,7 +58,6 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<2>,
     "Approval-2",
-    &["ranking"],
     false,
     true,
     true,
@@ -80,7 +69,28 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<3>,
     "Approval-3",
-    &["ranking"],
+    false,
+    true,
+    true,
+    false,
+    true,
+    false,
+    false
+);
+impl_algorithm!(
+    ApprovalRuleWith::<2, FallthroughTieBreaker, ApprovalBallot>,
+    "Approval-2",
+    false,
+    true,
+    true,
+    false,
+    true,
+    false,
+    false
+);
+impl_algorithm!(
+    ApprovalRuleWith::<3, FallthroughTieBreaker, ApprovalBallot>,
+    "Approval-3",
     false,
     true,
     true,
@@ -91,8 +101,7 @@ impl_algorithm!(
 );
 impl_algorithm!(
     AntiPluralityRule,
-    "Inverse Pluarlity",
-    &["ranking"],
+    "Inverse Plurality",
     true,
     true,
     true,
@@ -102,21 +111,11 @@ impl_algorithm!(
     false
 );
 impl_algorithm!(
-    BlackRule,
-    "Black",
-    &["ranking"],
-    true,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false
+    BlackRule, "Black", true, true, true, false, false, true, false
 );
 impl_algorithm!(
     CopelandIRule,
     "Copeland I",
-    &["ranking"],
     true,
     true,
     true,
@@ -128,7 +127,6 @@ impl_algorithm!(
 impl_algorithm!(
     CopelandIIRule,
     "Copeland II",
-    &["ranking"],
     true,
     true,
     true,
@@ -140,7 +138,6 @@ impl_algorithm!(
 impl_algorithm!(
     CopelandIIIRule,
     "Copeland III",
-    &["ranking"],
     true,
     true,
     true,
@@ -152,7 +149,6 @@ impl_algorithm!(
 impl_algorithm!(
     SimpsonRule,
     "Simpson",
-    &["ranking"],
     true,
     true,
     true,
@@ -162,57 +158,18 @@ impl_algorithm!(
     false
 );
 impl_algorithm!(
-    MinmaxRule,
-    "Minmax",
-    &["ranking"],
-    true,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false
+    MinmaxRule, "Minmax", true, true, true, false, false, true, false
+);
+impl_algorithm!(HareRule, "Hare", true, true, true, true, false, true, false);
+impl_algorithm!(
+    NansonRule, "Nanson", true, true, true, false, false, true, false
 );
 impl_algorithm!(
-    HareRule,
-    "Hare",
-    &["ranking"],
-    true,
-    true,
-    true,
-    true,
-    false,
-    true,
-    false
-);
-impl_algorithm!(
-    NansonRule,
-    "Nanson",
-    &["ranking"],
-    true,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false
-);
-impl_algorithm!(
-    CoombsRule,
-    "Coombs",
-    &["ranking"],
-    true,
-    true,
-    true,
-    false,
-    false,
-    true,
-    false
+    CoombsRule, "Coombs", true, true, true, false, false, true, false
 );
 impl_algorithm!(
     InverseBordaRule,
     "Inverse Borda",
-    &["ranking"],
     true,
     true,
     true,
@@ -222,23 +179,35 @@ impl_algorithm!(
     false
 );
 
+/// Return a registry with all the voting-core
+/// algorithms included for appropriate ballot types.
+#[must_use]
 pub fn get_core_registry() -> Registry {
     let mut registry = Registry::new();
-    registry.add(BordaRule::default());
-    registry.add(PluralityRule::default());
-    registry.add(ApprovalRule::<2>::default());
-    registry.add(ApprovalRule::<3>::default());
-    registry.add(AntiPluralityRule::default());
-    registry.add(BlackRule::default());
-    registry.add(CopelandIRule::default());
-    registry.add(CopelandIIRule::default());
-    registry.add(CopelandIIIRule::default());
-    registry.add(SimpsonRule::default());
-    registry.add(MinmaxRule::default());
-    registry.add(HareRule::default());
-    registry.add(NansonRule::default());
-    registry.add(CoombsRule::default());
-    registry.add(InverseBordaRule::default());
+    registry.add(BordaRule::default(), BallotType::Ranking);
+    registry.add(PluralityRule::default(), BallotType::Ranking);
+    registry.add(ApprovalRule::<2>::default(), BallotType::Ranking);
+    registry.add(ApprovalRule::<3>::default(), BallotType::Ranking);
+    registry.add(AntiPluralityRule::default(), BallotType::Ranking);
+    registry.add(BlackRule::default(), BallotType::Ranking);
+    registry.add(CopelandIRule::default(), BallotType::Ranking);
+    registry.add(CopelandIIRule::default(), BallotType::Ranking);
+    registry.add(CopelandIIIRule::default(), BallotType::Ranking);
+    registry.add(SimpsonRule::default(), BallotType::Ranking);
+    registry.add(MinmaxRule::default(), BallotType::Ranking);
+    registry.add(HareRule::default(), BallotType::Ranking);
+    registry.add(NansonRule::default(), BallotType::Ranking);
+    registry.add(CoombsRule::default(), BallotType::Ranking);
+    registry.add(InverseBordaRule::default(), BallotType::Ranking);
+
+    registry.add(
+        ApprovalRuleWith::<2, FallthroughTieBreaker, ApprovalBallot>::default(),
+        BallotType::Approval,
+    );
+    registry.add(
+        ApprovalRuleWith::<3, FallthroughTieBreaker, ApprovalBallot>::default(),
+        BallotType::Approval,
+    );
 
     registry
 }

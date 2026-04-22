@@ -33,6 +33,9 @@ workspace=true
 [build-dependencies]
 tonic-prost-build = "0.14.2"
 
+[dev-dependencies]
+mockall = "0.14.0"
+
 [package.metadata.clippy]
 config-file = "../../clippy.toml"
 

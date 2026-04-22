@@ -5,22 +5,21 @@
 
 use std::{collections::HashMap, error::Error};
 
-use crate::{
-    models::ranking::RankingBallot,
-    prelude::{Profile, VotingRuleExec},
-};
+use crate::prelude::{Profile, VotingRuleExec};
 
 /// Execute an election with named candidates and a chosen rule.
 ///
 /// # Errors
 ///
 /// An error can occur if the supplied input data doesn't represent a correct voting profile.
-pub fn run_election<VRE: VotingRuleExec<RankingBallot>>(
+pub fn run_election<T, VRE: VotingRuleExec<T>>(
     input_data: Vec<Vec<impl Into<String>>>,
     rule: &VRE,
 ) -> anyhow::Result<Vec<String>>
 where
     VRE::Error: Error + Send + Sync + 'static,
+    Profile<T>: TryFrom<Vec<Vec<usize>>>,
+    <Profile<T> as TryFrom<Vec<Vec<usize>>>>::Error: Error + Send + Sync + 'static,
 {
     let mut cand_to_id: HashMap<String, usize> = HashMap::new();
     let mut id_to_cand = vec![];

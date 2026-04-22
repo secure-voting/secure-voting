@@ -15,7 +15,8 @@ use crate::models::{profile::Profile, ranking::RankingBallot};
 /// 2. It is a non-empty matrix
 /// 3. It is a square-matrix
 /// 4. The diagonal is zero-ed out
-/// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n, if i != j and n is the number of voters.
+/// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n,
+///    if i != j and n is the number of voters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PairwiseMatrix {

@@ -1,10 +1,14 @@
-use std::{
-    ops::{Deref, DerefMut},
-    os::fd::OwnedFd,
-    sync::{Arc, RwLock},
-};
+//! Main computing service.
+//!
+//! Responds to requests for calulcation and the available algorithm list.
+//! Uses the voting-core library to calculate election results.
 
-use prost_types::ListValue;
+#![warn(missing_docs)]
+#![warn(clippy::missing_docs_in_private_items)]
+#![forbid(unsafe_code)]
+
+use std::sync::{Arc, RwLock};
+
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
@@ -23,7 +27,11 @@ use crate::{
 #[allow(clippy::default_trait_access)]
 #[allow(clippy::doc_markdown)]
 #[allow(clippy::large_enum_variant)]
+#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::too_many_lines)]
+/// Generated proto-structs.
 pub mod securevoting {
+    #[allow(missing_docs)]
     pub mod compute {
         pub mod v1 {
             tonic::include_proto!("securevoting.compute.v1");
@@ -31,6 +39,9 @@ pub mod securevoting {
     }
 }
 
+/// Registry module.
+///
+/// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
 pub mod registry;
 
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
@@ -138,7 +149,10 @@ impl Compute for ComputeService {
                     Payload::Ranking(ranking_ballot) => {
                         ballots.push(ranking_ballot.ranking);
                     }
-                    _ => {
+                    Payload::Approval(approval_ballot) => {
+                        ballots.push(approval_ballot.approvals);
+                    }
+                    Payload::Score(_) => {
                         return Ok(Response::new(create_error_type(
                             tonic::Code::Unimplemented,
                             "not yet supported",
@@ -148,7 +162,7 @@ impl Compute for ComputeService {
             }
         }
 
-        if header.ballot_format != "ranking" {
+        if header.ballot_format != "ranking" || header.ballot_format != "approval" {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
@@ -156,24 +170,29 @@ impl Compute for ComputeService {
         }
 
         #[allow(clippy::expect_used)]
-        match self
-            .registry
-            .read()
-            .expect("RwLock is poisoned")
-            .execute(ballots, header.tally_rule.as_str())
-        {
+        match self.registry.read().expect("RwLock is poisoned").execute(
+            ballots,
+            header.tally_rule.as_str(),
+            &header.ballot_format,
+        ) {
             Ok(result) => Ok(Response::new(create_winner_response(result))),
             Err(AlgorithmError::NoSuchAlgorithm) => Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "No such algorithm",
             ))),
-            Err(AlgorithmError::InvalidArgument(e)) => Ok(Response::new(create_error_type(
-                tonic::Code::InvalidArgument,
-                e,
-            ))),
+            Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => Ok(
+                Response::new(create_error_type(tonic::Code::InvalidArgument, e)),
+            ),
+            Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
+                Ok(Response::new(create_error_type(
+                    tonic::Code::InvalidArgument,
+                    format!("Algorithm {algorithm} does not support ballot type {ballot}"),
+                )))
+            }
         }
     }
 
+    #[allow(clippy::expect_used)]
     async fn list_tally_rules(
         &self,
         _request: tonic::Request<()>,
@@ -184,14 +203,15 @@ impl Compute for ComputeService {
                 .read()
                 .expect("RwLock is poisoned")
                 .algorithms()
-                .iter()
                 .map(|algo| TallyRuleInfo {
-                    id: algo.alias().to_lowercase().replace(" ", "-"),
+                    id: algo.alias().to_lowercase().replace(' ', "-"),
                     label: algo.alias().to_owned(),
-                    ballot_formats: algo
-                        .ballot_formats()
-                        .iter()
-                        .map(ToString::to_string)
+                    ballot_formats: self
+                        .registry
+                        .read()
+                        .expect("RwLock is poisoned")
+                        .supported_ballots(algo.alias())
+                        .map(|x| x.to_string())
                         .collect(),
                     supports_election_tally: algo.supports_election_tally(),
                     supports_experiment_runs: algo.supports_experiment_runs(),
