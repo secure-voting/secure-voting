@@ -19,7 +19,7 @@ pub struct AntiPluralityScorer;
 
 impl Scorer<RankingBallot> for AntiPluralityScorer {
     type Error = Infallible;
-    type Output = Vec<usize>;
+    type Output = usize;
 
     fn compute_score(
         &self,

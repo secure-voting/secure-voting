@@ -22,7 +22,7 @@ use crate::{
 pub struct CopelandIIScorer;
 
 impl Scorer<RankingBallot> for CopelandIIScorer {
-    type Output = Vec<isize>;
+    type Output = isize;
 
     type Error = Infallible;
 

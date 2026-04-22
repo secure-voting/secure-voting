@@ -17,7 +17,7 @@ use crate::{
 pub struct SimpsonScorer;
 
 impl Scorer<RankingBallot> for SimpsonScorer {
-    type Output = Vec<isize>;
+    type Output = isize;
 
     type Error = Infallible;
 

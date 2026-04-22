@@ -33,7 +33,7 @@ impl Scorer<RankingBallot> for CondorcetScorer {
         let vote_counts = PairwiseMatrix::from(profile);
         // The construction process ensures the invariants of the matrix are upheld
         Ok(Score::new(
-            CondorcetMatrix::from(vote_counts),
+            vec![CondorcetMatrix::from(vote_counts)],
             profile.active_candidates(),
         ))
     }

@@ -17,7 +17,7 @@ use crate::{
 pub struct MinmaxScorer;
 
 impl Scorer<RankingBallot> for MinmaxScorer {
-    type Output = Vec<isize>;
+    type Output = isize;
     type Error = Infallible;
 
     fn compute_score(

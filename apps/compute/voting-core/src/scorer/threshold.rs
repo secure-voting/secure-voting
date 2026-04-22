@@ -22,7 +22,7 @@ pub struct ThresholdScorer<Ballot> {
 }
 
 impl Scorer<RankingBallot> for ThresholdScorer<RankingBallot> {
-    type Output = Vec<Vec<usize>>;
+    type Output = Vec<usize>;
 
     type Error = Infallible;
 

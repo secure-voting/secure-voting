@@ -21,7 +21,7 @@ pub struct BordaScorer<Ballot> {
 }
 
 impl Scorer<RankingBallot> for BordaScorer<RankingBallot> {
-    type Output = Vec<usize>;
+    type Output = usize;
 
     type Error = Infallible;
 

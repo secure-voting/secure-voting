@@ -25,7 +25,7 @@ pub struct ApprovalScorer<const Q: usize>;
 pub struct ApprovalScorerError;
 
 impl<const Q: usize> Scorer<RankingBallot> for ApprovalScorer<Q> {
-    type Output = Vec<usize>;
+    type Output = usize;
     type Error = ApprovalScorerError;
 
     fn compute_score(
@@ -66,7 +66,7 @@ impl<const Q: usize> Scorer<RankingBallot> for ApprovalScorer<Q> {
 }
 
 impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
-    type Output = Vec<usize>;
+    type Output = usize;
     type Error = ApprovalScorerError;
 
     fn compute_score(
