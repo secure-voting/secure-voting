@@ -9,7 +9,7 @@ pub struct CandidateId(usize);
 
 impl Display for CandidateId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "candidate-id-{}", self.0)
     }
 }
 
