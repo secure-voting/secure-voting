@@ -13,7 +13,10 @@ use crate::{
     models::profile::Profile,
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
-    voting_rules::VotingRuleExec,
+    voting_rules::{
+        Final, Kind, Metrics, Numeric, Protocol, RoundSize, Score, Series, Step, Summary,
+        VotingRuleExec,
+    },
 };
 
 /// `VotingRule` error type.
@@ -63,7 +66,7 @@ pub struct VotingRule<S, D, T, Ballot> {
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
 pub type VotingRuleResult<S, D, T, Ballot> = Result<
-    RuleOutcome,
+    (RuleOutcome, Metrics, Protocol),
     VotingRuleError<
         <S as Scorer<Ballot>>::Error,
         <D as Decider>::Error,
@@ -76,6 +79,7 @@ where
     S: Scorer<Ballot, Output = D::Input>,
     D: Decider,
     T: TieBreaker<Ballot>,
+    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
 {
     /// Construct a new `VotingRule` from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
@@ -92,6 +96,9 @@ where
     /// Returns an error if any of the steps didn't succeed.
     #[instrument(skip(self, profile), ret)]
     fn run(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot> {
+        let n = profile.n_voters();
+        let m = profile.n_candidates();
+
         let scores = self
             .scorer
             .compute_score(profile)
@@ -103,18 +110,96 @@ where
             .map_err(VotingRuleError::DecisionError)?;
         tracing::debug!(?candidates, "Calculated a set of winners");
 
-        self.tiebreaker
+        let results = self
+            .tiebreaker
             .tie_break(&candidates, profile)
-            .map_err(VotingRuleError::TieBreakError)
+            .map_err(VotingRuleError::TieBreakError)?;
+        let winners = results.candidates();
+
+        let score_range = scores.clone().value_range();
+        let avg: f64 = score_range
+            .iter()
+            .map(|x| Into::<f64>::into(x.clone()))
+            .sum::<f64>()
+            / score_range.len() as f64;
+
+        let scores_array: Vec<_> = scores
+            .iter()
+            .map(|(score, cand)| {
+                Score::builder()
+                    .candidate_id(cand.to_string())
+                    .candidate_name(String::from("placeholder"))
+                    .value(score.clone().into())
+                    .build()
+            })
+            .collect();
+
+        let metrics = Metrics::builder()
+            .summary(
+                Summary::builder()
+                    .total_ballots(n)
+                    .valid_ballots(n)
+                    .invalid_ballots(0)
+                    .candidates_count(m)
+                    .winner_count(winners.len())
+                    .committee_size(0)
+                    .rounds_count(1)
+                    .build(),
+            )
+            .numeric(
+                Numeric::builder()
+                    .winner_score(score_range[0].clone().into())
+                    .runner_up_score(score_range[1].clone().into())
+                    .margin(score_range[0].clone().into() - score_range[1].clone().into())
+                    .average_score(avg)
+                    .build(),
+            )
+            .series(
+                Series::builder()
+                    .candidate_scores_final(scores_array.clone())
+                    .round_sizes(vec![
+                        RoundSize::builder()
+                            .round(1)
+                            .remaining_candidates(winners.len())
+                            .build(),
+                    ])
+                    .build(),
+            )
+            .build();
+
+        let protocol = Protocol::builder()
+            .kind(Kind::SingleStep)
+            .steps(vec![
+                Step::builder()
+                    .step(1)
+                    .title("Round 1".to_owned())
+                    .action("declare_winner".to_owned())
+                    .remaining_candidate_ids(winners.iter().map(ToString::to_string).collect())
+                    .scores(scores_array)
+                    .build(),
+            ])
+            .r#final(
+                Final::builder()
+                    .winner_ids(winners.iter().map(ToString::to_string).collect())
+                    .build(),
+            )
+            .build();
+
+        Ok((results, metrics, protocol))
     }
 }
 
 impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
     VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot>
+where
+    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         self.run(profile)
     }
 
