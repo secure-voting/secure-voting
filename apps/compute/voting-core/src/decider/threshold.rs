@@ -11,7 +11,7 @@ use crate::{decider::Decider, models::candidate_id::CandidateId, scorer::Score};
 pub struct ThresholdDecider;
 
 impl Decider for ThresholdDecider {
-    type Input = Vec<Vec<usize>>;
+    type Input = Vec<usize>;
     type Error = Infallible;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {

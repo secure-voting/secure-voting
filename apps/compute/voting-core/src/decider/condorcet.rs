@@ -19,7 +19,7 @@ impl Decider for CondorcetDecider {
     type Error = Infallible;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        for (row, &cand_id) in scores.iter() {
+        for (row, &cand_id) in scores.score()[0].iter().zip(scores.candidates().iter()) {
             if row.iter().map(|&elem| usize::from(elem)).sum::<usize>() + 1 == row.len() {
                 return Ok(vec![cand_id]);
             }
@@ -42,9 +42,11 @@ mod tests {
     #[test]
     fn condorcet_winner() {
         let scores = Score::new(
-            PairwiseMatrix::try_new(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]], 1)
-                .expect("Pairwise matrix is incorrectly constructed, revise text example")
-                .into(),
+            vec![
+                PairwiseMatrix::try_new(vec![vec![0, 1, 1], vec![0, 0, 0], vec![0, 1, 0]], 1)
+                    .expect("Pairwise matrix is incorrectly constructed, revise text example")
+                    .into(),
+            ],
             &[
                 CandidateId::new(42),
                 CandidateId::new(1),
@@ -61,9 +63,11 @@ mod tests {
     #[test]
     fn condorcet_cycle() {
         let scores = Score::new(
-            PairwiseMatrix::try_new(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]], 1)
-                .expect("Pairwise matrix is incorrectly constructed, revise text example")
-                .into(),
+            vec![
+                PairwiseMatrix::try_new(vec![vec![0, 1, 0], vec![0, 0, 1], vec![1, 0, 0]], 1)
+                    .expect("Pairwise matrix is incorrectly constructed, revise text example")
+                    .into(),
+            ],
             &[
                 CandidateId::new(4),
                 CandidateId::new(2),
