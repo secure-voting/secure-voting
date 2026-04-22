@@ -4,21 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+unset COMPOSE_FILE
+unset COMPOSE_PROFILES
+
 source scripts/ci/common.sh
 
 ARTIFACTS_DIR="$(ci_artifact_dir mongo-replication)"
-export COMPOSE_FILE="docker-compose.mongo-replication.yml"
+COMPOSE_ARGS=(-f docker-compose.mongo-replication.yml)
+export COMPOSE_PROJECT_NAME="secure-voting-mongo-repl"
 
 cleanup() {
-  collect_compose_artifacts mongo-replication
-  docker compose down -v --remove-orphans || true
+  collect_compose_artifacts mongo-replication "${COMPOSE_ARGS[@]}"
+  docker compose "${COMPOSE_ARGS[@]}" down -v --remove-orphans || true
 }
 trap cleanup EXIT
 
 echo "== start mongo primary/secondary =="
-docker compose up -d
+docker compose "${COMPOSE_ARGS[@]}" up -d
 
-WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose
+WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose "${COMPOSE_ARGS[@]}"
 
 echo "== wait replica set init =="
 deadline=$(( $(date +%s) + 120 ))
@@ -27,7 +31,7 @@ SECONDARY_READY="false"
 
 while [[ $(date +%s) -lt $deadline ]]; do
   PRIMARY_READY="$(
-    docker compose exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval '
+    docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval '
       try {
         const h = db.hello();
         print(h.isWritablePrimary === true ? "true" : "false");
@@ -38,7 +42,7 @@ while [[ $(date +%s) -lt $deadline ]]; do
   )"
 
   SECONDARY_READY="$(
-    docker compose exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval '
+    docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval '
       try {
         const h = db.hello();
         print(h.secondary === true ? "true" : "false");
@@ -73,7 +77,7 @@ PY
 MARKER_NAME="mongo_replication_${SUFFIX}"
 
 echo "== verify primary accepts writes =="
-docker compose exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval "
+docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval "
 db = db.getSiblingDB('replication_check');
 const res = db.items.insertOne(
   {name: '$MARKER_NAME', created_at: new Date()},
@@ -88,7 +92,7 @@ SECONDARY_COUNT="0"
 
 while [[ $(date +%s) -lt $deadline ]]; do
   SECONDARY_COUNT="$(
-    docker compose exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval "
+    docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval "
       db.getMongo().setReadPref('secondaryPreferred');
       db = db.getSiblingDB('replication_check');
       print(db.items.countDocuments({name: '$MARKER_NAME'}));
@@ -103,8 +107,8 @@ while [[ $(date +%s) -lt $deadline ]]; do
 done
 
 if [[ "$SECONDARY_COUNT" != "1" ]]; then
-  docker compose exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(rs.status())' > "$ARTIFACTS_DIR/mongo-rs-status-primary.json" || true
-  docker compose exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(rs.status())' > "$ARTIFACTS_DIR/mongo-rs-status-secondary.json" || true
+  docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(rs.status())' > "$ARTIFACTS_DIR/mongo-rs-status-primary.json" || true
+  docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(rs.status())' > "$ARTIFACTS_DIR/mongo-rs-status-secondary.json" || true
   echo "secondary did not receive marker document"
   exit 1
 fi
@@ -113,8 +117,8 @@ echo "== verify roles =="
 PRIMARY_HELLO="$ARTIFACTS_DIR/mongo-primary-hello.json"
 SECONDARY_HELLO="$ARTIFACTS_DIR/mongo-secondary-hello.json"
 
-docker compose exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(db.hello())' > "$PRIMARY_HELLO"
-docker compose exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(db.hello())' > "$SECONDARY_HELLO"
+docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-primary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(db.hello())' > "$PRIMARY_HELLO"
+docker compose "${COMPOSE_ARGS[@]}" exec -T mongo-secondary mongosh --quiet --host localhost --port 27017 --eval 'EJSON.stringify(db.hello())' > "$SECONDARY_HELLO"
 
 if ! grep -q '"isWritablePrimary"[[:space:]]*:[[:space:]]*true' "$PRIMARY_HELLO"; then
   echo "mongo-primary is not writable primary"

@@ -163,10 +163,17 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	if seed == nil {
 		sb := make([]byte, 8)
 		_, _ = rand.Read(sb)
-		v := int64(0)
+
+		var u uint64
 		for i := 0; i < 8; i++ {
-			v = (v << 8) | int64(sb[i])
+			u = (u << 8) | uint64(sb[i])
 		}
+
+		v := int64(u & 0x7fffffffffffffff)
+		if v == 0 {
+			v = 1
+		}
+
 		seed = &v
 	}
 

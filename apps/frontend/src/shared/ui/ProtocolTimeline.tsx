@@ -1,5 +1,4 @@
 import React from "react";
-import { JsonBlock } from "./JsonBlock";
 import { styles } from "./styles";
 
 type ProtocolEntry = {
@@ -7,7 +6,6 @@ type ProtocolEntry = {
   title: string;
   subtitle?: string;
   details?: Array<{ label: string; value: string }>;
-  raw?: unknown;
 };
 
 function safeStringify(value: unknown) {
@@ -37,6 +35,24 @@ function pickRecordArray(value: Record<string, unknown>, keys: string[]): unknow
   return null;
 }
 
+function normalizeScoreArray(value: unknown): string {
+  if (!Array.isArray(value)) return compact(value);
+
+  return value
+    .map((item) => {
+      if (!isObject(item)) return compact(item);
+      const candidateName =
+        typeof item.candidate_name === "string" && item.candidate_name.trim()
+          ? item.candidate_name.trim()
+          : typeof item.candidate_id === "string" && item.candidate_id.trim()
+            ? item.candidate_id.trim()
+            : "Кандидат";
+      const score = item.value ?? item.score ?? item.points ?? item.count;
+      return `${candidateName}: ${compact(score)}`;
+    })
+    .join(" · ");
+}
+
 function normalizeStepObject(obj: Record<string, unknown>, fallbackIndex: number): ProtocolEntry {
   const stepNo =
     obj.round ??
@@ -55,13 +71,16 @@ function normalizeStepObject(obj: Record<string, unknown>, fallbackIndex: number
     obj.type;
 
   const selected =
+    obj.selected_candidate_ids ??
     obj.selected ??
+    obj.winner_ids ??
     obj.winner ??
     obj.winners ??
     obj.elected ??
     obj.elected_candidates;
 
   const eliminated =
+    obj.eliminated_candidate_ids ??
     obj.eliminated ??
     obj.excluded ??
     obj.removed ??
@@ -73,19 +92,68 @@ function normalizeStepObject(obj: Record<string, unknown>, fallbackIndex: number
 
   const details: Array<{ label: string; value: string }> = [];
 
+  if (obj.title != null) {
+    details.push({ label: "Заголовок", value: compact(obj.title) });
+  }
+
   if (selected != null) {
-    details.push({ label: "Selected", value: compact(selected) });
+    details.push({ label: "Выбраны", value: compact(selected) });
   }
 
   if (eliminated != null) {
-    details.push({ label: "Eliminated", value: compact(eliminated) });
+    details.push({ label: "Исключены", value: compact(eliminated) });
+  }
+
+  if (obj.remaining_candidate_ids != null) {
+    details.push({
+      label: "Оставшиеся кандидаты",
+      value: compact(obj.remaining_candidate_ids),
+    });
+  }
+
+  if (obj.scores != null) {
+    details.push({
+      label: "Оценки",
+      value: normalizeScoreArray(obj.scores),
+    });
+  }
+
+  if (obj.note != null) {
+    details.push({ label: "Примечание", value: compact(obj.note) });
   }
 
   for (const [key, value] of Object.entries(obj)) {
     if (
-      ["round", "step", "iteration", "index", "order", "action", "event", "phase", "status", "kind", "type", "selected", "winner", "winners", "elected", "elected_candidates", "eliminated", "excluded", "removed", "loser", "losers"].includes(
-        key
-      )
+      [
+        "round",
+        "step",
+        "iteration",
+        "index",
+        "order",
+        "action",
+        "event",
+        "phase",
+        "status",
+        "kind",
+        "type",
+        "title",
+        "selected_candidate_ids",
+        "selected",
+        "winner_ids",
+        "winner",
+        "winners",
+        "elected",
+        "elected_candidates",
+        "eliminated_candidate_ids",
+        "eliminated",
+        "excluded",
+        "removed",
+        "loser",
+        "losers",
+        "remaining_candidate_ids",
+        "scores",
+        "note",
+      ].includes(key)
     ) {
       continue;
     }
@@ -98,7 +166,6 @@ function normalizeStepObject(obj: Record<string, unknown>, fallbackIndex: number
     key: `step-${fallbackIndex}`,
     title: titleParts.join(" "),
     details,
-    raw: obj,
   };
 }
 
@@ -112,7 +179,6 @@ function normalizeProtocol(protocol: unknown): ProtocolEntry[] {
         key: `step-${index}`,
         title: `Шаг ${index + 1}`,
         subtitle: compact(item),
-        raw: item,
       };
     });
   }
@@ -131,7 +197,6 @@ function normalizeProtocol(protocol: unknown): ProtocolEntry[] {
       key: "step-0",
       title: "Протокол",
       subtitle: compact(protocol),
-      raw: protocol,
     },
   ];
 }
@@ -140,7 +205,7 @@ export function ProtocolTimeline({ protocol }: { protocol: unknown }) {
   const entries = normalizeProtocol(protocol);
 
   if (entries.length === 0) {
-    return <div style={styles.muted}>Протокол шагов отсутствует</div>;
+    return <div style={styles.muted}>Подробный протокол для данного метода отсутствует</div>;
   }
 
   return (
@@ -160,12 +225,6 @@ export function ProtocolTimeline({ protocol }: { protocol: unknown }) {
                   <b>{detail.label}:</b> <span>{detail.value}</span>
                 </div>
               ))}
-            </div>
-          ) : null}
-
-          {entry.raw != null && !entry.details?.length && !entry.subtitle ? (
-            <div style={{ marginTop: 10 }}>
-              <JsonBlock value={entry.raw} />
             </div>
           ) : null}
         </div>

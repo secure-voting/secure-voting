@@ -192,23 +192,37 @@ services:
       - redis_network
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-    command: >
-      sh -c 'redis-server
-      --save 20 1
-      --loglevel warning
-      --requirepass "$$REDIS_PASSWORD"
-      --port 0
-      --tls-port 6380
-      --tls-cert-file /certs/redis.pem
-      --tls-key-file /certs/redis.key
-      --tls-ca-cert-file /certs/ca.pem
-      --tls-auth-clients no'
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          mkdir -p /tmp/redis-certs
+          cp /certs/ca.pem /tmp/redis-certs/ca.pem
+          cp /certs/redis.pem /tmp/redis-certs/redis.pem
+          cp /certs/redis.key /tmp/redis-certs/redis.key
+          chmod 644 /tmp/redis-certs/ca.pem /tmp/redis-certs/redis.pem
+          chmod 600 /tmp/redis-certs/redis.key
+          exec redis-server \
+            --save 20 1 \
+            --loglevel warning \
+            --requirepass "$REDIS_PASSWORD" \
+            --port 0 \
+            --tls-port 6380 \
+            --tls-cert-file /tmp/redis-certs/redis.pem \
+            --tls-key-file /tmp/redis-certs/redis.key \
+            --tls-ca-cert-file /tmp/redis-certs/ca.pem \
+            --tls-auth-clients no
     volumes:
       - redis-data:/data
       - ./scripts/certs/out:/certs:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --tls --cacert /certs/ca.pem -h 127.0.0.1 -p 6380 -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli --tls --cacert /tmp/redis-certs/ca.pem -h 127.0.0.1 -p 6380 -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -395,8 +409,6 @@ services:
     container_name: kafka-init
     networks:
       - kafka_network
-    volumes:
-      - ./scripts/certs/out:/certs:ro
     depends_on:
       kafka:
         condition: service_healthy
@@ -405,27 +417,19 @@ services:
       - -lc
       - |
           set -eu
-          cat > /tmp/client.properties <<'EOF'
-          security.protocol=SSL
-          ssl.truststore.type=PKCS12
-          ssl.truststore.location=/certs/kafka.truststore.p12
-          ssl.truststore.password=changeit
-          EOF
-          until kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --list >/dev/null 2>&1; do
+          until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
             echo "waiting for kafka topics api..."
             sleep 2
           done
-          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/client.properties --list | sort
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --list | sort
           echo "kafka-init done"
     restart: "no"
     profiles:
       - prod
       - debug
       - kafka
-
-
 
 networks:
   app_network:

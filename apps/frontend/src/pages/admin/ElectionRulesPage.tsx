@@ -5,10 +5,8 @@ import type { ElectionDetail, UpdateElectionRulesInput, TallyRuleInfo } from "..
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
+import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 function accessModeLabel(value: "open" | "invite") {
   return value === "open" ? "Открытый доступ" : "Только по приглашению";
@@ -442,7 +440,7 @@ export function ElectionRulesPage() {
 
               <div>
                 <label>
-                  Access mode
+                  Режим доступа
                   <Hint text="Определяет, смогут ли пользователи участвовать свободно или только по приглашению." />
                 </label>
                 <select
@@ -470,12 +468,11 @@ export function ElectionRulesPage() {
 
                 {delayPublish ? (
                   <div style={{ marginTop: 12, maxWidth: 420 }}>
-                    <label>Дата и время публикации</label>
-                    <input
-                      style={styles.input}
-                      type="datetime-local"
+                    <DateTimeField
+                      label="Дата и время публикации"
                       value={publishAtLocal}
-                      onChange={(e) => setPublishAtLocal(e.target.value)}
+                      onChange={setPublishAtLocal}
+                      minuteStep={5}
                     />
                   </div>
                 ) : (
@@ -602,13 +599,6 @@ export function ElectionRulesPage() {
           </>
         ) : null}
       </div>
-
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Election JSON</h3>
-          {item ? <JsonBlock value={item} /> : <div style={styles.muted}>Empty</div>}
-        </div>
-      ) : null}
     </div>
   );
 }

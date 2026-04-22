@@ -1,0 +1,321 @@
+services:
+  mongo:
+    volumes:
+      - mongo-data:/data/db
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          mkdir -p /tmp/mongo-certs
+          cp /certs/ca.pem /tmp/mongo-certs/ca.pem
+          cp /certs/mongo.server.pem /tmp/mongo-certs/mongo.server.pem
+          cp /certs/mongo.keyfile /tmp/mongo-certs/mongo.keyfile
+          chmod 644 /tmp/mongo-certs/ca.pem /tmp/mongo-certs/mongo.server.pem
+          chmod 400 /tmp/mongo-certs/mongo.keyfile
+          chown mongodb:mongodb /tmp/mongo-certs/mongo.keyfile /tmp/mongo-certs/mongo.server.pem /tmp/mongo-certs/ca.pem
+          exec /usr/local/bin/docker-entrypoint.sh mongod \
+            --bind_ip_all \
+            --replSet rs0 \
+            --keyFile /tmp/mongo-certs/mongo.keyfile \
+            --tlsMode requireTLS \
+            --tlsCAFile /tmp/mongo-certs/ca.pem \
+            --tlsCertificateKeyFile /tmp/mongo-certs/mongo.server.pem \
+            --tlsAllowConnectionsWithoutCertificates
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --host localhost --port 27017 --tls --tlsCAFile /tmp/mongo-certs/ca.pem --tlsAllowInvalidHostnames --username root --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1"
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  db-replica:
+    image: postgres:18.1
+    container_name: postgres-db-replica
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REPLICATION_USER=replicator
+      - REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+      - PGPASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+    networks:
+      - db_network
+    volumes:
+      - db-replica-data:/var/lib/postgresql
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          export PATH="/usr/lib/postgresql/18/bin:$PATH"
+          mkdir -p /var/lib/postgresql/data /tmp/pg-certs
+          cp /certs/ca.pem /tmp/pg-certs/root.crt
+          cp /certs/db.pem /tmp/pg-certs/server.crt
+          cp /certs/db.key /tmp/pg-certs/server.key
+          chown -R postgres:postgres /var/lib/postgresql /tmp/pg-certs
+          chmod 0700 /var/lib/postgresql/data
+          chmod 644 /tmp/pg-certs/root.crt /tmp/pg-certs/server.crt
+          chmod 600 /tmp/pg-certs/server.key
+
+          if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+            rm -rf /var/lib/postgresql/data/*
+            export PGPASSWORD="$${REPLICATION_PASSWORD}"
+            until pg_isready -h db -U "$${REPLICATION_USER}" -d postgres >/dev/null 2>&1; do
+              sleep 2
+            done
+            gosu postgres pg_basebackup \
+              -h db \
+              -U "$${REPLICATION_USER}" \
+              -D /var/lib/postgresql/data \
+              -Fp \
+              -Xs \
+              -P \
+              -R
+          fi
+
+          exec gosu postgres postgres \
+            -D /var/lib/postgresql/data \
+            -c hot_standby=on \
+            -c listen_addresses='*' \
+            -c ssl=on \
+            -c ssl_cert_file=/tmp/pg-certs/server.crt \
+            -c ssl_key_file=/tmp/pg-certs/server.key \
+            -c ssl_ca_file=/tmp/pg-certs/root.crt
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U admin -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    profiles:
+      - prod-replication
+
+  redis-replica:
+    image: redis:8.4
+    container_name: redis-cache-replica
+    depends_on:
+      cache:
+        condition: service_healthy
+    networks:
+      - redis_network
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: >
+      sh -c 'redis-server
+      --save ""
+      --loglevel warning
+      --port 0
+      --tls-port 6380
+      --tls-cert-file /certs/redis.pem
+      --tls-key-file /certs/redis.key
+      --tls-ca-cert-file /certs/ca.pem
+      --tls-auth-clients no
+      --replicaof cache 6380
+      --masterauth "$$REDIS_PASSWORD"'
+    volumes:
+      - redis-replica-data:/data
+      - ./scripts/certs/out:/certs:ro
+    restart: unless-stopped
+    profiles:
+      - prod-replication
+
+  mongo-secondary:
+    image: mongo:8.0
+    container_name: mongo-db-secondary
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - db_network
+    volumes:
+      - mongo-secondary-data:/data/db
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+          mkdir -p /tmp/mongo-certs
+          cp /certs/ca.pem /tmp/mongo-certs/ca.pem
+          cp /certs/mongo.server.pem /tmp/mongo-certs/mongo.server.pem
+          cp /certs/mongo.keyfile /tmp/mongo-certs/mongo.keyfile
+          chmod 644 /tmp/mongo-certs/ca.pem /tmp/mongo-certs/mongo.server.pem
+          chmod 400 /tmp/mongo-certs/mongo.keyfile
+          chown mongodb:mongodb /tmp/mongo-certs/mongo.keyfile /tmp/mongo-certs/mongo.server.pem /tmp/mongo-certs/ca.pem
+          exec /usr/local/bin/docker-entrypoint.sh mongod \
+            --bind_ip_all \
+            --replSet rs0 \
+            --keyFile /tmp/mongo-certs/mongo.keyfile \
+            --tlsMode requireTLS \
+            --tlsCAFile /tmp/mongo-certs/ca.pem \
+            --tlsCertificateKeyFile /tmp/mongo-certs/mongo.server.pem \
+            --tlsAllowConnectionsWithoutCertificates
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --host localhost --port 27017 --tls --tlsCAFile /tmp/mongo-certs/ca.pem --tlsAllowInvalidHostnames --eval 'db.adminCommand({ ping: 1 }).ok' | grep -q 1"
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+    profiles:
+      - prod-replication
+
+  mongo-rs-init-prod:
+    image: mongo:8.0
+    container_name: mongo-rs-init-prod
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mongo-secondary:
+        condition: service_healthy
+    environment:
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    networks:
+      - db_network
+    volumes:
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+
+          deadline=$$(( $$(date +%s) + 180 ))
+
+          while [ $$(date +%s) -lt $$deadline ]; do
+            if mongosh --quiet --host mongo --port 27017 \
+              --tls \
+              --tlsCAFile /certs/ca.pem \
+              --tlsAllowInvalidHostnames \
+              --username root \
+              --password "$$MONGO_INITDB_ROOT_PASSWORD" \
+              --authenticationDatabase admin \
+              --eval '
+                try {
+                  const st = rs.status();
+                  const states = st.members.map(m => m.stateStr).join(",");
+                  if (states.includes("PRIMARY") && states.includes("SECONDARY")) {
+                    print("ready");
+                  } else {
+                    print("not-ready");
+                  }
+                } catch (e) {
+                  try {
+                    rs.initiate({
+                      _id: "rs0",
+                      members: [
+                        { _id: 0, host: "mongo:27017", priority: 2 },
+                        { _id: 1, host: "mongo-secondary:27017", priority: 1 }
+                      ]
+                    });
+                    print("initiated");
+                  } catch (inner) {
+                    print("retry");
+                  }
+                }
+              ' | grep -Eq 'ready|initiated'
+            then
+              break
+            fi
+
+            sleep 3
+          done
+
+          mongosh --quiet --host mongo --port 27017 \
+            --tls \
+            --tlsCAFile /certs/ca.pem \
+            --tlsAllowInvalidHostnames \
+            --username root \
+            --password "$$MONGO_INITDB_ROOT_PASSWORD" \
+            --authenticationDatabase admin \
+            --eval '
+              const st = rs.status();
+              const states = st.members.map(m => m.stateStr).join(",");
+              if (!(states.includes("PRIMARY") && states.includes("SECONDARY"))) {
+                throw new Error("replica set not ready: " + states);
+              }
+              print("mongo replica set ready");
+            '
+    restart: "no"
+    profiles:
+      - prod-replication
+  
+  db-replication-init-prod:
+    image: postgres:18.1
+    container_name: postgres-db-repl-init-prod
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}
+    networks:
+      - db_network
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./scripts/certs/out:/certs:ro
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+          set -eu
+
+          export PGPASSWORD="$POSTGRES_PASSWORD"
+
+          until psql "host=db port=5432 user=admin dbname=secure-voting sslmode=verify-ca sslrootcert=/certs/ca.pem" -c "select 1" >/dev/null 2>&1; do
+            sleep 2
+          done
+
+          psql "host=db port=5432 user=admin dbname=secure-voting sslmode=verify-ca sslrootcert=/certs/ca.pem" <<SQL
+          DO \$\$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'replicator') THEN
+              CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '$${POSTGRES_REPLICATION_PASSWORD}';
+            ELSE
+              ALTER ROLE replicator WITH REPLICATION LOGIN PASSWORD '$${POSTGRES_REPLICATION_PASSWORD}';
+            END IF;
+          END
+          \$\$;
+
+          ALTER SYSTEM SET wal_level = 'replica';
+          ALTER SYSTEM SET max_wal_senders = '10';
+          ALTER SYSTEM SET max_replication_slots = '10';
+          ALTER SYSTEM SET hot_standby = 'on';
+          SQL
+
+          HBA="/var/lib/postgresql/data/pg_hba.conf"
+
+          grep -q '^hostssl[[:space:]]\+replication[[:space:]]\+replicator[[:space:]]\+all[[:space:]]\+scram-sha-256$' "$$HBA" || \
+            echo "hostssl replication replicator all scram-sha-256" >> "$$HBA"
+
+          grep -q '^host[[:space:]]\+replication[[:space:]]\+replicator[[:space:]]\+all[[:space:]]\+scram-sha-256$' "$$HBA" || \
+            echo "host replication replicator all scram-sha-256" >> "$$HBA"
+
+          psql "host=db port=5432 user=admin dbname=secure-voting sslmode=verify-ca sslrootcert=/certs/ca.pem" -c "SELECT pg_reload_conf();"
+
+          echo "postgres replication init done"
+    restart: "no"
+    profiles:
+      - prod-replication
+
+volumes:
+  db-replica-data:
+    driver: local
+  redis-replica-data:
+    driver: local
+  mongo-secondary-data:
+    driver: local
+

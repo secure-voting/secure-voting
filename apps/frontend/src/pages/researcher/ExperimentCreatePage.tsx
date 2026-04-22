@@ -113,6 +113,7 @@ export function ExperimentCreatePage() {
 
   const [approvalMax, setApprovalMax] = useState(2);
   const [rankingTopK, setRankingTopK] = useState(3);
+  const [rankingTopKEnabled, setRankingTopKEnabled] = useState(false);
 
   const [scoreMin, setScoreMin] = useState(0);
   const [scoreMax, setScoreMax] = useState(10);
@@ -272,7 +273,7 @@ export function ExperimentCreatePage() {
       params.approval_max_choices = approvalMax;
     }
 
-    if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k) {
+    if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k && rankingTopKEnabled) {
       params.ranking_top_k = rankingTopK;
     }
 
@@ -337,10 +338,10 @@ export function ExperimentCreatePage() {
         }
       }
 
-      if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k) {
-        if (rankingTopK < 1) return "ranking_top_k должен быть не меньше 1";
+      if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k && rankingTopKEnabled) {
+        if (rankingTopK < 1) return "Ограничение top-k должно быть не меньше 1";
         if (rankingTopK > candidates) {
-          return "ranking_top_k не может превышать число кандидатов";
+          return "Ограничение top-k не может превышать число кандидатов";
         }
       }
 
@@ -551,6 +552,10 @@ export function ExperimentCreatePage() {
                   value={committeeSize}
                   onChange={(e) => setCommitteeSize(Number(e.target.value))}
                 />
+                <div style={{ marginTop: 8, ...styles.muted }}>
+                  Внимание: некоторые алгоритмы возвращают одного победителя.
+                  Это связано со свойствами конкретного правила подсчета.
+                </div>
               </div>
 
               <div>
@@ -627,18 +632,33 @@ export function ExperimentCreatePage() {
             ) : null}
 
             {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
-              <div style={styles.grid2}>
-                <div>
-                  <label>top-k</label>
+              <div style={{ display: "grid", gap: 10 }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
-                    style={styles.input}
-                    type="number"
-                    min={1}
-                    max={Math.max(candidates, 1)}
-                    value={rankingTopK}
-                    onChange={(e) => setRankingTopK(Number(e.target.value))}
+                    type="checkbox"
+                    checked={rankingTopKEnabled}
+                    onChange={(e) => setRankingTopKEnabled(e.target.checked)}
                   />
+                  Ограничивать число учитываемых позиций top-k
+                </label>
+
+                <div style={styles.muted}>
+                  Поле необязательно. Если ограничение выключено, используется полное ранжирование.
                 </div>
+
+                {rankingTopKEnabled ? (
+                  <>
+                    <label>Ограничение top-k</label>
+                    <input
+                      style={styles.input}
+                      type="number"
+                      min={1}
+                      max={candidates}
+                      value={rankingTopK}
+                      onChange={(e) => setRankingTopK(Number(e.target.value))}
+                    />
+                  </>
+                ) : null}
               </div>
             ) : null}
 
@@ -746,14 +766,31 @@ export function ExperimentCreatePage() {
           <div style={{ display: "grid", gap: 12 }}>
             <SummaryGrid
               items={[
-                { label: "Тип эксперимента", value: type },
-                { label: "Формат бюллетеня", value: ballotFormat },
-                { label: "Правило подсчёта", value: tallyRule },
+                { label: "Тип эксперимента", value: type === "algo" ? "Алгоритмический" : "Поведенческий" },
+                {
+                  label: "Формат бюллетеня",
+                  value:
+                    ballotFormat === "approval"
+                      ? "Одобрение"
+                      : ballotFormat === "ranking"
+                        ? "Ранжирование"
+                        : "Оценивание",
+                },
+                { label: "Правило подсчёта", value: currentRule?.label || tallyRule },
                 { label: "Количество кандидатов", value: String(candidates) },
                 { label: "Количество избирателей", value: String(voters) },
                 { label: "Размер комитета", value: String(committeeSize) },
                 { label: "Тип квоты", value: committeeSize > 1 ? quotaType : "не используется" },
                 { label: "Seed", value: seed.trim() || "не задан" },
+                {
+                  label: "Ограничение top-k",
+                  value:
+                    ballotFormat === "ranking" && currentRule?.supports_ranking_top_k
+                      ? rankingTopKEnabled
+                        ? String(rankingTopK)
+                        : "Не используется"
+                      : "Не используется",
+                },
               ]}
             />
 

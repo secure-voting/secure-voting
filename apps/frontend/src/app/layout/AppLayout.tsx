@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
 import { useNotifications } from "../notifications";
 import { Badge } from "../../shared/ui/Badge";
@@ -13,6 +13,16 @@ function roleLabel(role?: string) {
   return role || "Неизвестно";
 }
 
+function NavButton({ to, children }: { to: string; children: React.ReactNode }) {
+  return (
+    <NavLink to={to} style={{ textDecoration: "none" }}>
+      {({ isActive }) => (
+        <button style={isActive ? styles.btnPrimary : styles.btn}>{children}</button>
+      )}
+    </NavLink>
+  );
+}
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { authed, me, bootLoading, bootError, logout } = useAuth();
   const { unreadCount } = useNotifications();
@@ -24,94 +34,67 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={styles.page}>
       <div style={styles.topbar}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h1 style={styles.title}>Secure Voting</h1>
-        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <h1 style={styles.title}>Secure Voting</h1>
+              {authed ? (
+                <span style={styles.muted}>
+                  {me?.email} <Badge text={roleLabel(me?.role)} />
+                </span>
+              ) : null}
+            </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          {bootLoading ? <span style={styles.muted}>Проверка сессии</span> : null}
+            {bootLoading ? <span style={styles.muted}>Проверка сессии</span> : null}
+          </div>
 
           {authed ? (
             <>
-              <span style={styles.muted}>
-                {me?.email} <Badge text={roleLabel(me?.role)} />
-              </span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <NavButton to="/dashboard">Дашборд</NavButton>
+                <NavButton to="/elections">Голосования</NavButton>
 
-              <Link to="/dashboard" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Дашборд</button>
-              </Link>
+                {isAdmin ? <NavButton to="/admin/elections/create">Создать голосование</NavButton> : null}
+                {isAdmin ? <NavButton to="/monitor/jobs">Задачи</NavButton> : null}
+                {isAdmin ? <NavButton to="/monitor/audit">Аудит</NavButton> : null}
+                {isAdmin ? <NavButton to="/admin/users">Пользователи</NavButton> : null}
 
-              <Link to="/elections" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Голосования</button>
-              </Link>
+                {isResearcher ? <NavButton to="/research/datasets">Наборы данных</NavButton> : null}
+                {isResearcher ? <NavButton to="/research/experiments">Эксперименты</NavButton> : null}
+                {isResearcher ? <NavButton to="/research/runs">Запуски</NavButton> : null}
+              </div>
 
-              {isAdmin ? (
-                <Link to="/admin/elections/create" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Создать голосование</button>
-                </Link>
-              ) : null}
-
-              {isResearcher ? (
-                <>
-                  <Link to="/research/datasets" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Наборы данных</button>
-                  </Link>
-                  <Link to="/research/experiments" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Эксперименты</button>
-                  </Link>
-                  <Link to="/research/runs" style={{ textDecoration: "none" }}>
-                    <button style={styles.btn}>Запуски</button>
-                  </Link>
-                </>
-              ) : null}
-
-              {isAdmin ? (
-                <Link to="/monitor/jobs" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Задачи</button>
-                </Link>
-              ) : null}
-
-              {isAdmin ? (
-                <Link to="/monitor/audit" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Аудит</button>
-                </Link>
-              ) : null}
-
-              {isAdmin ? (
-                <Link to="/admin/users" style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Пользователи</button>
-                </Link>
-              ) : null}
-
-              <Link to="/notifications" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <NavButton to="/notifications">
                   Уведомления{unreadCount > 0 ? ` (${unreadCount})` : ""}
+                </NavButton>
+                <NavButton to="/profile">Профиль</NavButton>
+                <NavButton to="/admin/settings">Настройки</NavButton>
+
+                <button
+                  style={styles.btnDanger}
+                  onClick={async () => {
+                    await logout();
+                    nav("/login", { replace: true });
+                  }}
+                  type="button"
+                >
+                  Выйти
                 </button>
-              </Link>
-
-              <Link to="/profile" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Профиль</button>
-              </Link>
-
-              <Link to="/admin/settings" style={{ textDecoration: "none" }}>
-                <button style={styles.btn}>Настройки</button>
-              </Link>
-
-              <button
-                style={styles.btnDanger}
-                onClick={async () => {
-                  await logout();
-                  nav("/login", { replace: true });
-                }}
-                type="button"
-              >
-                Выйти
-              </button>
+              </div>
             </>
           ) : (
-            <Link to="/login" style={{ textDecoration: "none" }}>
-              <button style={styles.btn}>Войти</button>
-            </Link>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <NavButton to="/login">Войти</NavButton>
+            </div>
           )}
         </div>
       </div>

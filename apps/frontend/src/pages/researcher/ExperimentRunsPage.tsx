@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { ExperimentRunItem } from "../../shared/api/types";
+import type { Experiment, ExperimentRunItem } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -144,6 +145,69 @@ function winnerList(value: unknown): string[] {
   }
   if (value != null) return [prettyValue(value)];
   return [];
+}
+
+type RunsLocationState = {
+  createdRuns?: Array<{
+    rule: string;
+    experimentId: string;
+    runId: string;
+    jobId: string;
+  }>;
+  autoOpenRunId?: string;
+};
+
+function ruleLabelRu(id: string) {
+  const map: Record<string, string> = {
+    plurality: "Плюральное правило",
+    borda: "Правило Борда",
+    black: "Правило Блэка",
+    simpson: "Правило Симпсона",
+    hare: "Правило Хэра",
+    nanson: "Правило Нэнсона",
+    coombs: "Правило Кумбса",
+    copeland_1: "Правило Коупленда I",
+    copeland_2: "Правило Коупленда II",
+    copeland_3: "Правило Коупленда III",
+    inverse_borda: "Обратное правило Борда",
+    inverse_plurality: "Обратное плюральное правило",
+    minmax: "Правило Minmax",
+    threshold: "Пороговое правило",
+    practical_condorcet: "Практическое правило Кондорсе",
+    approval_2: "Одобрение q=2",
+    approval_3: "Одобрение q=3",
+  };
+
+  return map[id] || id || "—";
+}
+
+function experimentParamsObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function experimentRuleId(exp?: Experiment | null) {
+  const params = experimentParamsObject(exp?.params);
+  const rule = params.tally_rule;
+  return typeof rule === "string" ? rule : "";
+}
+
+function experimentRuleLabel(exp?: Experiment | null) {
+  const id = experimentRuleId(exp);
+  return id ? ruleLabelRu(id) : "—";
 }
 
 function runDurationSeconds(item: ExperimentRunItem): number | null {
@@ -318,6 +382,12 @@ export function ExperimentRunsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
+  const location = useLocation();
+  const locationState = (location.state ?? null) as RunsLocationState | null;
+
+  const [experimentMap, setExperimentMap] = useState<Record<string, Experiment>>({});
+  const autoOpenRunRef = useRef<string>(locationState?.autoOpenRunId || "");
+
   const listAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
   const resultAbortRef = useRef<AbortController | null>(null);
@@ -337,13 +407,22 @@ export function ExperimentRunsPage() {
       setErr(null);
 
       try {
-        const list = await api.experimentRuns.list(
-          token,
-          {
-            experiment_id: experimentIdFilter.trim() || undefined,
-          },
-          ac.signal
-        );
+        const [list, experiments] = await Promise.all([
+          api.experimentRuns.list(
+            token,
+            {
+              experiment_id: experimentIdFilter.trim() || undefined,
+            },
+            ac.signal
+          ),
+          api.experiments.list(token, ac.signal),
+        ]);
+
+        const nextExperimentMap: Record<string, Experiment> = {};
+        for (const exp of experiments) {
+          if (exp?.id) nextExperimentMap[exp.id] = exp;
+        }
+        setExperimentMap(nextExperimentMap);
 
         const prev = prevStatusRef.current;
         const next = new Map<string, string>();
@@ -358,7 +437,7 @@ export function ExperimentRunsPage() {
             if (s === "done") {
               addNotification({
                 kind: "success",
-                title: "Запуск завершён",
+                title: "Запуск завершен",
                 message: id,
               });
             } else if (s === "error") {
@@ -378,7 +457,7 @@ export function ExperimentRunsPage() {
       } catch (e: any) {
         if (e?.name === "AbortError") return;
         if (e?.status === 401) setToken(null);
-        setErr(e?.message || "Не удалось загрузить experiment runs");
+        setErr(e?.message || "Не удалось загрузить список запусков");
         setItems([]);
       } finally {
         if (!silent) setLoading(false);
@@ -463,6 +542,24 @@ export function ExperimentRunsPage() {
       setResultLoading(false);
     }
   };
+
+  useEffect(() => {
+    const targetRunId = autoOpenRunRef.current;
+    if (!targetRunId) return;
+    if (items.length === 0) return;
+
+    const exists = items.some((item, index) => runId(item, index) === targetRunId);
+    if (!exists) return;
+
+    autoOpenRunRef.current = "";
+
+    if (locationState?.createdRuns?.length) {
+      setInfo(`Создано запусков: ${locationState.createdRuns.length}`);
+    }
+
+    loadDetail(targetRunId);
+    loadResult(targetRunId);
+  }, [items, locationState, loadDetail, loadResult]);
 
   const handleDownload = async (id: string) => {
     if (!token) return;
@@ -645,19 +742,19 @@ export function ExperimentRunsPage() {
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>Experiment runs</h2>
+          <h2 style={{ margin: 0 }}>Запуски экспериментов</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button style={styles.btn} onClick={() => loadList(false)} disabled={loading}>
               Обновить
             </button>
             <button style={styles.btn} onClick={exportRunsCsv} disabled={items.length === 0}>
-              Export CSV
+              Экспорт CSV
             </button>
             <button style={styles.btn} onClick={exportRunsXlsx} disabled={items.length === 0}>
-              Export XLSX
+              Экспорт XLSX
             </button>
             <button style={styles.btn} onClick={exportRunsJson} disabled={items.length === 0}>
-              Export runs JSON
+              Экспорт списка в JSON
             </button>
             {selectedResult ? (
               <>
@@ -665,19 +762,19 @@ export function ExperimentRunsPage() {
                   style={styles.btn}
                   onClick={() => downloadJsonFile("experiment-run-result.json", selectedResult)}
                 >
-                  Export result JSON
+                  Экспорт результата в JSON
                 </button>
                 <button style={styles.btn} onClick={exportResultSummaryCsv}>
-                  Export summary CSV
+                  Экспорт сводки CSV
                 </button>
                 <button style={styles.btn} onClick={exportResultSummaryXlsx}>
-                  Export summary XLSX
+                  Экспорт сводки XLSX
                 </button>
                 <button style={styles.btn} onClick={exportResultReportTxt}>
-                  Export report TXT
+                  Экспорт отчета TXT
                 </button>
                 <button style={styles.btn} onClick={exportResultReportPdf}>
-                  Export report PDF
+                  Экспорт отчета PDF
                 </button>
               </>
             ) : null}
@@ -693,7 +790,7 @@ export function ExperimentRunsPage() {
 
         <div style={{ marginTop: 12, ...styles.grid2 }}>
           <div>
-            <label>Filter by experiment_id</label>
+            <label>Фильтр по experiment_id</label>
             <input
               style={styles.input}
               value={experimentIdFilter}
@@ -758,6 +855,13 @@ export function ExperimentRunsPage() {
             const status = runStatus(item);
             const experimentId = prettyValue((item as any)?.experiment_id ?? "");
             const datasetId = prettyValue((item as any)?.dataset_id ?? "");
+            const rawExperimentId =
+              typeof (item as any)?.experiment_id === "string"
+                ? String((item as any)?.experiment_id)
+                : "";
+
+            const experiment = rawExperimentId ? experimentMap[rawExperimentId] : null;
+            const ruleText = experimentRuleLabel(experiment);
 
             return (
               <div key={id} style={{ ...styles.card, padding: 12 }}>
@@ -765,6 +869,7 @@ export function ExperimentRunsPage() {
                   <div>
                     <div style={{ fontWeight: 700 }}>{id}</div>
                     <div style={styles.muted}>experiment_id: {experimentId || "—"}</div>
+                    <div style={styles.muted}>правило: {ruleText}</div>
                     <div style={styles.muted}>dataset_id: {datasetId || "—"}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -781,10 +886,10 @@ export function ExperimentRunsPage() {
                     Открыть
                   </button>
                   <button style={styles.btn} onClick={() => loadResult(id)} disabled={resultLoading}>
-                    Result
+                    Результат
                   </button>
                   <button style={styles.btn} onClick={() => handleDownload(id)}>
-                    Download
+                    Скачать
                   </button>
                 </div>
               </div>
@@ -795,8 +900,8 @@ export function ExperimentRunsPage() {
 
       <div style={styles.grid2}>
         <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Batch create</h3>
-          <label>Batch payload (JSON object)</label>
+          <h3 style={{ marginTop: 0 }}>Пакетный запуск</h3>
+          <label>JSON-запрос</label>
           <textarea
             style={{
               ...styles.input,
@@ -835,6 +940,12 @@ export function ExperimentRunsPage() {
                   { label: "Dataset ID", value: prettyValue(selectedRecord.dataset_id) },
                   { label: "Started at", value: prettyValue(selectedRecord.started_at) },
                   { label: "Finished at", value: prettyValue(selectedRecord.finished_at) },
+                  { label: "Правило подсчета", value: experimentRuleLabel(
+                      typeof selectedRecord.experiment_id === "string"
+                        ? experimentMap[String(selectedRecord.experiment_id)]
+                        : null
+                    ) 
+                  },
                 ]}
               />
 
@@ -859,13 +970,21 @@ export function ExperimentRunsPage() {
               <div style={{ fontWeight: 700 }}>Результат вычисления</div>
               <div style={styles.muted}>Данные, возвращённые сервисом результата запуска</div>
             </div>
+            <div style={{ ...styles.card, background: "#f9fafb" }}>
+              <b>Правило подсчета:</b>{" "}
+              {experimentRuleLabel(
+                typeof selectedRecord?.experiment_id === "string"
+                  ? experimentMap[String(selectedRecord.experiment_id)]
+                  : null
+              )}
+            </div>
             <div>
               <h4 style={{ marginBottom: 8 }}>Ключевые показатели</h4>
               <SummaryGrid
                 items={[
-                  { label: "Time", value: formatSeconds(canonical.timeSeconds) },
-                  { label: "Memory", value: formatBytes(canonical.memoryBytes) },
-                  { label: "Speed", value: formatSpeed(canonical.speedPerSecond) },
+                  { label: "Время", value: formatSeconds(canonical.timeSeconds) },
+                  { label: "Память", value: formatBytes(canonical.memoryBytes) },
+                  { label: "Скорость", value: formatSpeed(canonical.speedPerSecond) },
                 ]}
               />
             </div>
@@ -909,7 +1028,7 @@ export function ExperimentRunsPage() {
               ) : resultRecord.timings != null ? (
                 <JsonBlock value={resultRecord.timings} />
               ) : (
-                <div style={styles.muted}>Timings отсутствуют</div>
+                <div style={styles.muted}>Временные показатели отсутствуют</div>
               )}
             </div>
 
@@ -926,7 +1045,7 @@ export function ExperimentRunsPage() {
               ) : resultRecord.artifacts != null ? (
                 <JsonBlock value={resultRecord.artifacts} />
               ) : (
-                <div style={styles.muted}>Artifacts отсутствуют</div>
+                <div style={styles.muted}>Артефакты отсутствуют</div>
               )}
             </div>
 

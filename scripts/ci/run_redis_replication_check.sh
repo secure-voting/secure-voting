@@ -4,21 +4,25 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+unset COMPOSE_FILE
+unset COMPOSE_PROFILES
+
 source scripts/ci/common.sh
 
 ARTIFACTS_DIR="$(ci_artifact_dir redis-replication)"
-export COMPOSE_FILE="docker-compose.redis-replication.yml"
+COMPOSE_ARGS=(-f docker-compose.redis-replication.yml)
+export COMPOSE_PROJECT_NAME="secure-voting-redis-repl"
 
 cleanup() {
-  collect_compose_artifacts redis-replication
-  docker compose down -v --remove-orphans || true
+  collect_compose_artifacts redis-replication "${COMPOSE_ARGS[@]}"
+  docker compose "${COMPOSE_ARGS[@]}" down -v --remove-orphans || true
 }
 trap cleanup EXIT
 
 echo "== start redis primary/replica =="
-docker compose up -d
+docker compose "${COMPOSE_ARGS[@]}" up -d
 
-WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose
+WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose "${COMPOSE_ARGS[@]}"
 
 SUFFIX="$(python3 - <<'PY'
 import uuid
@@ -29,7 +33,7 @@ MARKER_KEY="redis_replication_${SUFFIX}"
 MARKER_VALUE="value_${SUFFIX}"
 
 echo "== verify primary accepts writes =="
-docker compose exec -T redis-primary redis-cli -p 6379 SET "$MARKER_KEY" "$MARKER_VALUE" >/dev/null
+docker compose "${COMPOSE_ARGS[@]}" exec -T redis-primary redis-cli -p 6379 SET "$MARKER_KEY" "$MARKER_VALUE" >/dev/null
 
 echo "== wait for replica to receive marker =="
 deadline=$(( $(date +%s) + 60 ))
@@ -37,7 +41,7 @@ REPLICA_VALUE=""
 
 while [[ $(date +%s) -lt $deadline ]]; do
   REPLICA_VALUE="$(
-    docker compose exec -T redis-replica redis-cli -p 6379 --raw GET "$MARKER_KEY" | tr -d '\r'
+    docker compose "${COMPOSE_ARGS[@]}" exec -T redis-replica redis-cli -p 6379 --raw GET "$MARKER_KEY" | tr -d '\r'
   )"
 
   if [[ "$REPLICA_VALUE" == "$MARKER_VALUE" ]]; then
@@ -55,7 +59,7 @@ fi
 echo "== verify replica is read-only =="
 set +e
 READONLY_OUT="$(
-  docker compose exec -T redis-replica redis-cli -p 6379 SET "readonly_${SUFFIX}" "x" 2>&1 | tr -d '\r'
+  docker compose "${COMPOSE_ARGS[@]}" exec -T redis-replica redis-cli -p 6379 SET "readonly_${SUFFIX}" "x" 2>&1 | tr -d '\r'
 )"
 READONLY_RC=$?
 set -e
@@ -71,10 +75,10 @@ fi
 echo "== verify replication role/status =="
 
 PRIMARY_ROLE="$(
-  docker compose exec -T redis-primary redis-cli -p 6379 --raw ROLE | head -n 1 | tr -d '\r'
+  docker compose "${COMPOSE_ARGS[@]}" exec -T redis-primary redis-cli -p 6379 --raw ROLE | head -n 1 | tr -d '\r'
 )"
 REPLICA_ROLE="$(
-  docker compose exec -T redis-replica redis-cli -p 6379 --raw ROLE | head -n 1 | tr -d '\r'
+  docker compose "${COMPOSE_ARGS[@]}" exec -T redis-replica redis-cli -p 6379 --raw ROLE | head -n 1 | tr -d '\r'
 )"
 
 if [[ "$PRIMARY_ROLE" != "master" ]]; then
@@ -90,8 +94,8 @@ fi
 PRIMARY_INFO="$ARTIFACTS_DIR/redis-primary-info.txt"
 REPLICA_INFO="$ARTIFACTS_DIR/redis-replica-info.txt"
 
-docker compose exec -T redis-primary redis-cli -p 6379 INFO replication | tr -d '\r' > "$PRIMARY_INFO"
-docker compose exec -T redis-replica redis-cli -p 6379 INFO replication | tr -d '\r' > "$REPLICA_INFO"
+docker compose "${COMPOSE_ARGS[@]}" exec -T redis-primary redis-cli -p 6379 INFO replication | tr -d '\r' > "$PRIMARY_INFO"
+docker compose "${COMPOSE_ARGS[@]}" exec -T redis-replica redis-cli -p 6379 INFO replication | tr -d '\r' > "$REPLICA_INFO"
 
 if ! grep -q '^connected_slaves:1$' "$PRIMARY_INFO"; then
   echo "primary does not report one connected replica"

@@ -4,14 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+unset COMPOSE_FILE
+unset COMPOSE_PROFILES
+
 source scripts/ci/common.sh
 
-ARTIFACTS_DIR="$(ci_artifact_dir pg-replication)"
-export COMPOSE_FILE="docker-compose.postgres-replication.yml"
+ARTIFACTS_DIR="$(ci_artifact_dir postgres-replication)"
+COMPOSE_ARGS=(-f docker-compose.postgres-replication.yml)
+export COMPOSE_PROJECT_NAME="secure-voting-pg-repl"
 
 cleanup() {
-  collect_compose_artifacts pg-replication
-  docker compose down -v --remove-orphans || true
+  collect_compose_artifacts postgres-replication "${COMPOSE_ARGS[@]}"
+  docker compose "${COMPOSE_ARGS[@]}" down -v --remove-orphans || true
 }
 trap cleanup EXIT
 
@@ -27,13 +31,17 @@ fi
 set -a
 source .env
 : "${POSTGRES_PASSWORD:?missing POSTGRES_PASSWORD}"
+export POSTGRES_REPLICATION_USER="${POSTGRES_REPLICATION_USER:-replicator}"
 export POSTGRES_REPLICATION_PASSWORD="${POSTGRES_REPLICATION_PASSWORD:-replicatorpass}"
+
+export REPLICATION_USER="${REPLICATION_USER:-$POSTGRES_REPLICATION_USER}"
+export REPLICATION_PASSWORD="${REPLICATION_PASSWORD:-$POSTGRES_REPLICATION_PASSWORD}"
 set +a
 
 echo "== start postgres primary/replica =="
-docker compose up -d
+docker compose "${COMPOSE_ARGS[@]}" up -d
 
-WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose
+WAIT_ATTEMPTS=60 WAIT_SLEEP_SECONDS=2 wait_for_compose "${COMPOSE_ARGS[@]}"
 
 echo "== verify primary accepts writes =="
 SUFFIX="$(python3 - <<'PY'
@@ -43,7 +51,7 @@ PY
 )"
 MARKER_EMAIL="pg_replication_${SUFFIX}@local.dev"
 
-docker compose exec -T pg-primary sh -lc "
+docker compose "${COMPOSE_ARGS[@]}" exec -T pg-primary sh -lc "
   export PGPASSWORD='$POSTGRES_PASSWORD'
   psql -h localhost -U admin -d secure-voting -v ON_ERROR_STOP=1 -c \"
     INSERT INTO users (email, password_hash, role)
@@ -57,7 +65,7 @@ REPLICA_COUNT="0"
 
 while [[ $(date +%s) -lt $deadline ]]; do
   REPLICA_COUNT="$(
-    docker compose exec -T pg-replica sh -lc "
+    docker compose "${COMPOSE_ARGS[@]}" exec -T pg-replica sh -lc "
       export PGPASSWORD='$POSTGRES_PASSWORD'
       psql -h localhost -U admin -d secure-voting -t -A -c \"
         SELECT COUNT(*) FROM users WHERE email = '$MARKER_EMAIL';
@@ -80,7 +88,7 @@ fi
 echo "== verify replica is read-only =="
 set +e
 READONLY_OUT="$(
-  docker compose exec -T pg-replica sh -lc "
+  docker compose "${COMPOSE_ARGS[@]}" exec -T pg-replica sh -lc "
     export PGPASSWORD='$POSTGRES_PASSWORD'
     psql -h localhost -U admin -d secure-voting -v ON_ERROR_STOP=1 -c \"
       INSERT INTO users (email, password_hash, role)
@@ -100,7 +108,7 @@ fi
 echo "$READONLY_OUT" > "$ARTIFACTS_DIR/replica-readonly.txt"
 
 echo "== verify streaming replication status on primary =="
-docker compose exec -T pg-primary sh -lc "
+docker compose "${COMPOSE_ARGS[@]}" exec -T pg-primary sh -lc "
   export PGPASSWORD='$POSTGRES_PASSWORD'
   psql -h localhost -U admin -d secure-voting -t -A -c \"
     SELECT application_name || ':' || state

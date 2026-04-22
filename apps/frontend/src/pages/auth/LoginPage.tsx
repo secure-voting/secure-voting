@@ -3,11 +3,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { styles } from "../../shared/ui/styles";
 import { useAuth } from "../../app/auth";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 type FieldErrors = {
   email?: string;
@@ -72,7 +69,6 @@ export function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [rawResp, setRawResp] = useState<unknown>(null);
 
   useEffect(() => {
     if (authed) nav("/dashboard", { replace: true });
@@ -80,14 +76,12 @@ export function LoginPage() {
 
   useEffect(() => {
     setErr(null);
-    setRawResp(null);
     setFieldErrors({});
   }, [mode]);
 
   const submit = async () => {
     setLoading(true);
     setErr(null);
-    setRawResp(null);
 
     try {
       const nextErrors = validateAuthFields({
@@ -108,7 +102,6 @@ export function LoginPage() {
 
       if (mode === "register") {
         const t = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
-        if (IS_DEV) setRawResp({ ok: true, mode: "register" });
         setToken(t);
         addNotification({
           kind: "success",
@@ -117,7 +110,6 @@ export function LoginPage() {
         });
       } else {
         const t = await api.auth.login(normalizedEmail, password, normalizedInviteCode);
-        if (IS_DEV) setRawResp({ ok: true, mode: "login" });
         setToken(t);
         addNotification({
           kind: "success",
@@ -209,22 +201,16 @@ export function LoginPage() {
         </button>
       </div>
 
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Debug</h3>
-          {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>Empty</div>}
+      
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>Информация</h3>
+        <div style={{ ...styles.muted, display: "grid", gap: 8 }}>
+          <div>• После успешного входа открывается рабочий раздел пользователя.</div>
+          <div>• В голосованиях с доступом по приглашению может понадобиться код приглашения.</div>
+          <div>• Самостоятельная регистрация создаёт учётную запись голосующего.</div>
+          <div>• Учётные записи администратора и исследователя настраиваются отдельно.</div>
         </div>
-      ) : (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Информация</h3>
-          <div style={{ ...styles.muted, display: "grid", gap: 8 }}>
-            <div>• После успешного входа открывается рабочий раздел пользователя.</div>
-            <div>• В голосованиях с доступом по приглашению может понадобиться код приглашения.</div>
-            <div>• Самостоятельная регистрация создаёт учётную запись голосующего.</div>
-            <div>• Учётные записи администратора и исследователя настраиваются отдельно.</div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

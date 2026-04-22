@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
+unset COMPOSE_FILE
+unset COMPOSE_PROFILES
+unset COMPOSE_PROJECT_NAME
+
 source scripts/ci/common.sh
 
 ARTIFACTS_DIR="$(ci_artifact_dir integration)"

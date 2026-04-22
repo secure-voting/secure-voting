@@ -27,7 +27,7 @@ write_ext() {
   {
     echo "basicConstraints=CA:FALSE"
     echo "keyUsage = digitalSignature, keyEncipherment"
-    echo "extendedKeyUsage = serverAuth"
+    echo "extendedKeyUsage = serverAuth, clientAuth"
     echo "subjectAltName = @alt_names"
     echo
     echo "[alt_names]"
@@ -111,7 +111,12 @@ gen_server_cert \
 gen_server_cert \
   mongo \
   "/C=NL/ST=Noord-Holland/L=Amsterdam/O=secure-voting/OU=mongo/CN=mongo" \
-  DNS:mongo DNS:mongo-db DNS:localhost IP:127.0.0.1
+  DNS:mongo \
+  DNS:mongo-db \
+  DNS:mongo-secondary \
+  DNS:mongo-db-secondary \
+  DNS:localhost \
+  IP:127.0.0.1
 
 gen_server_cert \
   kafka \
@@ -139,6 +144,13 @@ echo "changeit" > "$OUT/kafka_truststore_creds"
 cat "$OUT/mongo.pem" "$OUT/mongo.key" > "$OUT/mongo.server.pem"
 chmod 600 "$OUT/mongo.server.pem"
 
+MONGO_KEYFILE="$OUT/mongo.keyfile"
+
+openssl rand -base64 512 | tr -d '\n\r' | head -c 768 > "$MONGO_KEYFILE"
+printf '\n' >> "$MONGO_KEYFILE"
+
+chmod 600 "$MONGO_KEYFILE"
+
 echo "OK:"
 echo "  CA:              $CA_PEM"
 echo "  COMPUTE CERT:    $OUT/compute.pem"
@@ -152,6 +164,7 @@ echo "  REDIS KEY:       $OUT/redis.key"
 echo "  MONGO CERT:      $OUT/mongo.pem"
 echo "  MONGO KEY:       $OUT/mongo.key"
 echo "  MONGO SERVER PEM $OUT/mongo.server.pem"
+echo "  MONGO KEYFILE:   $OUT/mongo.keyfile"
 echo "  FRONTEND SAN:    $FRONTEND_TLS_HOSTS"
 echo "  KAFKA CERT:      $OUT/kafka.pem"
 echo "  KAFKA KEY:       $OUT/kafka.key"

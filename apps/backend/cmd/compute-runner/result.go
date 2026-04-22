@@ -32,7 +32,7 @@ func anySliceToStringSlice(in []any) []string {
 	return out
 }
 
-func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, map[string]any, map[string]any) {
+func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, any, map[string]any, map[string]any) {
 	status := strings.TrimSpace(resp.GetStatus())
 	errText := strings.TrimSpace(resp.GetErrorText())
 
@@ -45,35 +45,23 @@ func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, 
 	if len(resp.GetMetricsJson()) > 0 {
 		_ = json.Unmarshal(resp.GetMetricsJson(), &metrics)
 	}
-	if metrics == nil {
-		metrics = map[string]any{}
+
+	var protocol any
+	if len(resp.GetProtocolJson()) > 0 {
+		_ = json.Unmarshal(resp.GetProtocolJson(), &protocol)
 	}
 
 	var timings map[string]any
 	if len(resp.GetTimingsJson()) > 0 {
 		_ = json.Unmarshal(resp.GetTimingsJson(), &timings)
 	}
-	if timings == nil {
-		timings = map[string]any{}
-	}
 
-	artifacts := map[string]any{}
+	var artifacts map[string]any
 	if len(resp.GetArtifactsJson()) > 0 {
-		var a map[string]any
-		if err := json.Unmarshal(resp.GetArtifactsJson(), &a); err == nil && a != nil {
-			for k, v := range a {
-				artifacts[k] = v
-			}
-		}
-	}
-	if len(resp.GetProtocolJson()) > 0 {
-		var p any
-		if err := json.Unmarshal(resp.GetProtocolJson(), &p); err == nil {
-			artifacts["protocol"] = p
-		}
+		_ = json.Unmarshal(resp.GetArtifactsJson(), &artifacts)
 	}
 
-	return status, errText, winners, metrics, timings, artifacts
+	return status, errText, winners, metrics, protocol, timings, artifacts
 }
 
 func makeErrorResult(runID, errText string) worker.ExperimentRunResult {
@@ -93,16 +81,6 @@ func makeErrorResult(runID, errText string) worker.ExperimentRunResult {
 
 func makeDoneResult(runID string, winners []string, metrics, timings, artifacts map[string]any) worker.ExperimentRunResult {
 	runID = strings.TrimSpace(runID)
-
-	if metrics == nil {
-		metrics = map[string]any{}
-	}
-	if timings == nil {
-		timings = map[string]any{}
-	}
-	if artifacts == nil {
-		artifacts = map[string]any{}
-	}
 
 	return worker.ExperimentRunResult{
 		Kind:      resultKind,
@@ -140,26 +118,14 @@ func makeElectionErrorResult(task worker.ElectionTallyTask, errText string) work
 	}
 }
 
-func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, metrics, timings, artifacts map[string]any) worker.ElectionTallyResult {
-	if metrics == nil {
-		metrics = map[string]any{}
-	}
-	if timings == nil {
-		timings = map[string]any{}
-	}
-	if artifacts == nil {
-		artifacts = map[string]any{}
-	}
-
-	protocol := map[string]any{}
-	if rawProtocol, ok := artifacts["protocol"]; ok && rawProtocol != nil {
-		if p, ok := rawProtocol.(map[string]any); ok {
-			protocol = p
-		} else {
-			protocol["raw"] = rawProtocol
-		}
-	}
-
+func makeElectionDoneResult(
+	task worker.ElectionTallyTask,
+	winners []string,
+	metrics map[string]any,
+	protocol any,
+	timings map[string]any,
+	artifacts map[string]any,
+) worker.ElectionTallyResult {
 	var approvalMax *int32
 	if task.ApprovalMaxChoices != nil {
 		v := int32(*task.ApprovalMaxChoices)

@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { ResultResp } from "../../shared/api/types";
+import type { ElectionDetail, ResultResp } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
@@ -15,8 +14,6 @@ import {
   downloadPdfTextFile,
   downloadXlsxFile,
 } from "../../shared/utils/export";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 function compactValue(value: unknown): string {
   if (typeof value === "string") return value;
@@ -32,7 +29,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function extractWinnerList(winners: unknown): string[] {
+function isEmptyObject(value: unknown): boolean {
+  return isObject(value) && Object.keys(value).length === 0;
+}
+
+function extractWinnerIdList(winners: unknown): string[] {
   if (Array.isArray(winners)) {
     return winners.map((item) => compactValue(item));
   }
@@ -56,30 +57,140 @@ function extractWinnerList(winners: unknown): string[] {
   return [];
 }
 
-function summaryItemsFromObject(value: unknown): Array<{ label: string; value: React.ReactNode }> {
+function metricLabel(key: string): string {
+  switch (key) {
+    case "total_ballots":
+      return "Всего бюллетеней";
+    case "valid_ballots":
+      return "Корректных бюллетеней";
+    case "invalid_ballots":
+      return "Некорректных бюллетеней";
+    case "candidates_count":
+      return "Число кандидатов";
+    case "winner_count":
+      return "Число победителей";
+    case "committee_size":
+      return "Размер комитета";
+    case "rounds_count":
+      return "Число раундов";
+    case "winner_score":
+      return "Баллы победителя";
+    case "runner_up_score":
+      return "Баллы второго места";
+    case "margin":
+      return "Отрыв";
+    case "average_score":
+      return "Средний балл";
+    default:
+      return key;
+  }
+}
+
+function paramLabel(key: string): string {
+  switch (key) {
+    case "tally_rule":
+      return "Правило подсчета";
+    case "ballot_format":
+      return "Формат бюллетеня";
+    case "committee_size":
+      return "Размер комитета";
+    case "quota_type":
+      return "Тип квоты";
+    case "approval_max_choices":
+      return "Лимит выбора";
+    case "ranking_top_k":
+      return "Ограничение top-k";
+    case "score_min":
+      return "Минимальная оценка";
+    case "score_max":
+      return "Максимальная оценка";
+    case "score_step":
+      return "Шаг оценки";
+    case "score_allow_skip":
+      return "Разрешить пропуск";
+    case "show_aggregates":
+      return "Показывать агрегаты";
+    default:
+      return key;
+  }
+}
+
+function formatParamValue(key: string, value: unknown): string {
+  if (key === "show_aggregates" || key === "score_allow_skip") {
+    return value ? "Да" : "Нет";
+  }
+  return compactValue(value);
+}
+
+function summaryItemsFromMetrics(value: unknown): Array<{ label: string; value: React.ReactNode }> {
   if (!isObject(value)) return [];
 
-  return Object.entries(value)
+  const summary = isObject(value.summary) ? value.summary : value;
+
+  return Object.entries(summary)
+    .filter(([, val]) => val != null && !(isObject(val) && Object.keys(val).length === 0))
     .slice(0, 12)
     .map(([key, val]) => ({
-      label: key,
+      label: metricLabel(key),
       value: compactValue(val),
     }));
 }
 
-function numericItemsFromObject(value: unknown): Array<{ label: string; value: number }> {
+function paramsItems(value: unknown): Array<{ label: string; value: React.ReactNode }> {
   if (!isObject(value)) return [];
 
   return Object.entries(value)
-    .filter(([, val]) => typeof val === "number" && Number.isFinite(val))
-    .slice(0, 12)
+    .filter(([, val]) => val != null)
     .map(([key, val]) => ({
-      label: key,
-      value: Number(val),
+      label: paramLabel(key),
+      value: formatParamValue(key, val),
     }));
 }
 
-function resultRows(result: ResultResp): Array<Record<string, unknown>> {
+function numericItemsFromMetrics(value: unknown): Array<{ label: string; value: number }> {
+  if (!isObject(value)) return [];
+
+  const series = isObject(value.series) ? value.series : null;
+  const numeric = isObject(value.numeric) ? value.numeric : null;
+
+  if (series && Array.isArray(series.candidate_scores_final)) {
+    return series.candidate_scores_final
+      .filter((item) => isObject(item) && typeof item.value === "number" && Number.isFinite(item.value))
+      .map((item) => ({
+        label:
+          typeof item.candidate_name === "string" && item.candidate_name.trim()
+            ? item.candidate_name.trim()
+            : typeof item.candidate_id === "string" && item.candidate_id.trim()
+              ? item.candidate_id.trim()
+              : "Кандидат",
+        value: Number(item.value),
+      }));
+  }
+
+  if (numeric) {
+    return Object.entries(numeric)
+      .filter(([, val]) => typeof val === "number" && Number.isFinite(val))
+      .slice(0, 12)
+      .map(([key, val]) => ({
+        label: metricLabel(key),
+        value: Number(val),
+      }));
+  }
+
+  return [];
+}
+
+function hasDisplayableProtocol(protocol: unknown): boolean {
+  if (protocol == null) return false;
+  if (Array.isArray(protocol)) return protocol.length > 0;
+  if (isObject(protocol)) {
+    if (Array.isArray(protocol.steps)) return protocol.steps.length > 0;
+    return Object.keys(protocol).length > 0;
+  }
+  return true;
+}
+
+function resultRows(result: ResultResp, winnerLabels: string[]) {
   const rows: Array<Record<string, unknown>> = [];
 
   rows.push(
@@ -89,7 +200,7 @@ function resultRows(result: ResultResp): Array<Record<string, unknown>> {
     { section: "summary", key: "published_at", value: result.published_at ?? "" }
   );
 
-  extractWinnerList(result.winners).forEach((winner, index) => {
+  winnerLabels.forEach((winner, index) => {
     rows.push({
       section: "winners",
       key: index + 1,
@@ -97,94 +208,27 @@ function resultRows(result: ResultResp): Array<Record<string, unknown>> {
     });
   });
 
-  if (isObject(result.metrics)) {
-    Object.entries(result.metrics).forEach(([key, value]) => {
-      rows.push({
-        section: "metrics",
-        key,
-        value: compactValue(value),
-      });
-    });
-  }
-
-  if (isObject(result.params)) {
-    Object.entries(result.params).forEach(([key, value]) => {
-      rows.push({
-        section: "params",
-        key,
-        value: compactValue(value),
-      });
-    });
-  }
-
-  if (isObject(result.protocol)) {
-    Object.entries(result.protocol).forEach(([key, value]) => {
-      rows.push({
-        section: "protocol",
-        key,
-        value: compactValue(value),
-      });
-    });
-  }
-
   return rows;
 }
 
-function buildResultReportText(result: ResultResp) {
-  const winners = extractWinnerList(result.winners);
+function buildResultReportText(result: ResultResp, winnerLabels: string[]) {
   const lines: string[] = [];
 
-  lines.push("Election result report");
+  lines.push("Отчет по результатам голосования");
   lines.push("");
-
-  lines.push("Summary:");
-  lines.push(`- election_id: ${compactValue(result.election_id)}`);
-  lines.push(`- version: ${compactValue(result.version)}`);
-  lines.push(`- method: ${compactValue(result.method)}`);
-  lines.push(`- published_at: ${compactValue(result.published_at ?? "—")}`);
+  lines.push(`ID голосования: ${compactValue(result.election_id)}`);
+  lines.push(`Версия результата: ${compactValue(result.version)}`);
+  lines.push(`Метод: ${compactValue(result.method)}`);
+  lines.push(`Опубликовано: ${compactValue(result.published_at ?? "—")}`);
   lines.push("");
-
-  lines.push("Winners:");
-  if (winners.length > 0) {
-    winners.forEach((winner, index) => {
+  lines.push("Победители:");
+  if (winnerLabels.length > 0) {
+    winnerLabels.forEach((winner, index) => {
       lines.push(`${index + 1}. ${winner}`);
     });
   } else {
     lines.push("—");
   }
-  lines.push("");
-
-  lines.push("Metrics:");
-  if (isObject(result.metrics) && Object.keys(result.metrics).length > 0) {
-    Object.entries(result.metrics).forEach(([key, value]) => {
-      lines.push(`- ${key}: ${compactValue(value)}`);
-    });
-  } else {
-    lines.push("—");
-  }
-  lines.push("");
-
-  lines.push("Params:");
-  if (isObject(result.params) && Object.keys(result.params).length > 0) {
-    Object.entries(result.params).forEach(([key, value]) => {
-      lines.push(`- ${key}: ${compactValue(value)}`);
-    });
-  } else {
-    lines.push("—");
-  }
-  lines.push("");
-
-  lines.push("Protocol:");
-  if (result.protocol != null) {
-    try {
-      lines.push(JSON.stringify(result.protocol, null, 2));
-    } catch {
-      lines.push(String(result.protocol));
-    }
-  } else {
-    lines.push("—");
-  }
-  lines.push("");
 
   return `${lines.join("\n")}`;
 }
@@ -195,6 +239,7 @@ export function ResultsPage() {
   const { token, setToken } = useAuth();
 
   const [res, setRes] = useState<ResultResp | null>(null);
+  const [detail, setDetail] = useState<ElectionDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -213,20 +258,25 @@ export function ResultsPage() {
     setInfo(null);
 
     try {
-      const r = await api.results.get(token, electionId, ac.signal);
-      setRes(r);
+      const [resultData, electionDetail] = await Promise.all([
+        api.results.get(token, electionId, ac.signal),
+        api.elections.get(token, electionId, ac.signal).catch(() => null),
+      ]);
+      setRes(resultData);
+      setDetail(electionDetail);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (e?.status === 401) {
         setToken(null);
       } else if (e?.status === 403) {
-        setInfo("Результаты ещё не опубликованы");
+        setInfo("Результаты еще не опубликованы");
       } else if (e?.status === 404) {
         setInfo("Результаты пока недоступны");
       } else {
         setErr(e?.message || "Не удалось загрузить результаты");
       }
       setRes(null);
+      setDetail(null);
     } finally {
       setLoading(false);
     }
@@ -237,10 +287,32 @@ export function ResultsPage() {
     return () => abortRef.current?.abort();
   }, [reload]);
 
-  const winners = useMemo(() => extractWinnerList(res?.winners), [res?.winners]);
-  const metricsSummary = useMemo(() => summaryItemsFromObject(res?.metrics), [res?.metrics]);
-  const paramsSummary = useMemo(() => summaryItemsFromObject(res?.params), [res?.params]);
-  const metricChartItems = useMemo(() => numericItemsFromObject(res?.metrics), [res?.metrics]);
+  const candidateNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!detail?.candidates) return map;
+    for (const candidate of detail.candidates) {
+      if (candidate?.id && candidate?.name) {
+        map.set(String(candidate.id), String(candidate.name));
+      }
+    }
+    return map;
+  }, [detail]);
+
+  const winnerIds = useMemo(() => extractWinnerIdList(res?.winners), [res?.winners]);
+
+  const winnerLabels = useMemo(
+    () =>
+      winnerIds.map((winnerId) => {
+        const name = candidateNameById.get(winnerId);
+        return name ? name : winnerId;
+      }),
+    [winnerIds, candidateNameById]
+  );
+
+  const metricsSummary = useMemo(() => summaryItemsFromMetrics(res?.metrics), [res?.metrics]);
+  const paramsSummary = useMemo(() => paramsItems(res?.params), [res?.params]);
+  const metricChartItems = useMemo(() => numericItemsFromMetrics(res?.metrics), [res?.metrics]);
+  const showProtocolBlock = hasDisplayableProtocol(res?.protocol);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -271,31 +343,31 @@ export function ResultsPage() {
                   style={styles.btn}
                   onClick={() => downloadJsonFile(`election-result-${electionId}.json`, res)}
                 >
-                  Export JSON
+                  Экспорт JSON
                 </button>
                 <button
                   style={styles.btn}
                   onClick={() =>
                     downloadXlsxFile(
                       `election-result-${electionId}.xlsx`,
-                      resultRows(res),
-                      "Results"
+                      resultRows(res, winnerLabels),
+                      "Результаты"
                     )
                   }
                 >
-                  Export XLSX
+                  Экспорт XLSX
                 </button>
                 <button
                   style={styles.btn}
                   onClick={() =>
                     downloadPdfTextFile(
                       `election-result-${electionId}.pdf`,
-                      "Election result report",
-                      buildResultReportText(res)
+                      "Отчет по результатам голосования",
+                      buildResultReportText(res, winnerLabels)
                     )
                   }
                 >
-                  Export PDF
+                  Экспорт PDF
                 </button>
               </>
             ) : null}
@@ -315,18 +387,18 @@ export function ResultsPage() {
         {res ? (
           <>
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Badge text={`method: ${res.method}`} />
-              <Badge text={`version: ${String(res.version)}`} />
-              <Badge text={`published_at: ${res.published_at ?? "null"}`} />
+              <Badge text={`Метод: ${res.method}`} />
+              <Badge text={`Версия: ${String(res.version)}`} />
+              <Badge text={`Опубликовано: ${res.published_at ?? "—"}`} />
             </div>
 
             <hr style={styles.hr} />
 
             <h3 style={{ marginTop: 0 }}>Победители</h3>
-            {winners.length > 0 ? (
+            {winnerLabels.length > 0 ? (
               <div style={{ ...styles.card, background: "#f9fafb" }}>
                 <ol style={{ margin: "0 0 0 18px" }}>
-                  {winners.map((winner, index) => (
+                  {winnerLabels.map((winner, index) => (
                     <li key={`${winner}-${index}`} style={{ marginBottom: 6 }}>
                       {winner}
                     </li>
@@ -344,10 +416,8 @@ export function ResultsPage() {
                 <h3 style={{ marginTop: 0 }}>Сводные показатели</h3>
                 {metricsSummary.length > 0 ? (
                   <SummaryGrid items={metricsSummary} />
-                ) : res.metrics != null ? (
-                  <JsonBlock value={res.metrics} />
                 ) : (
-                  <div style={styles.muted}>Сводные показатели не предоставлены</div>
+                  <div style={styles.muted}>Дополнительные метрики не предоставлены</div>
                 )}
               </div>
 
@@ -361,32 +431,23 @@ export function ResultsPage() {
             <hr style={styles.hr} />
 
             <h3 style={{ marginTop: 0 }}>Протокол шагов</h3>
-            {res.protocol != null ? (
+            {showProtocolBlock ? (
               <ProtocolTimeline protocol={res.protocol} />
             ) : (
-              <div style={styles.muted}>Протокол шагов отсутствует</div>
+              <div style={styles.muted}>Подробный протокол для данного метода отсутствует</div>
             )}
 
             <hr style={styles.hr} />
 
-            <h3 style={{ marginTop: 0 }}>Параметры расчёта</h3>
+            <h3 style={{ marginTop: 0 }}>Параметры расчета</h3>
             {paramsSummary.length > 0 ? (
               <SummaryGrid items={paramsSummary} />
-            ) : res.params != null ? (
-              <JsonBlock value={res.params} />
             ) : (
-              <div style={styles.muted}>Параметры расчёта не указаны</div>
+              <div style={styles.muted}>Параметры расчета не указаны</div>
             )}
           </>
         ) : null}
       </div>
-
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Results JSON</h3>
-          {res ? <JsonBlock value={res} /> : <div style={styles.muted}>Empty</div>}
-        </div>
-      ) : null}
     </div>
   );
 }

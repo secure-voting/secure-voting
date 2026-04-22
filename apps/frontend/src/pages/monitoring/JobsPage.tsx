@@ -5,7 +5,6 @@ import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { styles } from "../../shared/ui/styles";
 import {
   downloadCsvFile,
@@ -13,8 +12,6 @@ import {
   downloadPdfTextFile,
   downloadXlsxFile,
 } from "../../shared/utils/export";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 function str(v: unknown) {
   if (v == null) return "";
@@ -39,6 +36,38 @@ function nowTimeLabel() {
   return d.toLocaleTimeString();
 }
 
+function kindLabel(kind: string) {
+  switch (kind) {
+    case "tally":
+      return "Расчет результата";
+    case "experiment_run":
+      return "Запуск эксперимента";
+    case "import_dataset":
+      return "Импорт набора данных";
+    case "generate_dataset":
+      return "Генерация набора данных";
+    case "report":
+      return "Формирование отчета";
+    default:
+      return kind;
+  }
+}
+
+function statusLabel(status: string) {
+  switch (status) {
+    case "queued":
+      return "В очереди";
+    case "running":
+      return "Выполняется";
+    case "done":
+      return "Завершена";
+    case "error":
+      return "Ошибка";
+    default:
+      return status;
+  }
+}
+
 function jobsCsvRows(items: JobItem[]) {
   return items.map((job, index) => ({
     id: idOf(job, index),
@@ -55,20 +84,6 @@ function jobsCsvRows(items: JobItem[]) {
     experiment_id: str((job as any)?.experiment_id),
     experiment_run_id: str((job as any)?.experiment_run_id),
     error_text: str((job as any)?.error_text),
-    payload: (() => {
-      try {
-        return JSON.stringify((job as any)?.payload ?? "");
-      } catch {
-        return str((job as any)?.payload);
-      }
-    })(),
-    result_ref: (() => {
-      try {
-        return JSON.stringify((job as any)?.result_ref ?? "");
-      } catch {
-        return str((job as any)?.result_ref);
-      }
-    })(),
   }));
 }
 
@@ -81,25 +96,24 @@ function buildJobsReportText(
 ) {
   const lines: string[] = [];
 
-  lines.push("Jobs report");
+  lines.push("Отчет по задачам");
   lines.push("");
-
-  lines.push("Filters:");
-  lines.push(`- status: ${filters.statusFilter || "—"}`);
-  lines.push(`- kind: ${filters.kindFilter || "—"}`);
+  lines.push("Фильтры:");
+  lines.push(`- статус: ${filters.statusFilter || "—"}`);
+  lines.push(`- тип: ${filters.kindFilter || "—"}`);
   lines.push("");
-
-  lines.push(`Total jobs: ${items.length}`);
+  lines.push(`Всего задач: ${items.length}`);
   lines.push("");
 
   items.forEach((job, index) => {
     lines.push(
-      `${index + 1}. id=${idOf(job, index)} kind=${kindOf(job)} status=${statusOf(job)} created_at=${str((job as any)?.created_at)}`
+      `${index + 1}. id=${idOf(job, index)} тип=${kindLabel(kindOf(job))} статус=${statusLabel(
+        statusOf(job)
+      )} создано=${str((job as any)?.created_at)}`
     );
   });
 
   lines.push("");
-
   return `${lines.join("\n")}`;
 }
 
@@ -120,7 +134,6 @@ export function JobsPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<number | null>(null);
-
   const prevStatusRef = useRef<Map<string, string>>(new Map());
 
   const load = useCallback(
@@ -131,9 +144,7 @@ export function JobsPage() {
       const ac = new AbortController();
       abortRef.current = ac;
 
-      if (!silent) {
-        setLoading(true);
-      }
+      if (!silent) setLoading(true);
       setErr(null);
 
       try {
@@ -162,20 +173,19 @@ export function JobsPage() {
               addNotification({
                 kind: "success",
                 title: "Задача завершена",
-                message: `${kindOf(job)} · ${id}`,
+                message: `${kindLabel(kindOf(job))} · ${id}`,
               });
             } else if (nextStatus === "error") {
               addNotification({
                 kind: "error",
                 title: "Ошибка выполнения задачи",
-                message: `${kindOf(job)} · ${id}`,
+                message: `${kindLabel(kindOf(job))} · ${id}`,
               });
             }
           }
         });
 
         prevStatusRef.current = nextMap;
-
         setItems(list);
         setLastUpdatedAt(nowTimeLabel());
       } catch (e: any) {
@@ -187,9 +197,7 @@ export function JobsPage() {
         }
         setItems([]);
       } finally {
-        if (!silent) {
-          setLoading(false);
-        }
+        if (!silent) setLoading(false);
       }
     },
     [token, statusFilter, kindFilter, setToken, addNotification]
@@ -234,13 +242,13 @@ export function JobsPage() {
   }, [items]);
 
   const exportXlsx = useCallback(() => {
-    downloadXlsxFile("jobs.xlsx", jobsCsvRows(items), "Jobs");
+    downloadXlsxFile("jobs.xlsx", jobsCsvRows(items), "Задачи");
   }, [items]);
 
   const exportPdf = useCallback(() => {
     downloadPdfTextFile(
       "jobs-report.pdf",
-      "Jobs report",
+      "Отчет по задачам",
       buildJobsReportText(items, {
         statusFilter,
         kindFilter,
@@ -256,22 +264,22 @@ export function JobsPage() {
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
-          <h2 style={{ margin: 0 }}>Jobs</h2>
+          <h2 style={{ margin: 0 }}>Задачи</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button style={styles.btn} onClick={() => load(false)} disabled={loading}>
               Обновить
             </button>
             <button style={styles.btn} onClick={exportCsv} disabled={items.length === 0}>
-              Export CSV
+              Экспорт CSV
             </button>
             <button style={styles.btn} onClick={exportXlsx} disabled={items.length === 0}>
-              Export XLSX
+              Экспорт XLSX
             </button>
             <button style={styles.btn} onClick={exportJson} disabled={items.length === 0}>
-              Export JSON
+              Экспорт JSON
             </button>
             <button style={styles.btn} onClick={exportPdf} disabled={items.length === 0}>
-              Export PDF
+              Экспорт PDF
             </button>
           </div>
         </div>
@@ -280,11 +288,11 @@ export function JobsPage() {
 
         <div style={{ marginTop: 12, ...styles.grid2 }}>
           <div>
-            <label>Status filter</label>
+            <label>Фильтр по статусу</label>
             <input style={styles.input} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} />
           </div>
           <div>
-            <label>Kind filter</label>
+            <label>Фильтр по типу</label>
             <input style={styles.input} value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} />
           </div>
         </div>
@@ -316,7 +324,7 @@ export function JobsPage() {
 
         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {Object.entries(counters).map(([k, v]) => (
-            <Badge key={k} text={`${k}: ${v}`} />
+            <Badge key={k} text={`${statusLabel(k)}: ${v}`} />
           ))}
         </div>
 
@@ -347,22 +355,28 @@ export function JobsPage() {
                 <div key={id} style={{ ...styles.card, padding: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 700 }}>{kind}</div>
+                      <div style={{ fontWeight: 700 }}>{kindLabel(kind)}</div>
                       <div style={styles.muted}>{id}</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Badge text={status} />
-                      {hasProgress ? <Badge text={`progress: ${progress}%`} /> : null}
+                      <Badge text={statusLabel(status)} />
+                      {hasProgress ? <Badge text={`Прогресс: ${progress}%`} /> : null}
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                    created_at: {createdAt || "—"} · started_at: {startedAt || "—"} · finished_at: {finishedAt || "—"}
+                    создано: {createdAt || "—"} · запущено: {startedAt || "—"} · завершено: {finishedAt || "—"}
                   </div>
+
+                  {kind === "tally" && status === "done" ? (
+                    <div style={{ marginTop: 10, ...styles.muted }}>
+                      Расчет результата завершен. Если голосование еще не опубликовано, результат готов к публикации.
+                    </div>
+                  ) : null}
 
                   {status === "error" && errorText ? (
                     <div style={{ marginTop: 10, ...styles.card, background: "#fff1f2", borderColor: "#fecaca", color: "#7f1d1d" }}>
-                      <b>error:</b> {errorText}
+                      <b>Ошибка:</b> {errorText}
                     </div>
                   ) : null}
                 </div>
@@ -371,13 +385,6 @@ export function JobsPage() {
           </div>
         )}
       </div>
-
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Debug JSON</h3>
-          <JsonBlock value={items} />
-        </div>
-      ) : null}
     </div>
   );
 }

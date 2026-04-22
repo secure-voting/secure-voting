@@ -6,28 +6,29 @@ import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { styles } from "../../shared/ui/styles";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 function helperText(meta: BallotMeta | null) {
   if (!meta) return "";
+
   if (meta.ballot_format === "approval") {
     if (meta.approval_max_choices != null) {
-      return `Выберите не более ${meta.approval_max_choices} кандидатов`;
+      return `Выберите не более ${meta.approval_max_choices} кандидатов.`;
     }
-    return "Выберите поддерживаемых кандидатов";
+    return "Выберите поддерживаемых кандидатов.";
   }
+
   if (meta.ballot_format === "ranking") {
     if (meta.ranking_top_k != null) {
-      return `Распределите кандидатов по позициям от 1 до ${meta.ranking_top_k}. Можно заполнить только первые места.`;
+      return `Распределите кандидатов по позициям от 1 до ${meta.ranking_top_k} без пропусков между заполненными местами.`;
     }
-    return "Распределите кандидатов по позициям в порядке предпочтения";
+    return "Распределите кандидатов по позициям в порядке предпочтения.";
   }
+
   if (meta.ballot_format === "score") {
-    return `Допустимый диапазон оценок: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"}, шаг ${meta.score_step ?? "?"}`;
+    return `Допустимый диапазон оценок: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"}, шаг ${meta.score_step ?? "?"}.`;
   }
+
   return "";
 }
 
@@ -38,6 +39,42 @@ function buildInitialRankingSlots(meta: BallotMeta): string[] {
       : meta.candidates.length;
 
   return Array.from({ length: slotsCount }, () => "");
+}
+
+function ballotFormatLabel(value?: string) {
+  switch (value) {
+    case "approval":
+      return "Одобрение";
+    case "ranking":
+      return "Ранжирование";
+    case "score":
+      return "Оценивание";
+    default:
+      return value || "—";
+  }
+}
+
+function ballotStatusLabel(value?: string) {
+  switch (value) {
+    case "accepted":
+      return "Голос учтен";
+    case "draft":
+      return "Черновик";
+    case "rejected":
+      return "Отклонен";
+    default:
+      return value || "—";
+  }
+}
+
+function ruleLabel(value?: string) {
+  return value || "—";
+}
+
+function candidateDescription(meta?: Record<string, unknown> | null) {
+  if (!meta || typeof meta !== "object") return "";
+  const value = meta.description;
+  return typeof value === "string" ? value : "";
 }
 
 export function VotePage() {
@@ -55,7 +92,6 @@ export function VotePage() {
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [submitResp, setSubmitResp] = useState<unknown>(null);
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -68,7 +104,6 @@ export function VotePage() {
 
     setLoading(true);
     setErr(null);
-    setSubmitResp(null);
 
     try {
       const m = await api.elections.ballotMeta(token, electionId, ac.signal);
@@ -84,7 +119,10 @@ export function VotePage() {
       }
     } catch (e: any) {
       if (e?.name === "AbortError") return;
-      if (e?.status === 401) setToken(null);
+      if (e?.status === 401) {
+        setToken(null);
+        return;
+      }
       setErr(e?.message || "Не удалось загрузить бюллетень");
       setMeta(null);
       setMy(null);
@@ -171,7 +209,7 @@ export function VotePage() {
   }, [rankingSlots]);
 
   const validateBeforeSubmit = (): string | null => {
-    if (!meta) return "Нет метаданных бюллетеня";
+    if (!meta) return "Нет данных бюллетеня";
 
     if (meta.ballot_format === "approval") {
       if (approvalSet.length === 0) return "Выберите хотя бы одного кандидата";
@@ -185,12 +223,12 @@ export function VotePage() {
 
       const topK = meta.ranking_top_k ?? null;
       if (topK != null && topK > 0 && ranking.length > topK) {
-        return "Превышен top-k";
+        return "Превышено допустимое число позиций";
       }
 
       const uniq = new Set(ranking);
       if (uniq.size !== ranking.length) {
-        return "В ранжировании есть повторы";
+        return "В ранжировании есть повторяющиеся кандидаты";
       }
 
       for (let i = 0; i < rankingSlots.length; i += 1) {
@@ -211,7 +249,7 @@ export function VotePage() {
       const step = meta.score_step;
 
       if (min == null || max == null || step == null || step <= 0) {
-        return "Некорректные параметры оценки";
+        return "Некорректные параметры оценивания";
       }
 
       for (const c of meta.candidates) {
@@ -221,8 +259,8 @@ export function VotePage() {
           return "Заполните все оценки";
         }
         if (!Number.isFinite(v)) return "Некорректное значение оценки";
-        if (v < min || v > max) return "Оценка вне диапазона";
-        if ((v - min) % step !== 0) return "Оценка не соответствует шагу";
+        if (v < min || v > max) return "Оценка вне допустимого диапазона";
+        if ((v - min) % step !== 0) return "Оценка не соответствует заданному шагу";
       }
 
       return null;
@@ -242,7 +280,6 @@ export function VotePage() {
 
     setLoading(true);
     setErr(null);
-    setSubmitResp(null);
 
     try {
       const body: Record<string, unknown> = {};
@@ -265,14 +302,12 @@ export function VotePage() {
         body.scores = out;
       }
 
-      const resp = await api.ballots.submit(
+      await api.ballots.submit(
         token,
         electionId,
         body,
         api.ballots.newIdempotencyKey()
       );
-
-      if (IS_DEV) setSubmitResp(resp);
 
       addNotification({
         kind: "success",
@@ -282,14 +317,17 @@ export function VotePage() {
 
       await reload();
     } catch (e: any) {
-      if (e?.status === 401) setToken(null);
+      if (e?.status === 401) {
+        setToken(null);
+        return;
+      }
 
       if (e?.code === "already_submitted") {
         setErr("Голос уже отправлен");
       } else if (e?.code === "election_not_active" || e?.code === "not_active") {
         setErr("Голосование сейчас недоступно");
       } else if (e?.code === "idempotency_in_progress") {
-        setErr("Запрос уже обрабатывается, попробуйте ещё раз");
+        setErr("Запрос уже обрабатывается, попробуйте еще раз");
       } else {
         setErr(e?.message || "Не удалось отправить бюллетень");
       }
@@ -330,6 +368,7 @@ export function VotePage() {
             justifyContent: "space-between",
             gap: 10,
             alignItems: "baseline",
+            flexWrap: "wrap",
           }}
         >
           <h2 style={{ margin: 0 }}>Заполнение бюллетеня</h2>
@@ -351,26 +390,26 @@ export function VotePage() {
 
         {my ? (
           <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <Badge text={`status: ${my.status}`} />
-            {my.submitted_at ? <span style={styles.muted}>submitted_at: {my.submitted_at}</span> : null}
-            {my.updated_at ? <span style={styles.muted}>updated_at: {my.updated_at}</span> : null}
+            <Badge text={`Состояние: ${ballotStatusLabel(my.status)}`} />
+            {my.submitted_at ? <span style={styles.muted}>Отправлено: {my.submitted_at}</span> : null}
+            {my.updated_at ? <span style={styles.muted}>Обновлено: {my.updated_at}</span> : null}
           </div>
         ) : null}
 
         {meta ? (
           <>
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Badge text={`format: ${meta.ballot_format}`} />
-              <Badge text={`rule: ${meta.tally_rule}`} />
+              <Badge text={`Формат: ${ballotFormatLabel(meta.ballot_format)}`} />
+              <Badge text={`Правило: ${ruleLabel(meta.tally_rule)}`} />
               {meta.ballot_format === "approval" && meta.approval_max_choices != null ? (
-                <Badge text={`max: ${meta.approval_max_choices}`} />
+                <Badge text={`Максимум выборов: ${meta.approval_max_choices}`} />
               ) : null}
               {meta.ballot_format === "ranking" && meta.ranking_top_k != null ? (
-                <Badge text={`top-k: ${meta.ranking_top_k}`} />
+                <Badge text={`Максимум позиций: ${meta.ranking_top_k}`} />
               ) : null}
               {meta.ballot_format === "score" ? (
                 <Badge
-                  text={`score: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"} step ${meta.score_step ?? "?"} skip ${String(meta.score_allow_skip)}`}
+                  text={`Оценки: ${meta.score_min ?? "?"}..${meta.score_max ?? "?"}, шаг ${meta.score_step ?? "?"}, пропуск ${meta.score_allow_skip ? "разрешен" : "запрещен"}`}
                 />
               ) : null}
             </div>
@@ -385,42 +424,41 @@ export function VotePage() {
 
             {meta.ballot_format === "approval" ? (
               <>
-                <h3 style={{ marginTop: 0 }}>Одобрительный бюллетень</h3>
-                {approvalRemaining != null ? (
-                  <div style={styles.muted}>Осталось доступных отметок: {approvalRemaining}</div>
-                ) : null}
+                <div style={{ marginBottom: 10 }}>
+                  <b>Выбор кандидатов</b>
+                  {approvalRemaining != null ? (
+                    <div style={{ ...styles.muted, marginTop: 4 }}>
+                      Осталось отметить: {approvalRemaining}
+                    </div>
+                  ) : null}
+                </div>
 
-                <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gap: 8 }}>
                   {meta.candidates.map((c) => {
                     const checked = approvalSet.includes(c.id);
-                    const max = meta.approval_max_choices ?? null;
-                    const disabled =
-                      !checked && max != null && max > 0 && approvalSet.length >= max;
-
                     return (
                       <label
                         key={c.id}
                         style={{
+                          ...styles.card,
+                          padding: 10,
                           display: "flex",
                           gap: 10,
-                          alignItems: "center",
-                          padding: 10,
-                          border: "1px solid #e5e7eb",
-                          borderRadius: 12,
-                          cursor: disabled ? "not-allowed" : "pointer",
-                          userSelect: "none",
-                          opacity: disabled ? 0.6 : 1,
+                          alignItems: "flex-start",
+                          cursor: "pointer",
                         }}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={disabled}
                           onChange={() => toggleApproval(c.id)}
+                          disabled={loading || !canSubmit}
                         />
-                        <div style={{ flex: 1 }}>
-                          <b>{c.name}</b>
-                          <div style={styles.muted}>{c.id}</div>
+                        <div>
+                          <div style={{ fontWeight: 700 }}>{c.name}</div>
+                          {candidateDescription(c.meta) ? (
+                            <div style={{ marginTop: 4, ...styles.muted }}>{candidateDescription(c.meta)}</div>
+                          ) : null}
                         </div>
                       </label>
                     );
@@ -431,118 +469,81 @@ export function VotePage() {
 
             {meta.ballot_format === "ranking" ? (
               <>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    alignItems: "baseline",
-                    flexWrap: "wrap",
-                  }}
-                >
+                <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <div>
-                    <h3 style={{ marginTop: 0, marginBottom: 6 }}>Ранжированный бюллетень</h3>
+                    <b>Ранжирование кандидатов</b>
                     {rankingRemaining != null ? (
-                      <div style={styles.muted}>Осталось незаполненных позиций: {rankingRemaining}</div>
+                      <div style={{ ...styles.muted, marginTop: 4 }}>
+                        Осталось заполнить позиций: {rankingRemaining}
+                      </div>
                     ) : null}
                   </div>
 
-                  <button style={styles.btn} onClick={clearRankingAll} type="button">
-                    Очистить всё
+                  <button style={styles.btn} type="button" onClick={clearRankingAll} disabled={loading || !canSubmit}>
+                    Очистить все
                   </button>
                 </div>
 
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
-                  {rankingSlots.map((candidateId, index) => {
-                    const currentValue = candidateId || "";
-                    const options = meta.candidates.filter((candidate) => {
-                      if (candidate.id === currentValue) return true;
-                      return !usedRankingCandidateIds.has(candidate.id);
-                    });
+                <div style={{ display: "grid", gap: 10 }}>
+                  {rankingSlots.map((candidateId, index) => (
+                    <div key={`slot-${index}`} style={{ ...styles.card, padding: 12 }}>
+                      <div style={{ marginBottom: 8, fontWeight: 700 }}>Позиция {index + 1}</div>
 
-                    return (
-                      <div
-                        key={`rank-slot-${index}`}
-                        style={{ ...styles.card, padding: 12, background: "#f9fafb" }}
-                      >
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "110px 1fr auto",
-                            gap: 10,
-                            alignItems: "center",
-                          }}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <select
+                          style={styles.input}
+                          value={candidateId}
+                          onChange={(e) => setRankingSlotValue(index, e.target.value)}
+                          disabled={loading || !canSubmit}
                         >
-                          <div>
-                            <b>Место #{index + 1}</b>
-                          </div>
+                          <option value="">Не выбрано</option>
+                          {meta.candidates.map((candidate) => {
+                            const isUsedElsewhere =
+                              usedRankingCandidateIds.has(candidate.id) && candidateId !== candidate.id;
 
-                          <select
-                            style={styles.input}
-                            value={currentValue}
-                            onChange={(e) => setRankingSlotValue(index, e.target.value)}
-                          >
-                            <option value="">Не выбрано</option>
-                            {options.map((candidate) => (
-                              <option key={candidate.id} value={candidate.id}>
+                            return (
+                              <option
+                                key={candidate.id}
+                                value={candidate.id}
+                                disabled={isUsedElsewhere}
+                              >
                                 {candidate.name}
                               </option>
-                            ))}
-                          </select>
+                            );
+                          })}
+                        </select>
 
-                          <button
-                            style={styles.btn}
-                            type="button"
-                            onClick={() => clearRankingSlot(index)}
-                            disabled={!currentValue}
-                          >
-                            Сбросить
-                          </button>
-                        </div>
-
-                        {currentValue ? (
-                          <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                            Назначен кандидат:{" "}
-                            {meta.candidates.find((c) => c.id === currentValue)?.name ?? currentValue}
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                            Эта позиция пока не заполнена
-                          </div>
-                        )}
+                        <button
+                          type="button"
+                          style={styles.btn}
+                          onClick={() => clearRankingSlot(index)}
+                          disabled={loading || !canSubmit || !candidateId}
+                        >
+                          Очистить
+                        </button>
                       </div>
-                    );
-                  })}
+
+                      {candidateId ? (
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          Назначен кандидат:{" "}
+                          {meta.candidates.find((c) => c.id === candidateId)?.name || candidateId}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
 
-                <div style={{ marginTop: 12 }}>
-                  <h4 style={{ margin: "0 0 8px 0" }}>Кандидаты и занятые позиции</h4>
-                  <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+                  <b>Текущее распределение мест</b>
+                  <div style={{ display: "grid", gap: 6 }}>
                     {meta.candidates.map((candidate) => {
-                      const rankNo = assignedRankingMap.get(candidate.id);
-
+                      const place = assignedRankingMap.get(candidate.id);
                       return (
-                        <div
-                          key={candidate.id}
-                          style={{
-                            ...styles.card,
-                            padding: 10,
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            alignItems: "center",
-                          }}
-                        >
-                          <div>
-                            <b>{candidate.name}</b>
-                            <div style={styles.muted}>{candidate.id}</div>
+                        <div key={candidate.id} style={{ ...styles.card, padding: 10 }}>
+                          <div style={{ fontWeight: 700 }}>{candidate.name}</div>
+                          <div style={{ ...styles.muted, marginTop: 4 }}>
+                            {place ? `Назначено место: ${place}` : "Пока не назначено"}
                           </div>
-
-                          {rankNo ? (
-                            <Badge text={`место ${rankNo}`} />
-                          ) : (
-                            <span style={styles.muted}>не назначен</span>
-                          )}
                         </div>
                       );
                     })}
@@ -553,69 +554,39 @@ export function VotePage() {
 
             {meta.ballot_format === "score" ? (
               <>
-                <h3 style={{ marginTop: 0 }}>Оценочный бюллетень</h3>
-                <div style={styles.muted}>
-                  Выставьте оценки кандидатам в допустимом диапазоне
+                <div style={{ marginBottom: 10 }}>
+                  <b>Оценивание кандидатов</b>
                 </div>
 
-                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gap: 8 }}>
                   {meta.candidates.map((c) => {
-                    const v = scores[c.id];
-                    const min = meta.score_min ?? 0;
-                    const max = meta.score_max ?? 10;
-                    const step = meta.score_step ?? 1;
-                    const missing =
-                      !meta.score_allow_skip && (v === undefined || v === null);
-
+                    const value = scores[c.id];
                     return (
-                      <div
-                        key={c.id}
-                        style={{
-                          ...styles.card,
-                          padding: 12,
-                          borderColor: missing ? "#fecaca" : "#e5e7eb",
-                          background: missing ? "#fff1f2" : "white",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            gap: 10,
-                            alignItems: "baseline",
-                          }}
-                        >
-                          <div>
-                            <b>{c.name}</b>
-                            <div style={styles.muted}>{c.id}</div>
-                          </div>
+                      <div key={c.id} style={{ ...styles.card, padding: 12 }}>
+                        <div style={{ fontWeight: 700 }}>{c.name}</div>
+                        {candidateDescription(c.meta) ? (
+                          <div style={{ marginTop: 4, ...styles.muted }}>{candidateDescription(c.meta)}</div>
+                        ) : null}
 
-                          <div style={{ width: 220 }}>
-                            <input
-                              style={styles.input}
-                              type="number"
-                              min={min}
-                              max={max}
-                              step={step}
-                              value={v ?? ""}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                if (raw.trim() === "") {
-                                  if (meta.score_allow_skip) {
-                                    setScores((prev) => {
-                                      const next = { ...prev };
-                                      delete next[c.id];
-                                      return next;
-                                    });
-                                  }
-                                  return;
-                                }
-
-                                const num = Number(raw);
-                                if (Number.isFinite(num)) setScore(c.id, num);
-                              }}
-                            />
-                          </div>
+                        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <input
+                            style={{ ...styles.input, maxWidth: 160 }}
+                            type="number"
+                            value={value ?? ""}
+                            min={meta.score_min ?? undefined}
+                            max={meta.score_max ?? undefined}
+                            step={meta.score_step ?? undefined}
+                            disabled={loading || !canSubmit}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === "") return;
+                              const num = Number(raw);
+                              if (Number.isFinite(num)) setScore(c.id, num);
+                            }}
+                          />
+                          <span style={styles.muted}>
+                            Диапазон: {meta.score_min ?? "?"}..{meta.score_max ?? "?"}, шаг {meta.score_step ?? "?"}
+                          </span>
                         </div>
 
                         {meta.score_allow_skip ? (
@@ -641,52 +612,22 @@ export function VotePage() {
                 ? "Отправка…"
                 : canSubmit
                   ? "Отправить бюллетень"
-                  : "Голос уже учтён"}
+                  : "Голос уже учтен"}
             </button>
 
             {!canSubmit ? (
               <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
                 <div style={{ color: "#15803d", fontWeight: 600 }}>
-                  Голос учтён
+                  Голос учтен
                 </div>
                 <div style={styles.muted}>
                   Повторная отправка для данного пользователя недоступна
                 </div>
               </div>
             ) : null}
-
-            {IS_DEV && submitResp ? (
-              <>
-                <hr style={styles.hr} />
-                <h3 style={{ marginTop: 0 }}>Submit response</h3>
-                <JsonBlock value={submitResp} />
-              </>
-            ) : null}
           </>
         ) : null}
       </div>
-
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Debug</h3>
-          <div style={{ display: "grid", gap: 10 }}>
-            <div>
-              <div style={styles.muted}>Ballot meta</div>
-              {meta ? <JsonBlock value={meta} /> : <div style={styles.muted}>Empty</div>}
-            </div>
-            <div>
-              <div style={styles.muted}>My ballot</div>
-              {my ? <JsonBlock value={my} /> : <div style={styles.muted}>Empty</div>}
-            </div>
-            {meta?.ballot_format === "ranking" ? (
-              <div>
-                <div style={styles.muted}>Ranking slots</div>
-                <JsonBlock value={rankingSlots} />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -4,12 +4,10 @@ import { api } from "../../shared/api/client";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
-import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
+import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
 import type { CandidateDraft, CandidatePayload, TallyRuleInfo } from "../../shared/api/types";
-
-const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
 const STEPS = [
   "Общие сведения",
@@ -19,7 +17,7 @@ const STEPS = [
   "Проверка",
 ] as const;
 
-
+const CREATE_ELECTION_DRAFT_KEY = "secure-voting:create-election-draft:v1";
 
 function toLocalInputValue(date: Date) {
   const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
@@ -34,6 +32,10 @@ function toRFC3339FromLocalInput(value: string) {
 
 function normalizedCandidateName(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function safeNumber(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function candidateError(candidate: CandidateDraft, all: CandidateDraft[]) {
@@ -104,6 +106,23 @@ function submitModeLabel(value: "draft" | "open" | "schedule") {
   if (value === "draft") return "Сохранить как черновик";
   if (value === "open") return "Открыть сразу";
   return "Запланировать открытие";
+}
+
+function reviewBallotFormatLabel(value: "approval" | "ranking" | "score") {
+  if (value === "approval") return "Одобрение";
+  if (value === "ranking") return "Ранжирование";
+  return "Оценивание";
+}
+
+function reviewQuotaUsageLabel(enabled: boolean, quotaType: "hare" | "droop") {
+  if (!enabled) return "Не используется";
+  return `Квота ${quotaTypeLabel(quotaType)}`;
+}
+
+function reviewRankingModeLabel(limitEnabled: boolean, topK: number) {
+  if (!limitEnabled) return "Без ограничения числа позиций";
+  if (topK === 1) return "Только первое место";
+  return `Не более ${topK} позиций`;
 }
 
 function supportsBallotFormat(
@@ -250,9 +269,143 @@ export function AdminCreateElectionPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [createdID, setCreatedID] = useState<string | null>(null);
-  const [rawResp, setRawResp] = useState<unknown>(null);
 
   const candidateCount = candidates.length;
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CREATE_ELECTION_DRAFT_KEY);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw) as Record<string, unknown>;
+
+      if (typeof draft.step === "number" && draft.step >= 0 && draft.step < STEPS.length) {
+        setStep(draft.step);
+      }
+
+      if (typeof draft.title === "string") setTitle(draft.title);
+      if (typeof draft.description === "string") setDescription(draft.description);
+      if (typeof draft.startAtLocal === "string") setStartAtLocal(draft.startAtLocal);
+      if (typeof draft.endAtLocal === "string") setEndAtLocal(draft.endAtLocal);
+
+      if (Array.isArray(draft.candidates)) {
+        const restoredCandidates = draft.candidates
+          .filter(
+            (item): item is CandidateDraft =>
+              Boolean(item) &&
+              typeof item === "object" &&
+              typeof (item as CandidateDraft).name === "string" &&
+              typeof (item as CandidateDraft).description === "string"
+          )
+          .map((item) => ({
+            name: item.name,
+            description: item.description,
+          }));
+
+        if (restoredCandidates.length >= 2) {
+          setCandidates(restoredCandidates);
+        }
+      }
+
+      if (typeof draft.importedCandidatesFileName === "string") {
+        setImportedCandidatesFileName(draft.importedCandidatesFileName);
+      }
+
+      if (draft.ballotFormat === "approval" || draft.ballotFormat === "ranking" || draft.ballotFormat === "score") {
+        setBallotFormat(draft.ballotFormat);
+      }
+
+      if (typeof draft.tallyRule === "string") setTallyRule(draft.tallyRule);
+      setCommitteeSize(safeNumber(draft.committeeSize, 1));
+
+      if (draft.quotaType === "hare" || draft.quotaType === "droop") {
+        setQuotaType(draft.quotaType);
+      }
+
+      setApprovalMax(safeNumber(draft.approvalMax, 2));
+      setLimitRankingTopK(Boolean(draft.limitRankingTopK));
+
+      if (typeof draft.rankingTopKInput === "string") {
+        setRankingTopKInput(draft.rankingTopKInput);
+      }
+
+      setScoreMin(safeNumber(draft.scoreMin, 0));
+      setScoreMax(safeNumber(draft.scoreMax, 10));
+      setScoreStep(safeNumber(draft.scoreStep, 1));
+      setScoreAllowSkip(Boolean(draft.scoreAllowSkip));
+
+      if (draft.accessMode === "open" || draft.accessMode === "invite") {
+        setAccessMode(draft.accessMode);
+      }
+
+      setShowAggregates(Boolean(draft.showAggregates));
+      setDelayPublish(Boolean(draft.delayPublish));
+
+      if (typeof draft.publishAtLocal === "string") {
+        setPublishAtLocal(draft.publishAtLocal);
+      }
+
+      if (draft.submitMode === "draft" || draft.submitMode === "open" || draft.submitMode === "schedule") {
+        setSubmitMode(draft.submitMode);
+      }
+    } catch {
+      localStorage.removeItem(CREATE_ELECTION_DRAFT_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    const draft = {
+      step,
+      title,
+      description,
+      startAtLocal,
+      endAtLocal,
+      candidates,
+      importedCandidatesFileName,
+      ballotFormat,
+      tallyRule,
+      committeeSize,
+      quotaType,
+      approvalMax,
+      limitRankingTopK,
+      rankingTopKInput,
+      scoreMin,
+      scoreMax,
+      scoreStep,
+      scoreAllowSkip,
+      accessMode,
+      showAggregates,
+      delayPublish,
+      publishAtLocal,
+      submitMode,
+    };
+
+    localStorage.setItem(CREATE_ELECTION_DRAFT_KEY, JSON.stringify(draft));
+  }, [
+    step,
+    title,
+    description,
+    startAtLocal,
+    endAtLocal,
+    candidates,
+    importedCandidatesFileName,
+    ballotFormat,
+    tallyRule,
+    committeeSize,
+    quotaType,
+    approvalMax,
+    limitRankingTopK,
+    rankingTopKInput,
+    scoreMin,
+    scoreMax,
+    scoreStep,
+    scoreAllowSkip,
+    accessMode,
+    showAggregates,
+    delayPublish,
+    publishAtLocal,
+    submitMode,
+  ]);
 
   const currentRule = useMemo(
     () => selectedRuleInfo(availableRules, tallyRule),
@@ -543,6 +696,39 @@ export function AdminCreateElectionPage() {
     setStep(nextStep);
   };
 
+  const resetDraft = () => {
+    localStorage.removeItem(CREATE_ELECTION_DRAFT_KEY);
+
+    setStep(0);
+    setTitle("Новое голосование");
+    setDescription("");
+    setStartAtLocal(toLocalInputValue(new Date(Date.now() + 10 * 60_000)));
+    setEndAtLocal(toLocalInputValue(new Date(Date.now() + 70 * 60_000)));
+    setCandidates([
+      { name: "", description: "" },
+      { name: "", description: "" },
+    ]);
+    setImportedCandidatesFileName("");
+    setBallotFormat("ranking");
+    setTallyRule(availableRules[0]?.id || "plurality");
+    setCommitteeSize(1);
+    setQuotaType("hare");
+    setApprovalMax(2);
+    setLimitRankingTopK(true);
+    setRankingTopKInput("3");
+    setScoreMin(0);
+    setScoreMax(10);
+    setScoreStep(1);
+    setScoreAllowSkip(false);
+    setAccessMode("open");
+    setShowAggregates(true);
+    setDelayPublish(false);
+    setPublishAtLocal(toLocalInputValue(new Date(Date.now() + 24 * 60 * 60_000)));
+    setSubmitMode("draft");
+    setCreatedID(null);
+    setErr(null);
+  };
+
   const submit = async () => {
     if (!token) return;
 
@@ -555,7 +741,6 @@ export function AdminCreateElectionPage() {
     setLoading(true);
     setErr(null);
     setCreatedID(null);
-    setRawResp(null);
 
     try {
       const effectiveStartAtRFC3339 =
@@ -623,6 +808,7 @@ export function AdminCreateElectionPage() {
       }
 
       setCreatedID(id);
+      localStorage.removeItem(CREATE_ELECTION_DRAFT_KEY);
 
       addNotification({
         kind: "success",
@@ -634,10 +820,6 @@ export function AdminCreateElectionPage() {
             ? `Создано и запланировано голосование ${id}`
             : `Создано новое голосование ${id}`,
       });
-
-      if (IS_DEV) {
-        setRawResp({ id, body, submitMode });
-      }
 
       setStep(STEPS.length - 1);
     } catch (e: any) {
@@ -671,6 +853,9 @@ export function AdminCreateElectionPage() {
             <Link to="/elections" style={{ textDecoration: "none" }}>
               <button style={styles.btn}>К списку</button>
             </Link>
+            <button type="button" style={styles.btn} onClick={resetDraft} disabled={loading}>
+              Очистить черновик
+            </button>
           </div>
         </div>
 
@@ -701,31 +886,29 @@ export function AdminCreateElectionPage() {
                 />
               </div>
 
-              <div>
-                <label>
-                  Дата и время начала
-                  <Hint text="Для режима «Открыть сразу» время начала будет заменено текущим моментом." />
-                </label>
-                <input
-                  style={styles.input}
-                  type="datetime-local"
-                  value={startAtLocal}
-                  onChange={(e) => setStartAtLocal(e.target.value)}
-                />
-              </div>
+              <DateTimeField
+                label={
+                  <>
+                    Дата и время начала
+                    <Hint text="Для режима «Открыть сразу» время начала будет заменено текущим моментом." />
+                  </>
+                }
+                value={startAtLocal}
+                onChange={setStartAtLocal}
+                minuteStep={5}
+              />
 
-              <div>
-                <label>
-                  Дата и время окончания
-                  <Hint text="После этой даты новые бюллетени приниматься не должны." />
-                </label>
-                <input
-                  style={styles.input}
-                  type="datetime-local"
-                  value={endAtLocal}
-                  onChange={(e) => setEndAtLocal(e.target.value)}
-                />
-              </div>
+              <DateTimeField
+                label={
+                  <>
+                    Дата и время окончания
+                    <Hint text="После этой даты новые бюллетени приниматься не должны." />
+                  </>
+                }
+                value={endAtLocal}
+                onChange={setEndAtLocal}
+                minuteStep={5}
+              />
             </div>
           </div>
         ) : null}
@@ -1031,8 +1214,8 @@ export function AdminCreateElectionPage() {
                   value={accessMode}
                   onChange={(e) => setAccessMode(e.target.value as "open" | "invite")}
                 >
-                  <option value="open">open</option>
-                  <option value="invite">invite</option>
+                  <option value="open">{accessModeLabel("open")}</option>
+                  <option value="invite">{accessModeLabel("invite")}</option>
                 </select>
               </div>
 
@@ -1064,12 +1247,11 @@ export function AdminCreateElectionPage() {
 
               {delayPublish ? (
                 <div style={{ marginTop: 12, maxWidth: 420 }}>
-                  <label>Дата и время публикации</label>
-                  <input
-                    style={styles.input}
-                    type="datetime-local"
+                  <DateTimeField
+                    label="Дата и время публикации"
                     value={publishAtLocal}
-                    onChange={(e) => setPublishAtLocal(e.target.value)}
+                    onChange={setPublishAtLocal}
+                    minuteStep={5}
                   />
                 </div>
               ) : (
@@ -1172,16 +1354,32 @@ export function AdminCreateElectionPage() {
             <SummaryGrid
               items={[
                 { label: "Название", value: title.trim() || "—" },
-                { label: "Формат бюллетеня", value: ballotFormatLabel(ballotFormat) },
-                { label: "Правило подсчёта", value: tallyRule },
-                { label: "Размер комитета", value: String(committeeSize) },
-                { label: "Тип квоты", value: committeeSize > 1 ? quotaTypeLabel(quotaType) : "не используется" },
+                { label: "Описание", value: description.trim() || "—" },
+                { label: "Формат бюллетеня", value: reviewBallotFormatLabel(ballotFormat) },
+                { label: "Правило подсчета", value: currentRule?.label || tallyRule },
+                {
+                  label: "Размер комитета",
+                  value: currentRule?.requires_committee_size ? String(committeeSize) : "Один победитель",
+                },
+                {
+                  label: "Квота",
+                  value: reviewQuotaUsageLabel(
+                    Boolean(committeeSize > 1 && currentRule?.supports_quota_type),
+                    quotaType
+                  ),
+                },
                 { label: "Режим доступа", value: accessModeLabel(accessMode) },
-                { label: "Показывать агрегаты", value: showAggregates ? "да" : "нет" },
-                { label: "Начало", value: submitMode === "open" ? "Сразу после создания" : startAtRFC3339 || "—" },
-                { label: "Окончание", value: endAtRFC3339 || "—" },
-                { label: "Отложенная публикация", value: delayPublish ? publishAtRFC3339 || "—" : "нет" },
-                { label: "Кандидатов", value: String(candidateCount) },
+                { label: "Показывать агрегаты", value: showAggregates ? "Да" : "Нет" },
+                {
+                  label: "Начало голосования",
+                  value: submitMode === "open" ? "Сразу после создания" : startAtRFC3339 || "—",
+                },
+                { label: "Окончание голосования", value: endAtRFC3339 || "—" },
+                {
+                  label: "Публикация результатов",
+                  value: delayPublish ? publishAtRFC3339 || "—" : "Сразу после готовности и ручной публикации",
+                },
+                { label: "Число кандидатов", value: String(candidateCount) },
                 { label: "После сохранения", value: submitModeLabel(submitMode) },
               ]}
             />
@@ -1205,19 +1403,31 @@ export function AdminCreateElectionPage() {
             <div style={styles.card}>
               <h3 style={{ marginTop: 0 }}>Параметры бюллетеня</h3>
 
-              {ballotFormat === "approval" ? <div>Максимум отметок: {approvalMax}</div> : null}
+              {ballotFormat === "approval" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div>Максимальное число отметок: {approvalMax}</div>
+                </div>
+              ) : null}
 
-              {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
-                <div>top-k: {limitRankingTopK ? normalizedTopK() : "не ограничен"}</div>
+              {ballotFormat === "ranking" ? (
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div>
+                    Режим ранжирования:{" "}
+                    {reviewRankingModeLabel(
+                      Boolean(currentRule?.supports_ranking_top_k && limitRankingTopK),
+                      normalizedTopK()
+                    )}
+                  </div>
+                </div>
               ) : null}
 
               {ballotFormat === "score" ? (
                 <div style={{ display: "grid", gap: 6 }}>
                   <div>
-                    Диапазон: {scoreMin}..{scoreMax}
+                    Диапазон оценок: {scoreMin}..{scoreMax}
                   </div>
-                  <div>Шаг: {scoreStep}</div>
-                  <div>Разрешить пропуск: {scoreAllowSkip ? "да" : "нет"}</div>
+                  <div>Шаг изменения оценки: {scoreStep}</div>
+                  <div>Разрешить пропуск оценки: {scoreAllowSkip ? "Да" : "Нет"}</div>
                 </div>
               ) : null}
             </div>
@@ -1260,13 +1470,6 @@ export function AdminCreateElectionPage() {
           </div>
         </div>
       </div>
-
-      {IS_DEV ? (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Create response</h3>
-          {rawResp ? <JsonBlock value={rawResp} /> : <div style={styles.muted}>Empty</div>}
-        </div>
-      ) : null}
     </div>
   );
 }
