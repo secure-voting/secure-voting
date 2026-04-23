@@ -213,6 +213,8 @@ where
 
 impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
     for VotingRule<S, D, T, Ballot>
+where
+    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
 {
     fn default() -> Self {
         Self {
