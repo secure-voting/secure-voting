@@ -19,7 +19,7 @@ pub struct AntiPluralityScorer;
 
 impl Scorer<RankingBallot> for AntiPluralityScorer {
     type Error = Infallible;
-    type Output = usize;
+    type Output = Vec<usize>;
 
     fn compute_score(
         &self,
@@ -35,7 +35,7 @@ impl Scorer<RankingBallot> for AntiPluralityScorer {
             (0..n_voters)
                 .into_par_iter()
                 .map(|i| {
-                    let mut tmp = vec![0; n_candidates];
+                    let mut tmp = vec![0usize; n_candidates];
 
                     tmp[profile.index_of(profile[i].iter().last().unwrap()).unwrap()] = 1;
 
@@ -59,22 +59,31 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![1, 2, 0]], &[1, 1, 1]; "case_1")]
-    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 3, 2], vec![2, 3, 1, 0]], &[1, 0, 1, 1]; "case_2")]
+    #[test_case(
+    vec![
+        vec![1, 0, 2],
+        vec![0, 2, 1],
+        vec![1, 2, 0]
+    ],
+    &[1, 1, 1];
+    "case_1"
+)]
+    #[test_case(
+    vec![
+        vec![0, 1, 2, 3],
+        vec![0, 1, 3, 2],
+        vec![2, 3, 1, 0]
+    ],
+    &[1, 0, 1, 1];
+    "case_2"
+)]
     fn test_correct_anti_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = AntiPluralityScorer;
 
-        assert_eq!(
-            answer,
-            scorer
-                .compute_score(
-                    &votes
-                        .try_into()
-                        .expect("Profile is constructed incorrectly, revise test examples.")
-                )
-                .unwrap()
-                .score()
-                .clone()
-        );
+        let names = (0..4).map(|i| format!("C{i}")).collect::<Vec<_>>();
+        let profile = Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test examples.");
+
+        assert_eq!(answer, scorer.compute_score(&profile).unwrap().score());
     }
 }

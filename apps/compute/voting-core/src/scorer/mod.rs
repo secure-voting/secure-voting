@@ -22,14 +22,14 @@ pub mod zip;
 #[derive(Debug, Clone)]
 pub struct Score<T> {
     /// Scores of the candidates.
-    scores: Vec<T>,
+    scores: T,
     /// A list of candidates in this scoring.
     candidates: Vec<CandidateId>,
 }
 
 impl<T> Score<T> {
     /// Return a new Score instance.
-    pub fn new(scores: Vec<T>, candidates: &[CandidateId]) -> Self {
+    pub fn new(scores: T, candidates: &[CandidateId]) -> Self {
         Self {
             scores,
             candidates: candidates.to_vec(),
@@ -37,12 +37,12 @@ impl<T> Score<T> {
     }
 
     /// Get a non-owning view of the scores.
-    pub fn score(&self) -> &[T] {
+    pub fn score(&self) -> &T {
         &self.scores
     }
 
     /// Consume self and get scores.
-    pub fn consume_score(self) -> Vec<T> {
+    pub fn consume_score(self) -> T {
         self.scores
     }
 
@@ -52,23 +52,15 @@ impl<T> Score<T> {
     }
 
     /// Get an iterator over pairs of (score, candidate) in the scores.
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = (&'a T, &'a CandidateId)> {
-        let scores = self.score();
+    pub fn iter<'a, U>(&'a self) -> impl Iterator<Item = (&'a U, &'a CandidateId)>
+    where
+        T: AsRef<[U]>,
+        U: 'a,
+    {
+        let scores = self.score().as_ref();
         debug_assert_eq!(scores.len(), self.candidates.len());
 
-        scores.iter().zip(self.candidates.iter())
-    }
-}
-
-impl<T: Clone + PartialOrd + Ord> Score<T> {
-    /// Get a range of all the scores
-    pub fn value_range(self) -> Vec<T> {
-        let mut v: Vec<T> = self.consume_score();
-        v.sort_unstable();
-        v.dedup();
-        v.reverse();
-
-        v
+        scores.into_iter().zip(self.candidates.iter())
     }
 }
 

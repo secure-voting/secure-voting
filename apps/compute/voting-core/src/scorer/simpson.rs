@@ -17,7 +17,7 @@ use crate::{
 pub struct SimpsonScorer;
 
 impl Scorer<RankingBallot> for SimpsonScorer {
-    type Output = isize;
+    type Output = Vec<isize>;
 
     type Error = Infallible;
 
@@ -55,77 +55,77 @@ mod tests {
     use super::*;
     use crate::models::profile::Profile;
 
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
     #[test]
     fn simpson_single_vote_linear_order() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2, 3]])
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2, 3]], 4);
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, -1, -1, -1]);
+        assert_eq!(scores.consume_score(), vec![1, -1, -1, -1]);
     }
-
     #[test]
     fn simpson_condorcet_winner() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]])
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], 3);
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![3, -3, -3]);
+        assert_eq!(scores.consume_score(), vec![3, -3, -3]);
     }
-
     #[test]
     fn simpson_condorcet_cycle() {
-        let profile = Profile::try_from(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]])
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]], 3);
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![-1, -1, -1]);
+        assert_eq!(scores.consume_score(), vec![-1, -1, -1]);
     }
-
     #[test]
     fn simpson_two_candidates() {
-        let profile = Profile::try_from(vec![vec![0, 1], vec![0, 1], vec![1, 0]])
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1], vec![0, 1], vec![1, 0]], 2);
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, -1]);
+        assert_eq!(scores.consume_score(), vec![1, -1]);
     }
-
     #[test]
     fn simpson_all_pairwise_tied() {
-        let profile = Profile::try_from(vec![
-            vec![0, 1, 2],
-            vec![0, 2, 1],
-            vec![1, 0, 2],
-            vec![1, 2, 0],
-            vec![2, 0, 1],
-            vec![2, 1, 0],
-        ])
-        .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(
+            vec![
+                vec![0, 1, 2],
+                vec![0, 2, 1],
+                vec![1, 0, 2],
+                vec![1, 2, 0],
+                vec![2, 0, 1],
+                vec![2, 1, 0],
+            ],
+            3,
+        );
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
+        assert_eq!(scores.consume_score(), vec![0, 0, 0]);
     }
-
     #[test]
     fn simpson_worst_loss_dominates() {
-        // Candidate 0 wins big against 1, but loses badly to 2
-        let profile = Profile::try_from(vec![
-            vec![0, 1, 2],
-            vec![0, 1, 2],
-            vec![0, 1, 2],
-            vec![2, 0, 1],
-            vec![2, 0, 1],
-        ])
-        .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(
+            vec![
+                vec![0, 1, 2],
+                vec![0, 1, 2],
+                vec![0, 1, 2],
+                vec![2, 0, 1],
+                vec![2, 0, 1],
+            ],
+            3,
+        );
 
         let scores = SimpsonScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, -5, -1]);
+        assert_eq!(scores.consume_score(), vec![1, -5, -1]);
     }
 }

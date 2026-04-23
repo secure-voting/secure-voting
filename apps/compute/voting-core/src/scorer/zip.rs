@@ -67,11 +67,7 @@ impl<
             .map_err(ZipScorerError::SecondScorerError)?;
 
         Ok(Score::new(
-            score1
-                .consume_score()
-                .into_iter()
-                .zip(score2.consume_score().into_iter())
-                .collect(),
+            (score1.consume_score(), score2.consume_score()),
             profile.active_candidates(),
         ))
     }
