@@ -63,11 +63,7 @@ mod tests {
         assert_eq!(
             answer,
             Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
+                CondorcetScorer.compute_score(&profile).unwrap().score()[0].clone()
             )
         );
     }
@@ -88,11 +84,7 @@ mod tests {
         assert_eq!(
             answer,
             Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
+                CondorcetScorer.compute_score(&profile).unwrap().score()[0].clone()
             )
         );
     }
