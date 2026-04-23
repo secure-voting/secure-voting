@@ -21,7 +21,7 @@ pub type CoombsRule = CoombsRuleWith<FallthroughTieBreaker, RankingBallot>;
 
 /// The Coombs' voting rule type with a custom tie-breaker.
 pub type CoombsRuleWith<TB, Ballot> = Elimination<
-    ZipScorer<PluralityScorer, AntiPluralityScorer, Ballot, usize, usize>,
+    ZipScorer<PluralityScorer, AntiPluralityScorer, Ballot>,
     ZipSelector<1, MaxScoreElimination, Vec<usize>, Vec<usize>>,
     ZipSelector<0, MaxScoreDecider<usize>, Vec<usize>, Vec<usize>>,
     TB,
