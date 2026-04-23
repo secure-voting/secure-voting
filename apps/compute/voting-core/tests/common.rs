@@ -27,7 +27,16 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
     (0..15).for_each(|_| votes.push(vec![CHATTANOOGA, KNOXVILLE, NASHVILLE, MEMPHIS]));
     (0..17).for_each(|_| votes.push(vec![KNOXVILLE, CHATTANOOGA, NASHVILLE, MEMPHIS]));
 
-    Profile::try_from(votes).expect("Profile is constructed incorrectly, revise test example.")
+    Profile::try_from((
+        votes,
+        vec![
+            "MEMPHIS".into(),
+            "NASHVILLE".into(),
+            "CHATTANOOGA".into(),
+            "KNOXVILLE".into(),
+        ],
+    ))
+    .expect("Profile is constructed incorrectly, revise test example.")
 }
 
 static INIT: Once = Once::new();

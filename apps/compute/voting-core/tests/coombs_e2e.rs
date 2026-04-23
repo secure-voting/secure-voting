@@ -14,9 +14,10 @@ fn wiki_tennesee_example() {
     let scorer = CoombsRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }
