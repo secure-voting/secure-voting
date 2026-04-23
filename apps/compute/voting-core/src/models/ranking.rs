@@ -153,19 +153,19 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
     fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
         let (value, names) = value;
 
-        if value.len() != names.len() {
-            return Err(ProfileError::CandidateLengthMismatch(
-                value.len(),
-                names.len(),
-            ));
-        }
-
         if value.is_empty() {
             return Err(ProfileError::NoVoters);
         }
 
         if value[0].is_empty() {
             return Err(ProfileError::NoCandidates);
+        }
+
+        if value[0].len() != names.len() {
+            return Err(ProfileError::CandidateLengthMismatch(
+                value.len(),
+                names.len(),
+            ));
         }
 
         if (1..value.len()).any(|row| value[row].len() != value[0].len()) {

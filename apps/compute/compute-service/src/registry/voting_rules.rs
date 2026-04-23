@@ -115,9 +115,9 @@ impl_algorithm!(
     true,
     false
 );
-impl_algorithm!(
-    BlackRule, "Black", true, true, true, false, false, true, false
-);
+// impl_algorithm!(
+//     BlackRule, "Black", true, true, true, false, false, true, false
+// );
 impl_algorithm!(
     CopelandIRule,
     "Copeland I",
@@ -169,9 +169,9 @@ impl_algorithm!(HareRule, "Hare", true, true, true, true, false, true, false);
 impl_algorithm!(
     NansonRule, "Nanson", true, true, true, false, false, true, false
 );
-impl_algorithm!(
-    CoombsRule, "Coombs", true, true, true, false, false, true, false
-);
+// impl_algorithm!(
+//     CoombsRule, "Coombs", true, true, true, false, false, true, false
+// );
 impl_algorithm!(
     InverseBordaRule,
     "Inverse Borda",
@@ -194,7 +194,7 @@ pub fn get_core_registry() -> Registry {
     registry.add(ApprovalRule::<2>::default(), BallotType::Ranking);
     registry.add(ApprovalRule::<3>::default(), BallotType::Ranking);
     registry.add(AntiPluralityRule::default(), BallotType::Ranking);
-    registry.add(BlackRule::default(), BallotType::Ranking);
+    // registry.add(BlackRule::default(), BallotType::Ranking);
     registry.add(CopelandIRule::default(), BallotType::Ranking);
     registry.add(CopelandIIRule::default(), BallotType::Ranking);
     registry.add(CopelandIIIRule::default(), BallotType::Ranking);
@@ -202,7 +202,7 @@ pub fn get_core_registry() -> Registry {
     registry.add(MinmaxRule::default(), BallotType::Ranking);
     registry.add(HareRule::default(), BallotType::Ranking);
     registry.add(NansonRule::default(), BallotType::Ranking);
-    registry.add(CoombsRule::default(), BallotType::Ranking);
+    // registry.add(CoombsRule::default(), BallotType::Ranking);
     registry.add(InverseBordaRule::default(), BallotType::Ranking);
 
     registry.add(

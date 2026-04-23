@@ -16,7 +16,7 @@ use crate::{
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
-        Final, Kind, Metrics, Protocol, RoundSize, Score, Series, Step, Summary, ToScore,
+        Final, Kind, Metrics, Protocol, RoundSize, Series, Step, Summary, ToScore,
         VotingRuleExec,
         elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
     },
