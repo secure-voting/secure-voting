@@ -1,4 +1,4 @@
-//! Module containing the `CandidateId` type implementatino
+//! Candidate ID type implementation.
 
 use std::fmt::Display;
 

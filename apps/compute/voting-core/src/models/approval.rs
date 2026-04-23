@@ -11,9 +11,9 @@ use crate::models::{
     profile::{CandidateRemovalError, Profile},
 };
 
-/// Ranking ballot type.
+/// Approval ballot type.
 ///
-/// Represents a full ranking of one candidate.
+/// Represents a set of approved candidates.
 #[derive(Clone, Debug)]
 pub struct ApprovalBallot {
     /// Candidates approved by each voter.

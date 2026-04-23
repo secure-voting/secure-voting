@@ -1,4 +1,4 @@
-//! `BelowAverageElimination` module.
+//! Below average elimination module.
 
 use crate::{
     prelude::CandidateId, scorer::Score, voting_rules::elimination::criterion::EliminationCriterion,
