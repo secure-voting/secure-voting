@@ -5,7 +5,10 @@
 
 use std::{collections::HashMap, error::Error};
 
-use crate::prelude::{Profile, VotingRuleExec};
+use crate::{
+    prelude::{Profile, VotingRuleExec},
+    voting_rules::{Metrics, Protocol},
+};
 
 /// Execute an election with named candidates and a chosen rule.
 ///
@@ -15,7 +18,7 @@ use crate::prelude::{Profile, VotingRuleExec};
 pub fn run_election<T, VRE: VotingRuleExec<T>>(
     input_data: Vec<Vec<impl Into<String>>>,
     rule: &VRE,
-) -> anyhow::Result<Vec<String>>
+) -> anyhow::Result<(Vec<String>, Metrics, Protocol)>
 where
     VRE::Error: Error + Send + Sync + 'static,
     Profile<T>: TryFrom<Vec<Vec<usize>>>,
@@ -47,9 +50,14 @@ where
 
     let result = rule.execute(&profile)?;
 
-    Ok(result
+    let outcome = result
+        .0
         .candidates()
         .iter()
         .map(|x| id_to_cand[x.into_inner()].clone())
-        .collect())
+        .collect();
+
+    unimplemented!("Placeholder for name resolution");
+
+    Ok((outcome, result.1, result.2))
 }
