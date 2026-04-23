@@ -1,6 +1,8 @@
 use voting_core::{
-    models::approval::ApprovalBallot, prelude::*, tie_breaker::fallthrough::FallthroughTieBreaker,
-    voting_rules::approval::ApprovalRuleWith,
+    models::approval::ApprovalBallot,
+    prelude::*,
+    tie_breaker::fallthrough::FallthroughTieBreaker,
+    voting_rules::{Metrics, Protocol, approval::ApprovalRuleWith},
 };
 
 use crate::registry::{Algorithm, AlgorithmError, BallotType, Registry};
@@ -8,7 +10,10 @@ use crate::registry::{Algorithm, AlgorithmError, BallotType, Registry};
 macro_rules! impl_algorithm {
     ($ty:path, $alias:expr, $tally:literal, $runs:literal, $size:literal, $type:literal, $choices:literal, $top_k:literal, $range: literal) => {
         impl Algorithm for $ty {
-            fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError> {
+            fn run_election(
+                &self,
+                input: Vec<Vec<String>>,
+            ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError> {
                 run_election(input, &Self::default())
                     .map_err(|e| AlgorithmError::InvalidArgument(e.to_string()))
             }
