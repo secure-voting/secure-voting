@@ -14,8 +14,7 @@ use crate::{
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
-        Final, Kind, Metrics, Numeric, Protocol, RoundSize, Score, Series, Step, Summary,
-        VotingRuleExec,
+        Final, Kind, Metrics, Protocol, RoundSize, Series, Step, Summary, ToScore, VotingRuleExec,
     },
 };
 
@@ -51,7 +50,7 @@ where
 /// 2. Decider - chooses a set of winners depending on the score information
 /// 3. `TieBreaker` - chooses an absolute winner from the selected set
 #[derive(Debug, Clone, Copy)]
-pub struct VotingRule<S, D, T, Ballot> {
+pub struct VotingRule<S, D, T, Ballot, U> {
     /// A scorer instance.
     scorer: S,
     /// A decider instance.
@@ -60,6 +59,8 @@ pub struct VotingRule<S, D, T, Ballot> {
     tiebreaker: T,
     /// Phantom marker on the Ballot type.
     _ballot_type: PhantomData<Ballot>,
+    /// Scorer inner value type marker.
+    _score_type: PhantomData<U>,
 }
 
 /// Helper result type returned from the [`super::VotingRuleExec::execute`] method of [`VotingRule`] struct.
@@ -74,12 +75,11 @@ pub type VotingRuleResult<S, D, T, Ballot> = Result<
     >,
 >;
 
-impl<S, D, T, Ballot> VotingRule<S, D, T, Ballot>
+impl<S, D, T, Ballot, U> VotingRule<S, D, T, Ballot, U>
 where
     S: Scorer<Ballot, Output = D::Input>,
     D: Decider,
     T: TieBreaker<Ballot>,
-    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
 {
     /// Construct a new `VotingRule` from its 3 components.
     pub fn new(scorer: S, decider: D, tiebreaker: T) -> Self {
@@ -88,14 +88,20 @@ where
             decider,
             tiebreaker,
             _ballot_type: PhantomData,
+            _score_type: PhantomData,
         }
     }
 
     /// Run the constructed pipeline.
     ///
     /// Returns an error if any of the steps didn't succeed.
+    #[allow(clippy::unwrap_used)]
     #[instrument(skip(self, profile), ret)]
-    fn run(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot> {
+    fn run<'a>(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot>
+    where
+        U: 'a + ToScore,
+        <D as Decider>::Input: AsRef<[U]>,
+    {
         let n = profile.n_voters();
         let m = profile.n_candidates();
 
@@ -116,22 +122,9 @@ where
             .map_err(VotingRuleError::TieBreakError)?;
         let winners = results.candidates();
 
-        let score_range = scores.clone().value_range();
-        let avg: f64 = score_range
-            .iter()
-            .map(|x| Into::<f64>::into(x.clone()))
-            .sum::<f64>()
-            / score_range.len() as f64;
-
         let scores_array: Vec<_> = scores
             .iter()
-            .map(|(score, cand)| {
-                Score::builder()
-                    .candidate_id(cand.to_string())
-                    .candidate_name(String::from("placeholder"))
-                    .value(score.clone().into())
-                    .build()
-            })
+            .map(|(score, cand)| score.to_score(cand.to_string(), "placeholder".into()))
             .collect();
 
         let metrics = Metrics::builder()
@@ -144,14 +137,6 @@ where
                     .winner_count(winners.len())
                     .committee_size(0)
                     .rounds_count(1)
-                    .build(),
-            )
-            .numeric(
-                Numeric::builder()
-                    .winner_score(score_range[0].clone().into())
-                    .runner_up_score(score_range[1].clone().into())
-                    .margin(score_range[0].clone().into() - score_range[1].clone().into())
-                    .average_score(avg)
                     .build(),
             )
             .series(
@@ -189,10 +174,11 @@ where
     }
 }
 
-impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
-    VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot>
+impl<'a, U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
+    VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot, U>
 where
-    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
+    <D as Decider>::Input: AsRef<[U]>,
+    U: 'a + ToScore,
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
@@ -211,10 +197,11 @@ where
     }
 }
 
-impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
-    for VotingRule<S, D, T, Ballot>
+impl<'a, U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
+    for VotingRule<S, D, T, Ballot, U>
 where
-    <D as Decider>::Input: Clone + PartialOrd + Ord + Into<f64>,
+    <D as Decider>::Input: AsRef<[U]>,
+    U: 'a + ToScore,
 {
     fn default() -> Self {
         Self {
@@ -222,6 +209,7 @@ where
             decider: D::new(),
             tiebreaker: T::new(),
             _ballot_type: PhantomData,
+            _score_type: PhantomData,
         }
     }
 }
