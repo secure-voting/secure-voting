@@ -164,7 +164,7 @@ impl Compute for ComputeService {
             }
         }
 
-        if header.ballot_format != "ranking" || header.ballot_format != "approval" {
+        if header.ballot_format != "ranking" && header.ballot_format != "approval" {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
