@@ -89,7 +89,10 @@ impl ProfileParser<RankingBallot> for CVRParser {
 
                     if !candidate_mapping.contains_key(&choice) {
                         candidate_mapping.insert(choice.clone(), new_cand_id);
-                        reverse_map.insert(CandidateId::new(new_cand_id), choice.clone());
+                        reverse_map.insert(
+                            CandidateId::new(new_cand_id, choice.clone()),
+                            choice.clone(),
+                        );
                         new_cand_id += 1;
                     }
 
@@ -106,7 +109,10 @@ impl ProfileParser<RankingBallot> for CVRParser {
 
         let votes = vote_map.into_values().collect::<Vec<_>>();
 
-        Ok((Profile::try_from(votes)?, reverse_map))
+        Ok((
+            Profile::try_from((votes, candidate_mapping.keys().cloned().collect()))?,
+            reverse_map,
+        ))
     }
 }
 
