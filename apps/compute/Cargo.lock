@@ -239,6 +239,7 @@ dependencies = [
  "mockall",
  "prost",
  "prost-types",
+ "serde_json",
  "tokio",
  "tonic",
  "tonic-prost",
