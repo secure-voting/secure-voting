@@ -25,17 +25,17 @@ where
         let mut cur_max = None;
         let mut winners = vec![];
 
-        for (score, &cand_id) in scores.iter() {
+        for (score, cand_id) in scores.iter() {
             if cur_max.is_none() {
                 cur_max = Some(score);
-                winners = vec![cand_id];
+                winners = vec![cand_id.clone()];
             } else if let Some(cur_max_inner) = cur_max
                 && cur_max_inner < score
             {
                 cur_max = Some(score);
-                winners = vec![cand_id];
+                winners = vec![cand_id.clone()];
             } else if Some(score) == cur_max {
-                winners.push(cand_id);
+                winners.push(cand_id.clone());
             }
         }
 
@@ -54,7 +54,7 @@ mod tests {
     use super::*;
 
     fn ids(v: Vec<CandidateId>) -> Vec<usize> {
-        v.into_iter().map(CandidateId::into_inner).collect()
+        v.iter().map(CandidateId::get_id).collect()
     }
 
     #[test]
@@ -62,10 +62,10 @@ mod tests {
         let scores = Score::new(
             vec![0, 1, 0, 2],
             &[
-                CandidateId::new(1),
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(0),
+                CandidateId::new(1, "A"),
+                CandidateId::new(2, "B"),
+                CandidateId::new(9, "C"),
+                CandidateId::new(0, "D"),
             ],
         );
 
@@ -80,10 +80,10 @@ mod tests {
         let scores = Score::new(
             vec![0, 1, 0, 1],
             &[
-                CandidateId::new(1),
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(0),
+                CandidateId::new(1, "A"),
+                CandidateId::new(2, "B"),
+                CandidateId::new(9, "C"),
+                CandidateId::new(0, "D"),
             ],
         );
 
@@ -98,11 +98,11 @@ mod tests {
         let scores = Score::new(
             vec![1, 1, 1, 1, 1],
             &[
-                CandidateId::new(42),
-                CandidateId::new(1),
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(0),
+                CandidateId::new(42, "A"),
+                CandidateId::new(1, "B"),
+                CandidateId::new(2, "C"),
+                CandidateId::new(9, "D"),
+                CandidateId::new(0, "E"),
             ],
         );
 
