@@ -14,4 +14,4 @@ pub type SimpsonRule = SimpsonRuleWith<FallthroughTieBreaker, RankingBallot>;
 
 /// The Simpson's voting rule with a custom tie-breaker.
 pub type SimpsonRuleWith<TB, Ballot> =
-    VotingRule<SimpsonScorer, MaxScoreDecider<isize>, TB, Ballot, usize>;
+    VotingRule<SimpsonScorer, MaxScoreDecider<isize>, TB, Ballot, isize>;

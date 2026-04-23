@@ -192,6 +192,16 @@ impl ToScore for isize {
     }
 }
 
+impl ToScore for (usize, usize) {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Vector {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            values: vec![self.0 as f64, self.1 as f64],
+        }
+    }
+}
+
 impl ToScore for Vec<usize> {
     fn to_score(&self, cand_id: String, cand_name: String) -> Score {
         Score::Vector {

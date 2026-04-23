@@ -174,11 +174,11 @@ where
     }
 }
 
-impl<'a, U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
+impl<U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
     VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot, U>
 where
     <D as Decider>::Input: AsRef<[U]>,
-    U: 'a + ToScore,
+    U: ToScore,
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
@@ -197,11 +197,11 @@ where
     }
 }
 
-impl<'a, U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
+impl<U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
     for VotingRule<S, D, T, Ballot, U>
 where
     <D as Decider>::Input: AsRef<[U]>,
-    U: 'a + ToScore,
+    U: ToScore,
 {
     fn default() -> Self {
         Self {
