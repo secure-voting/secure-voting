@@ -13,6 +13,7 @@ use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
 };
+use voting_core::voting_rules::{Metrics, Protocol};
 
 use crate::{
     registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
@@ -59,7 +60,8 @@ fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult
     }
 }
 
-fn create_winner_response(winners: Vec<String>) -> RunResult {
+#[allow(clippy::expect_used)]
+fn create_winner_response(winners: Vec<String>, metrics: Metrics, protocol: Protocol) -> RunResult {
     let winner_json = format!(
         "[{}]",
         winners
@@ -76,8 +78,8 @@ fn create_winner_response(winners: Vec<String>) -> RunResult {
         status: "done".to_owned(),
         error_text: String::new(),
         winners_json: winner_json.as_bytes().to_vec(),
-        metrics_json: vec![],
-        protocol_json: vec![],
+        metrics_json: serde_json::to_vec(&metrics).expect("Serialization failed"),
+        protocol_json: serde_json::to_vec(&protocol).expect("Serialization failed"),
         timings_json: vec![],
         artifacts_json: vec![],
     }
@@ -162,7 +164,7 @@ impl Compute for ComputeService {
             }
         }
 
-        if header.ballot_format != "ranking" || header.ballot_format != "approval" {
+        if header.ballot_format != "ranking" && header.ballot_format != "approval" {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
@@ -175,7 +177,9 @@ impl Compute for ComputeService {
             header.tally_rule.as_str(),
             &header.ballot_format,
         ) {
-            Ok(result) => Ok(Response::new(create_winner_response(result))),
+            Ok(result) => Ok(Response::new(create_winner_response(
+                result.0, result.1, result.2,
+            ))),
             Err(AlgorithmError::NoSuchAlgorithm) => Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "No such algorithm",

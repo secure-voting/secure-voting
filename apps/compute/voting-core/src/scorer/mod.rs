@@ -19,7 +19,7 @@ pub mod threshold;
 pub mod zip;
 
 /// The score type to be used by Scorers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Score<T> {
     /// Scores of the candidates.
     scores: T,
@@ -50,18 +50,17 @@ impl<T> Score<T> {
     pub fn candidates(&self) -> &[CandidateId] {
         &self.candidates
     }
-}
 
-impl<T> Score<T> {
     /// Get an iterator over pairs of (score, candidate) in the scores.
-    pub fn iter<'a, U: 'a>(&'a self) -> impl Iterator<Item = (&'a U, &'a CandidateId)>
+    pub fn iter<'a, U>(&'a self) -> impl Iterator<Item = (&'a U, &'a CandidateId)>
     where
         T: AsRef<[U]>,
+        U: 'a,
     {
         let scores = self.score().as_ref();
         debug_assert_eq!(scores.len(), self.candidates.len());
 
-        scores.iter().zip(self.candidates.iter())
+        scores.into_iter().zip(self.candidates.iter())
     }
 }
 

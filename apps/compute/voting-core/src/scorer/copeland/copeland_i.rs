@@ -50,70 +50,65 @@ impl Scorer<RankingBallot> for CopelandIScorer {
 mod tests {
     use super::*;
 
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
     #[test]
     fn copeland_single_vote_linear_order() {
-        let votes = vec![vec![0, 1, 2, 3]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2, 3]], 4);
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![3, 2, 1, 0]);
+        assert_eq!(scores.consume_score(), vec![3, 2, 1, 0]);
     }
 
     #[test]
     fn copeland_condorcet_winner() {
-        let votes = vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], 3);
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![2, 1, 0]);
+        assert_eq!(scores.consume_score(), vec![2usize, 1, 0]);
     }
 
     #[test]
     fn copeland_cycle() {
-        let votes = vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]], 3);
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, 1, 1]);
+        assert_eq!(scores.consume_score(), vec![1usize, 1, 1]);
     }
 
     #[test]
     fn copeland_two_candidates() {
-        let votes = vec![vec![0, 1], vec![0, 1], vec![1, 0]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1], vec![0, 1], vec![1, 0]], 2);
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, 0]);
+        assert_eq!(scores.consume_score(), vec![1usize, 0]);
     }
 
     #[test]
     fn copeland_all_tied() {
-        let votes = vec![
-            vec![0, 1, 2],
-            vec![1, 2, 0],
-            vec![2, 0, 1],
-            vec![0, 2, 1],
-            vec![1, 0, 2],
-            vec![2, 1, 0],
-        ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(
+            vec![
+                vec![0, 1, 2],
+                vec![1, 2, 0],
+                vec![2, 0, 1],
+                vec![0, 2, 1],
+                vec![1, 0, 2],
+                vec![2, 1, 0],
+            ],
+            3,
+        );
 
         let scores = CopelandIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
+        assert_eq!(scores.consume_score(), vec![0usize, 0, 0]);
     }
 }

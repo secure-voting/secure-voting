@@ -11,9 +11,9 @@ use crate::models::{
     profile::{CandidateRemovalError, Profile},
 };
 
-/// Ranking ballot type.
+/// Approval ballot type.
 ///
-/// Represents a full ranking of one candidate.
+/// Represents a set of approved candidates.
 #[derive(Clone, Debug)]
 pub struct ApprovalBallot {
     /// Candidates approved by each voter.
@@ -22,9 +22,9 @@ pub struct ApprovalBallot {
 
 impl ApprovalBallot {
     /// Create a new `ApprovalBallot`.
-    pub fn new(votes: &[usize]) -> Self {
+    pub fn new(votes: &[CandidateId]) -> Self {
         Self {
-            votes: votes.iter().copied().map(CandidateId::new).collect(),
+            votes: votes.to_vec(),
         }
     }
 
@@ -87,11 +87,11 @@ impl Profile<ApprovalBallot> {
         self,
         candidates: Vec<CandidateId>,
     ) -> Result<Self, CandidateRemovalError> {
-        if let Some(&wrong_id) = candidates
+        if let Some(wrong_id) = candidates
             .iter()
             .find(|candidate_id| self.active_candidates.binary_search(candidate_id).is_err())
         {
-            return Err(CandidateRemovalError(wrong_id));
+            return Err(CandidateRemovalError(wrong_id.clone()));
         }
 
         let to_remove = candidates.into_iter().collect::<HashSet<_>>();
@@ -109,7 +109,7 @@ impl Profile<ApprovalBallot> {
                     continue;
                 }
 
-                new_ranking.push(rank.into_inner());
+                new_ranking.push(rank);
             }
 
             new_votes.push(ApprovalBallot::new(&new_ranking));
@@ -128,7 +128,7 @@ impl Profile<ApprovalBallot> {
     }
 }
 
-impl TryFrom<Vec<Vec<usize>>> for Profile<ApprovalBallot> {
+impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<ApprovalBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
@@ -139,7 +139,8 @@ impl TryFrom<Vec<Vec<usize>>> for Profile<ApprovalBallot> {
     ///
     /// The order of candidates doesn't matter, all the candidates are 'approved'.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: Vec<Vec<usize>>) -> Result<Self, Self::Error> {
+    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (value, names) = value;
         if value.is_empty() {
             return Err(ProfileError::NoVoters);
         }
@@ -161,15 +162,21 @@ impl TryFrom<Vec<Vec<usize>>> for Profile<ApprovalBallot> {
                 active_candidates.insert(candidate);
             }
         }
-
         Ok(Profile {
             votes: value
                 .iter()
-                .map(|voter_info| ApprovalBallot::new(voter_info))
+                .map(|voter_info| {
+                    ApprovalBallot::new(
+                        &voter_info
+                            .iter()
+                            .map(|&elem| CandidateId::new(elem, names[elem].clone()))
+                            .collect::<Vec<_>>(),
+                    )
+                })
                 .collect(),
-            active_candidates: active_candidates
-                .into_iter()
-                .map(CandidateId::new)
+            active_candidates: (0..value[0].len())
+                .zip(names.iter())
+                .map(|(id, name)| CandidateId::new(id, name))
                 .collect(),
         })
     }

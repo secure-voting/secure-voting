@@ -15,4 +15,4 @@ pub type PluralityRule = PluralityRuleWith<FallthroughTieBreaker, RankingBallot>
 
 /// Plurality Voting rule type with a custom tie-breaker.
 pub type PluralityRuleWith<TB, Ballot> =
-    VotingRule<PluralityScorer, MaxScoreDecider<usize>, TB, Ballot>;
+    VotingRule<PluralityScorer, MaxScoreDecider<usize>, TB, Ballot, usize>;

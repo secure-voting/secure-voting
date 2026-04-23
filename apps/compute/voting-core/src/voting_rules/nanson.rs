@@ -26,4 +26,5 @@ pub type NansonRuleWith<TB> = Elimination<
     TB,
     RankingBallot,
     NoEarlyStop<RankingBallot>,
+    usize,
 >;

@@ -185,8 +185,7 @@ impl From<&Profile<RankingBallot>> for PairwiseMatrix {
 
                 for i in 0..n_candidates {
                     for j in i + 1..n_candidates {
-                        matrix[profile[voter_id][i].into_inner()]
-                            [profile[voter_id][j].into_inner()] = 1;
+                        matrix[profile[voter_id][i].get_id()][profile[voter_id][j].get_id()] = 1;
                     }
                 }
 

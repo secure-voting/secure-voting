@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use voting_core::voting_rules::{Metrics, Protocol};
+
 /// Implementations of the `Algrotihm` trait for the algorithms
 /// provided by the voting-core library.
 pub mod voting_rules;
@@ -73,7 +75,10 @@ pub trait Algorithm: std::fmt::Debug + Send + Sync {
     /// # Errors
     ///
     /// The implementation of the algorithm is free to wrap its error type in the `AlgorithmError::InvalidArgument`.
-    fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError>;
+    fn run_election(
+        &self,
+        input: Vec<Vec<String>>,
+    ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError>;
 
     /// Alias of the algorithm. A short name for the system storage.
     fn alias(&self) -> &'static str;
@@ -146,7 +151,7 @@ impl Registry {
         input: Vec<Vec<String>>,
         alias: &str,
         ballot_type: &str,
-    ) -> Result<Vec<String>, AlgorithmError> {
+    ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError> {
         let ballot_type = BallotType::try_from(ballot_type)?;
         let alias_lower = alias.to_lowercase();
 
@@ -199,7 +204,7 @@ mod tests {
       }
 
       impl Algorithm for Algorithm {
-        fn run_election(&self, input: Vec<Vec<String>>) -> Result<Vec<String>, AlgorithmError>;
+        fn run_election(&self, input: Vec<Vec<String>>) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError>;
         fn alias(&self) -> &'static str;
         fn supports_election_tally(&self) -> bool;
         fn supports_experiment_runs(&self) -> bool;
@@ -217,8 +222,11 @@ mod tests {
 
         let mut algo = MockAlgorithm::new();
         algo.expect_alias().return_const_st("test");
-        algo.expect_run_election()
-            .return_const_st(Ok(vec!["A".into()]));
+        algo.expect_run_election().return_const_st(Ok((
+            vec!["A".into()],
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         registry.add(algo, BallotType::Ranking);
 

@@ -5,7 +5,11 @@ use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{models::profile::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{
+    models::profile::Profile,
+    tie_breaker::RuleOutcome,
+    voting_rules::{Metrics, Protocol, VotingRuleExec},
+};
 
 /// Require unique adaptor.
 ///
@@ -48,13 +52,16 @@ impl<R: VotingRuleExec<Ballot>, Ballot> VotingRuleExec<Ballot> for RequireUnique
     type Error = RequireUniqueError<R::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         match self.rule.execute(profile)? {
-            outcome @ RuleOutcome::UniqueWinner(_) => {
+            outcome @ (RuleOutcome::UniqueWinner(_), _, _) => {
                 tracing::debug!("Rule returned a unique winner");
                 Ok(outcome)
             }
-            RuleOutcome::MultipleWinners(_) => {
+            (RuleOutcome::MultipleWinners(_), _, _) => {
                 tracing::error!("Multiple winners detected, returning error");
                 Err(RequireUniqueError::NotUnique)
             }
@@ -92,29 +99,35 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = ();
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from(vec![vec![0, 2, 1]])
-            .expect("Profile is constructed incorrectly, revise test example.")
+        Profile::try_from((
+            vec![vec![0, 2, 1]],
+            vec!["A".into(), "B".into(), "C".into()],
+        ))
+        .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     #[test]
     fn unique_winner_propagation() {
         let mut mock = MockVotingRule::new();
 
-        mock.expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        mock.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
-            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             RequireUnique::new(mock)
                 .execute(&fake_profile())
                 .expect("Shouldn't fail on a profile with a clear winner")
+                .0
         );
     }
 
@@ -129,17 +142,15 @@ mod tests {
             Err(RequireUniqueError::RuleError(()))
         ));
     }
-
     #[test]
     fn error_non_unique() {
         let mut mock = MockVotingRule::new();
 
-        mock.expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        mock.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B")]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert!(matches!(
             RequireUnique::new(mock).execute(&fake_profile()),

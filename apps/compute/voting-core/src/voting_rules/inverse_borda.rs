@@ -26,4 +26,5 @@ pub type InverseBordaRuleWith<TB, Ballot> = Elimination<
     TB,
     Ballot,
     NoEarlyStop<Ballot>,
+    usize,
 >;

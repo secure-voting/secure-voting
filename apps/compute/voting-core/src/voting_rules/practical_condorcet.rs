@@ -10,4 +10,4 @@ use crate::{
 /// If there exists a Condorcet winner, choose them.
 /// Otherwise fallback to another rule to decide.
 pub type CondorcetPracticalRule<FB, TB, Ballot> =
-    Fallback<VotingRule<CondorcetScorer, CondorcetDecider, TB, Ballot>, FB, Ballot>;
+    Fallback<VotingRule<CondorcetScorer, CondorcetDecider, TB, Ballot, Vec<usize>>, FB, Ballot>;

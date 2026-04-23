@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::models::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
-use crate::voting_rules::VotingRuleExec;
+use crate::voting_rules::{Metrics, Protocol, VotingRuleExec};
 
 /// `AcceptIf` adaptor.
 ///
@@ -38,16 +38,23 @@ where
     type Error = V::Error;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         let outcome = self.voting_rule.execute(profile)?;
         tracing::debug!(?outcome, "Calculated outcome");
 
-        if (self.predicate)(&outcome) {
+        if (self.predicate)(&outcome.0) {
             tracing::debug!("Predicate is true, accepting outcome");
             Ok(outcome)
         } else {
             tracing::debug!("Predicate is false, rejecting outcome");
-            Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
+            Ok((
+                RuleOutcome::MultipleWinners(outcome.0.candidates()),
+                outcome.1,
+                outcome.2,
+            ))
         }
     }
 
@@ -87,50 +94,54 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for SuccessfulVotingRule {
             type Error = ();
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from(vec![vec![0, 2, 1]])
-            .expect("Profile is constructed incorrectly, revise test example.")
+        Profile::try_from((
+            vec![vec![0, 2, 1]],
+            vec!["A".into(), "B".into(), "C".into()],
+        ))
+        .expect("Profile is constructed incorrectly, revise test example.")
     }
-
     #[test]
     fn does_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
-        mock.expect_execute()
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        mock.expect_execute().return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
-            Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect("Unexpected error")
+                .0
         );
     }
-
     #[test]
     fn doesnt_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
-        mock.expect_execute()
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(1),
-                CandidateId::new(2),
-            ])));
+        mock.expect_execute().return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1, "B"), CandidateId::new(2, "C")]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
-            Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(1),
-                CandidateId::new(2)
-            ])),
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1, "B"), CandidateId::new(2, "C"),]),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect("Unexpected error")
+                .0
         );
     }
-
     #[test]
     fn voting_rule_error_is_propagated() {
         let mut mock = MockSuccessfulVotingRule::new();
@@ -138,9 +149,10 @@ mod tests {
         mock.expect_execute().return_const(Err(()));
 
         assert_eq!(
-            Err(()),
+            (),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect_err("Unexpected success")
         );
     }
 }

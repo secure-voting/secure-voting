@@ -15,4 +15,4 @@ pub type ApprovalRule<const Q: usize> = ApprovalRuleWith<Q, FallthroughTieBreake
 
 /// Q-Approval Voting rule type with a custom `TieBreaker`.
 pub type ApprovalRuleWith<const Q: usize, TB, Ballot> =
-    VotingRule<ApprovalScorer<Q>, MaxScoreDecider<usize>, TB, Ballot>;
+    VotingRule<ApprovalScorer<Q>, MaxScoreDecider<usize>, TB, Ballot, usize>;

@@ -74,19 +74,27 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3], vec![1, 2, 3, 0]], &[vec![2, 0, 0], vec![1, 2, 0], vec![0, 1, 2], vec![0, 0, 1]]; "simple example")]
+    #[test_case(
+    vec![
+        vec![0, 1, 2, 3],
+        vec![0, 1, 2, 3],
+        vec![1, 2, 3, 0]
+    ],
+    &[vec![2, 0, 0], vec![1, 2, 0], vec![0, 1, 2], vec![0, 0, 1]];
+    "simple example"
+)]
     fn correct_threshold_ranking(votes: Vec<Vec<usize>>, answer: &[Vec<usize>]) {
+        let names = vec!["A".into(), "B".into(), "C".into(), "D".into()];
+
+        let profile = Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test examples.");
+
         assert_eq!(
             answer,
             ThresholdScorer::<RankingBallot>::new()
-                .compute_score(
-                    &votes
-                        .try_into()
-                        .expect("Profile is constructed incorrectly, revise test examples.")
-                )
+                .compute_score(&profile)
                 .unwrap()
                 .score()
-                .clone()
         );
     }
 }

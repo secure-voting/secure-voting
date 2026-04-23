@@ -14,4 +14,4 @@ pub type ThresholdRule = ThresholdRuleWith<FallthroughTieBreaker, RankingBallot>
 
 /// The Simpson's voting rule with a custom tie-breaker.
 pub type ThresholdRuleWith<TB, Ballot> =
-    VotingRule<ThresholdScorer<RankingBallot>, ThresholdDecider, TB, Ballot>;
+    VotingRule<ThresholdScorer<RankingBallot>, ThresholdDecider, TB, Ballot, Vec<usize>>;

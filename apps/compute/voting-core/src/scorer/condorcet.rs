@@ -47,53 +47,54 @@ impl Scorer<RankingBallot> for CondorcetScorer {
 mod tests {
     use super::*;
 
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
     #[test]
     fn correct_condorcet_matrix_single_vote() {
         let votes = vec![vec![1, 2, 0, 3]];
+
         let answer = vec![
             vec![false, false, false, true],
             vec![true, false, true, true],
             vec![true, false, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
 
-        assert_eq!(
-            answer,
-            Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
-            )
-        );
+        let profile = profile(votes, 4);
+
+        let result = CondorcetScorer
+            .compute_score(&profile)
+            .unwrap()
+            .score()
+            .clone();
+
+        assert_eq!(answer, Vec::<Vec<bool>>::from(result));
     }
 
     #[test]
     fn correct_condorcet_matrix_multiple_votes() {
         let votes = vec![vec![1, 2, 0, 3], vec![3, 0, 2, 1], vec![0, 2, 1, 3]];
+
         let answer = vec![
             vec![false, true, true, true],
             vec![false, false, false, true],
             vec![false, true, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
 
-        assert_eq!(
-            answer,
-            Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
-            )
-        );
+        let profile = profile(votes, 4);
+
+        let result = CondorcetScorer
+            .compute_score(&profile)
+            .unwrap()
+            .score()
+            .clone();
+
+        assert_eq!(answer, Vec::<Vec<bool>>::from(result));
     }
 }

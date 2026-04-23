@@ -25,7 +25,7 @@ impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
         _profile: &Profile<Ballot>,
     ) -> Result<RuleOutcome, Self::Error> {
         match candidates.len() {
-            1 => Ok(RuleOutcome::UniqueWinner(candidates[0])),
+            1 => Ok(RuleOutcome::UniqueWinner(candidates[0].clone())),
             _ => Ok(RuleOutcome::MultipleWinners(candidates.to_vec())),
         }
     }
@@ -41,30 +41,34 @@ mod tests {
 
     use super::*;
 
+    fn fake_profile() -> Profile<RankingBallot> {
+        Profile::try_from((vec![vec![0]], vec!["A".into()]))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
     #[test]
     fn unique_winner_fallthrough() {
-        let fake_profile: Profile<RankingBallot> = (vec![vec![0]])
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
-        let candidates = vec![CandidateId::new(0)];
+        let fake_profile = fake_profile();
+
+        let candidates = vec![CandidateId::new(0, "A")];
 
         assert_eq!(
-            RuleOutcome::UniqueWinner(CandidateId::new(0)),
+            RuleOutcome::UniqueWinner(CandidateId::new(0, "A")),
             FallthroughTieBreaker
                 .tie_break(&candidates, &fake_profile)
                 .unwrap()
         );
     }
-
     #[test]
     fn multiple_winner_fallthrough() {
-        let fake_profile: Profile<RankingBallot> = (vec![vec![0]])
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
-        let candidates = vec![CandidateId::new(0), CandidateId::new(42)];
+        let fake_profile = fake_profile();
+
+        let candidates = vec![CandidateId::new(0, "A"), CandidateId::new(42, "X")];
 
         assert_eq!(
-            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(42)]),
+            RuleOutcome::MultipleWinners(
+                vec![CandidateId::new(0, "A"), CandidateId::new(42, "X"),]
+            ),
             FallthroughTieBreaker
                 .tie_break(&candidates, &fake_profile)
                 .unwrap()

@@ -15,4 +15,4 @@ pub type BordaRule = BordaRuleWith<FallthroughTieBreaker, RankingBallot>;
 
 /// Borda Voting rule type with a custom tie-breaker.
 pub type BordaRuleWith<TB, Ballot> =
-    VotingRule<BordaScorer<Ballot>, MaxScoreDecider<usize>, TB, Ballot>;
+    VotingRule<BordaScorer<Ballot>, MaxScoreDecider<usize>, TB, Ballot, usize>;

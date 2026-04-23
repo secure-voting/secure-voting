@@ -111,12 +111,27 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], &[3, 3]; "count all")]
-    #[test_case(vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]], &[3, 1, 2]; "count top 2")]
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test examples.")
+    }
+
+    #[test_case(
+    vec![vec![1, 0], vec![0, 1], vec![1, 0]],
+    &[3, 3];
+    "count all"
+)]
+    #[test_case(
+    vec![vec![1, 0, 2], vec![0, 2, 1], vec![0, 2, 1]],
+    &[3, 1, 2];
+    "count top 2"
+)]
     fn test_correct_approval_scoring(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = ApprovalScorer::<2>;
-        let profile: Profile<RankingBallot> = Profile::try_from(votes)
-            .expect("Profile is constructed incorrectly, revise test examples.");
+
+        let profile = profile(votes, 3);
 
         assert_eq!(
             answer,
@@ -124,15 +139,17 @@ mod tests {
                 .compute_score(&profile)
                 .expect("Scorer should not fail if Q is bigger than candidate count")
                 .score()
-                .clone()
         );
     }
 
-    #[test_case(vec![vec![0, 1], vec![1, 0], vec![0, 1]]; "less than q")]
+    #[test_case(
+    vec![vec![0, 1], vec![1, 0], vec![0, 1]];
+    "less than q"
+)]
     fn test_incorrect_too_little_candidates_for_this_q(votes: Vec<Vec<usize>>) {
         let scorer = ApprovalScorer::<3>;
-        let profile: Profile<RankingBallot> = Profile::try_from(votes)
-            .expect("Profile is constructed incorrectly, revise test examples.");
+
+        let profile = profile(votes, 2);
 
         assert!(matches!(
             scorer.compute_score(&profile),

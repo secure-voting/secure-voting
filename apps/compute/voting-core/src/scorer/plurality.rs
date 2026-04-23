@@ -35,7 +35,7 @@ impl Scorer<RankingBallot> for PluralityScorer {
             (0..n_voters)
                 .into_par_iter()
                 .map(|i| {
-                    let mut tmp = vec![0; n_candidates];
+                    let mut tmp = vec![0usize; n_candidates];
                     tmp[profile.index_of(&profile[i][0]).unwrap()] = 1;
 
                     tmp
@@ -58,21 +58,22 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], &[1, 2]; "simple plurality")]
+    #[test_case(
+    vec![vec![1, 0], vec![0, 1], vec![1, 0]],
+    &[1, 2];
+    "simple plurality"
+)]
     fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = PluralityScorer;
 
+        let names = vec!["A".into(), "B".into()];
+
+        let profile = Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.");
+
         assert_eq!(
             answer,
-            scorer
-                .compute_score(
-                    &votes
-                        .try_into()
-                        .expect("Profile is constructed incorrectly, revise test example.")
-                )
-                .unwrap()
-                .score()
-                .clone()
+            scorer.compute_score(&profile).unwrap().consume_score()
         );
     }
 }

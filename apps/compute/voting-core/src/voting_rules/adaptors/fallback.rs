@@ -4,7 +4,11 @@ use std::{fmt::Debug, marker::PhantomData};
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::{prelude::Profile, tie_breaker::RuleOutcome, voting_rules::VotingRuleExec};
+use crate::{
+    prelude::Profile,
+    tie_breaker::RuleOutcome,
+    voting_rules::{Metrics, Protocol, VotingRuleExec},
+};
 
 /// A fallback adaptor.
 ///
@@ -57,13 +61,16 @@ where
     type Error = FallbackError<R1::Error, R2::Error>;
 
     #[instrument(skip(self, profile))]
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         match self.primary.execute(profile) {
-            Ok(RuleOutcome::UniqueWinner(winner)) => {
+            Ok(outcome @ (RuleOutcome::UniqueWinner(_), _, _)) => {
                 tracing::debug!("Primary rule returned a unique winner");
-                Ok(RuleOutcome::UniqueWinner(winner))
+                Ok(outcome)
             }
-            Ok(RuleOutcome::MultipleWinners(_)) => {
+            Ok((RuleOutcome::MultipleWinners(_), _, _)) => {
                 tracing::debug!("Primary rule can't decide winner, running fallback");
                 self.fallback
                     .execute(profile)
@@ -111,25 +118,24 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = &'static str;
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
-
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from(vec![vec![0, 1]])
+        Profile::try_from((vec![vec![0, 1]], vec!["A".into(), "B".into()]))
             .expect("Profile is constructed incorrectly, revise test example")
     }
-
     #[test]
     fn primary_unique_winner_short_circuits() {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(0))));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(0, "A")),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         fallback.expect_execute().times(0);
 
@@ -138,39 +144,36 @@ mod tests {
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.expect("The rule shouldn't fail"),
-            RuleOutcome::UniqueWinner(CandidateId::new(0))
+            result.expect("The rule shouldn't fail").0,
+            RuleOutcome::UniqueWinner(CandidateId::new(0, "A"))
         );
     }
-
     #[test]
     fn primary_multiple_winners_triggers_fallback() {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B")]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
-        fallback
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        fallback.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         let rule = Fallback::new(primary, fallback);
 
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.expect("The rule shouldn't fail"),
-            RuleOutcome::UniqueWinner(CandidateId::new(1))
+            result.expect("The rule shouldn't fail").0,
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B"))
         );
     }
-
     #[test]
     fn primary_error_is_propagated_and_fallback_not_called() {
         let mut primary = MockVotingRule::new();
@@ -192,19 +195,16 @@ mod tests {
             Err(FallbackError::PrimaryError("primary failed"))
         ));
     }
-
     #[test]
     fn fallback_error_is_wrapped_correctly() {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B")]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         fallback
             .expect_execute()

@@ -10,10 +10,11 @@ fn wiki_tennessee_example_copeland_i() {
     let scorer = CopelandIRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have")
+            .0
     );
 }
 
@@ -23,10 +24,11 @@ fn wiki_tennessee_example_copeland_ii() {
     let scorer = CopelandIIRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have")
+            .0
     );
 }
 
@@ -36,9 +38,10 @@ fn wiki_tennessee_example_copeland_iii() {
     let scorer = CopelandIIIRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have")
+            .0
     );
 }

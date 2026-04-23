@@ -12,10 +12,11 @@ fn wiki_example_q_1() {
     let scorer = ApprovalRule::<1>::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(MEMPHIS)),
+        RuleOutcome::UniqueWinner(CandidateId::new(MEMPHIS, "MEMPHIS")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }
 
@@ -25,10 +26,11 @@ fn wiki_example_q_2() {
     let scorer = ApprovalRule::<2>::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }
 
@@ -39,12 +41,13 @@ fn wiki_example_q_3() {
 
     assert_eq!(
         RuleOutcome::MultipleWinners(vec![
-            CandidateId::new(NASHVILLE),
-            CandidateId::new(CHATTANOOGA)
+            CandidateId::new(NASHVILLE, "NASHVILLE"),
+            CandidateId::new(CHATTANOOGA, "CHATTANOOGA")
         ]),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }
 

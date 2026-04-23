@@ -19,9 +19,9 @@ impl Decider for CondorcetDecider {
     type Error = Infallible;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        for (row, &cand_id) in scores.iter() {
+        for (row, cand_id) in scores.iter() {
             if row.iter().map(|&elem| usize::from(elem)).sum::<usize>() + 1 == row.len() {
-                return Ok(vec![cand_id]);
+                return Ok(vec![cand_id.clone()]);
             }
         }
 
@@ -46,14 +46,14 @@ mod tests {
                 .expect("Pairwise matrix is incorrectly constructed, revise text example")
                 .into(),
             &[
-                CandidateId::new(42),
-                CandidateId::new(1),
-                CandidateId::new(87),
+                CandidateId::new(42, "A"),
+                CandidateId::new(1, "B"),
+                CandidateId::new(87, "C"),
             ],
         );
 
         assert_eq!(
-            vec![CandidateId::new(42)],
+            vec![CandidateId::new(42, "A")],
             CondorcetDecider.decide(&scores).unwrap()
         );
     }
@@ -65,9 +65,9 @@ mod tests {
                 .expect("Pairwise matrix is incorrectly constructed, revise text example")
                 .into(),
             &[
-                CandidateId::new(4),
-                CandidateId::new(2),
-                CandidateId::new(67),
+                CandidateId::new(4, "A"),
+                CandidateId::new(2, "B"),
+                CandidateId::new(67, "C"),
             ],
         );
         let answer: Vec<CandidateId> = vec![];

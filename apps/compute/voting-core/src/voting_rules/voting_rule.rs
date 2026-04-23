@@ -13,7 +13,9 @@ use crate::{
     models::profile::Profile,
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
-    voting_rules::VotingRuleExec,
+    voting_rules::{
+        Final, Kind, Metrics, Protocol, RoundSize, Series, Step, Summary, ToScore, VotingRuleExec,
+    },
 };
 
 /// `VotingRule` error type.
@@ -48,7 +50,7 @@ where
 /// 2. Decider - chooses a set of winners depending on the score information
 /// 3. `TieBreaker` - chooses an absolute winner from the selected set
 #[derive(Debug, Clone, Copy)]
-pub struct VotingRule<S, D, T, Ballot> {
+pub struct VotingRule<S, D, T, Ballot, U> {
     /// A scorer instance.
     scorer: S,
     /// A decider instance.
@@ -57,13 +59,15 @@ pub struct VotingRule<S, D, T, Ballot> {
     tiebreaker: T,
     /// Phantom marker on the Ballot type.
     _ballot_type: PhantomData<Ballot>,
+    /// Scorer inner value type marker.
+    _score_type: PhantomData<U>,
 }
 
 /// Helper result type returned from the [`super::VotingRuleExec::execute`] method of [`VotingRule`] struct.
 ///
 /// Allows the method to fail in each of 3 steps, propagating the returned error up.
 pub type VotingRuleResult<S, D, T, Ballot> = Result<
-    RuleOutcome,
+    (RuleOutcome, Metrics, Protocol),
     VotingRuleError<
         <S as Scorer<Ballot>>::Error,
         <D as Decider>::Error,
@@ -71,7 +75,7 @@ pub type VotingRuleResult<S, D, T, Ballot> = Result<
     >,
 >;
 
-impl<S, D, T, Ballot> VotingRule<S, D, T, Ballot>
+impl<S, D, T, Ballot, U> VotingRule<S, D, T, Ballot, U>
 where
     S: Scorer<Ballot, Output = D::Input>,
     D: Decider,
@@ -84,14 +88,23 @@ where
             decider,
             tiebreaker,
             _ballot_type: PhantomData,
+            _score_type: PhantomData,
         }
     }
 
     /// Run the constructed pipeline.
     ///
     /// Returns an error if any of the steps didn't succeed.
+    #[allow(clippy::unwrap_used)]
     #[instrument(skip(self, profile), ret)]
-    fn run(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot> {
+    fn run<'a>(&self, profile: &Profile<Ballot>) -> VotingRuleResult<S, D, T, Ballot>
+    where
+        U: 'a + ToScore,
+        <D as Decider>::Input: AsRef<[U]>,
+    {
+        let n = profile.n_voters();
+        let m = profile.n_candidates();
+
         let scores = self
             .scorer
             .compute_score(profile)
@@ -103,18 +116,76 @@ where
             .map_err(VotingRuleError::DecisionError)?;
         tracing::debug!(?candidates, "Calculated a set of winners");
 
-        self.tiebreaker
+        let results = self
+            .tiebreaker
             .tie_break(&candidates, profile)
-            .map_err(VotingRuleError::TieBreakError)
+            .map_err(VotingRuleError::TieBreakError)?;
+        let winners = results.candidates();
+
+        let scores_array: Vec<_> = scores
+            .iter()
+            .map(|(score, cand)| score.to_score(cand.to_string(), cand.get_name().to_owned()))
+            .collect();
+
+        let metrics = Metrics::builder()
+            .summary(
+                Summary::builder()
+                    .total_ballots(n)
+                    .valid_ballots(n)
+                    .invalid_ballots(0)
+                    .candidates_count(m)
+                    .winner_count(winners.len())
+                    .committee_size(0)
+                    .rounds_count(1)
+                    .build(),
+            )
+            .series(
+                Series::builder()
+                    .candidate_scores_final(scores_array.clone())
+                    .round_sizes(vec![
+                        RoundSize::builder()
+                            .round(1)
+                            .remaining_candidates(winners.len())
+                            .build(),
+                    ])
+                    .build(),
+            )
+            .build();
+
+        let protocol = Protocol::builder()
+            .kind(Kind::SingleStep)
+            .steps(vec![
+                Step::builder()
+                    .step(1)
+                    .title("Round 1".to_owned())
+                    .action("declare_winner".to_owned())
+                    .remaining_candidate_ids(winners.iter().map(ToString::to_string).collect())
+                    .scores(scores_array)
+                    .build(),
+            ])
+            .r#final(
+                Final::builder()
+                    .winner_ids(winners.iter().map(ToString::to_string).collect())
+                    .build(),
+            )
+            .build();
+
+        Ok((results, metrics, protocol))
     }
 }
 
-impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
-    VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot>
+impl<U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot>
+    VotingRuleExec<Ballot> for VotingRule<S, D, T, Ballot, U>
+where
+    <D as Decider>::Input: AsRef<[U]>,
+    U: ToScore,
 {
     type Error = VotingRuleError<S::Error, D::Error, T::Error>;
 
-    fn execute(&self, profile: &Profile<Ballot>) -> Result<RuleOutcome, Self::Error> {
+    fn execute(
+        &self,
+        profile: &Profile<Ballot>,
+    ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         self.run(profile)
     }
 
@@ -126,8 +197,11 @@ impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ba
     }
 }
 
-impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
-    for VotingRule<S, D, T, Ballot>
+impl<U, S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ballot> Default
+    for VotingRule<S, D, T, Ballot, U>
+where
+    <D as Decider>::Input: AsRef<[U]>,
+    U: ToScore,
 {
     fn default() -> Self {
         Self {
@@ -135,6 +209,7 @@ impl<S: Scorer<Ballot, Output = D::Input>, D: Decider, T: TieBreaker<Ballot>, Ba
             decider: D::new(),
             tiebreaker: T::new(),
             _ballot_type: PhantomData,
+            _score_type: PhantomData,
         }
     }
 }

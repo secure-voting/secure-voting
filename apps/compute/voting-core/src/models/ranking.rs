@@ -22,9 +22,9 @@ pub struct RankingBallot {
 
 impl RankingBallot {
     /// Create a new `RankingBallot`.
-    pub fn new(votes: &[usize]) -> Self {
+    pub fn new(votes: &[CandidateId]) -> Self {
         Self {
-            votes: votes.iter().copied().map(CandidateId::new).collect(),
+            votes: votes.to_vec(),
         }
     }
 
@@ -83,6 +83,9 @@ pub enum ProfileError {
     /// Returned if the ballot contains a duplicate vote.
     #[error("Candidate ID {0} was voted at least twice")]
     DoubleVote(usize),
+    /// Returned if the candidate names don't match the number of them.
+    #[error("There are {0} candidates' names, but {1} candidates")]
+    CandidateLengthMismatch(usize, usize),
 }
 
 impl Profile<RankingBallot> {
@@ -93,11 +96,11 @@ impl Profile<RankingBallot> {
         self,
         candidates: Vec<CandidateId>,
     ) -> Result<Self, CandidateRemovalError> {
-        if let Some(&wrong_id) = candidates
+        if let Some(wrong_id) = candidates
             .iter()
             .find(|candidate_id| self.active_candidates.binary_search(candidate_id).is_err())
         {
-            return Err(CandidateRemovalError(wrong_id));
+            return Err(CandidateRemovalError(wrong_id.clone()));
         }
 
         let to_remove = candidates.into_iter().collect::<HashSet<_>>();
@@ -115,7 +118,7 @@ impl Profile<RankingBallot> {
                     continue;
                 }
 
-                new_ranking.push(rank.into_inner());
+                new_ranking.push(rank);
             }
 
             new_votes.push(RankingBallot::new(&new_ranking));
@@ -134,12 +137,12 @@ impl Profile<RankingBallot> {
     }
 }
 
-impl TryFrom<Vec<Vec<usize>>> for Profile<RankingBallot> {
+impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
     ///
-    /// - At least one voter
+/// - At least one voter
     /// - At least one candidate
     /// - All ballots have the same length
     /// - All candidates' IDs are valid
@@ -147,7 +150,9 @@ impl TryFrom<Vec<Vec<usize>>> for Profile<RankingBallot> {
     ///
     /// The order of candidates in each ballot represents the preference of chosen voter.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: Vec<Vec<usize>>) -> Result<Self, Self::Error> {
+    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (value, names) = value;
+
         if value.is_empty() {
             return Err(ProfileError::NoVoters);
         }
@@ -160,27 +165,46 @@ impl TryFrom<Vec<Vec<usize>>> for Profile<RankingBallot> {
             return Err(ProfileError::DifferentVoteLengths);
         }
 
-        for vote in &value {
-            let mut candidates = vec![0; value[0].len()];
-            for &candidate in vote {
-                if candidate >= value[0].len() {
-                    return Err(ProfileError::InvalidCandidateId(candidate));
-                }
+        let max_id = value.iter().flat_map(|v| v.iter()).copied().max().unwrap_or(0);
+        if max_id >= names.len() {
+            return Err(ProfileError::InvalidCandidateId(max_id));
+        }
 
-                if candidates[candidate] != 0 {
+        if value[0].len() > names.len() {
+            return Err(ProfileError::CandidateLengthMismatch(
+                value[0].len(),
+                names.len(),
+            ));
+        }
+
+        // If we have more names than ballot positions, that's ok - those candidates simply weren't ranked.
+
+        for vote in &value {
+            let mut seen = vec![false; names.len()];
+            for &candidate in vote {
+                if seen[candidate] {
                     return Err(ProfileError::DoubleVote(candidate));
                 }
-
-                candidates[candidate] = 1;
+                seen[candidate] = true;
             }
         }
 
         Ok(Profile {
             votes: value
                 .iter()
-                .map(|voter_info| RankingBallot::new(voter_info))
+                .map(|voter_info| {
+                    RankingBallot::new(
+                        &voter_info
+                            .iter()
+                            .map(|&elem| CandidateId::new(elem, names[elem].clone()))
+                            .collect::<Vec<_>>(),
+                    )
+                })
                 .collect(),
-            active_candidates: (0..value[0].len()).map(CandidateId::new).collect(),
+            active_candidates: (0..value[0].len())
+                .zip(names.iter())
+                .map(|(id, name)| CandidateId::new(id, name))
+                .collect(),
         })
     }
 }

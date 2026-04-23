@@ -44,8 +44,13 @@ pub enum ZipScorerError<SE1, SE2> {
     SecondScorerError(SE2),
 }
 
-impl<T1, T2, S1: Scorer<Ballot, Output = T1>, S2: Scorer<Ballot, Output = T2>, Ballot>
-    Scorer<Ballot> for ZipScorer<S1, S2, Ballot>
+impl<
+    T1: Clone + PartialOrd + Ord,
+    T2: Clone + PartialOrd + Ord,
+    S1: Scorer<Ballot, Output = T1>,
+    S2: Scorer<Ballot, Output = T2>,
+    Ballot,
+> Scorer<Ballot> for ZipScorer<S1, S2, Ballot>
 {
     type Output = (T1, T2);
 

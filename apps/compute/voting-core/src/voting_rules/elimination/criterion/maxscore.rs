@@ -22,7 +22,8 @@ impl EliminationCriterion for MaxScoreElimination {
         scores
             .iter()
             .filter(|(score, _)| max_score == *score)
-            .map(|(_, &id)| id)
+            .map(|(_, id)| id)
+            .cloned()
             .collect()
     }
 

@@ -15,23 +15,23 @@ impl Decider for ThresholdDecider {
     type Error = Infallible;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        let mut best: Option<&Vec<usize>> = None;
+        let mut best = None;
         let mut winners = Vec::new();
 
         for (score_vec, candidate) in scores.iter() {
             match best {
                 None => {
                     best = Some(score_vec);
-                    winners.push(*candidate);
+                    winners.push(candidate.clone());
                 }
                 Some(best_vec) => match score_vec.cmp(best_vec) {
                     std::cmp::Ordering::Greater => {
                         best = Some(score_vec);
                         winners.clear();
-                        winners.push(*candidate);
+                        winners.push(candidate.clone());
                     }
                     std::cmp::Ordering::Equal => {
-                        winners.push(*candidate);
+                        winners.push(candidate.clone());
                     }
                     std::cmp::Ordering::Less => {}
                 },
@@ -55,13 +55,16 @@ mod tests {
         let scores = Score::new(
             vec![vec![2, 1], vec![0, 1], vec![1, 1]],
             &[
-                CandidateId::new(0),
-                CandidateId::new(1),
-                CandidateId::new(2),
+                CandidateId::new(0, "A"),
+                CandidateId::new(1, "B"),
+                CandidateId::new(2, "C"),
             ],
         );
 
         let decider = ThresholdDecider;
-        assert_eq!(decider.decide(&scores).unwrap(), vec![CandidateId::new(0)]);
+        assert_eq!(
+            decider.decide(&scores).unwrap(),
+            vec![CandidateId::new(0, "A")]
+        );
     }
 }
