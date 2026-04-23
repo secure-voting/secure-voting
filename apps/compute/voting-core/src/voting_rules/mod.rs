@@ -6,7 +6,7 @@ use std::fmt::Debug;
 
 use bon::Builder;
 
-use crate::{models::profile::Profile, tie_breaker::RuleOutcome};
+use crate::{models::profile::Profile, prelude::CandidateId, tie_breaker::RuleOutcome};
 
 pub mod adaptors;
 pub mod elimination;
@@ -29,7 +29,7 @@ pub mod simpson;
 pub mod threshold;
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Summary {
     total_ballots: usize,
     valid_ballots: usize,
@@ -41,7 +41,7 @@ pub struct Summary {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Numeric {
     winner_score: f64,
     runner_up_score: f64,
@@ -50,7 +50,7 @@ pub struct Numeric {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Score {
     candidate_id: String,
     candidate_name: String,
@@ -58,21 +58,21 @@ pub struct Score {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct RoundSize {
     round: usize,
     remaining_candidates: usize,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Series {
     candidate_scores_final: Option<Vec<Score>>,
     round_sizes: Option<Vec<RoundSize>>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Metrics {
     summary: Summary,
     numeric: Option<Numeric>,
@@ -80,8 +80,9 @@ pub struct Metrics {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum Kind {
+    #[default]
     SingleStep,
     EliminationRounds,
     SelectionRounds,
@@ -90,13 +91,13 @@ pub enum Kind {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Final {
     winner_ids: Vec<String>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Step {
     step: usize,
     title: String,
@@ -109,11 +110,40 @@ pub struct Step {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Builder)]
+#[derive(Debug, Clone, Default, Builder)]
 pub struct Protocol {
     kind: Kind,
     steps: Vec<Step>,
     r#final: Final,
+}
+
+impl Step {
+    pub fn set_remaining(&mut self, cands: &[CandidateId]) {
+        self.remaining_candidate_ids = Some(cands.iter().map(ToString::to_string).collect());
+    }
+
+    pub fn set_eliminated(&mut self, cands: &[CandidateId]) {
+        self.eliminated_candidate_ids = Some(cands.iter().map(ToString::to_string).collect());
+    }
+
+    pub fn set_action(&mut self, action: &str) {
+        self.action = action.to_owned();
+    }
+}
+
+impl Protocol {
+    pub fn add_step(&mut self, step: Step) {
+        self.steps.push(step);
+    }
+
+    pub fn add_steps(&mut self, steps: &[Step]) {
+        let orig_len = self.steps.len();
+        self.steps.extend(steps.iter().cloned());
+
+        self.steps[orig_len..]
+            .iter_mut()
+            .for_each(|x| x.step += orig_len);
+    }
 }
 
 /// Trait for all the voting rules, simple and complex ones.
