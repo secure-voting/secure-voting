@@ -14,7 +14,7 @@ use crate::{
 pub struct MinScoreElimination;
 
 impl EliminationCriterion for MinScoreElimination {
-    type Score = Vec<usize>;
+    type Score = usize;
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         #[allow(clippy::unwrap_used)]
