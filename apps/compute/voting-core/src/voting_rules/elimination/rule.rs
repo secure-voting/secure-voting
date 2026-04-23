@@ -16,7 +16,7 @@ use crate::{
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
-        Metrics, Protocol, VotingRuleExec,
+        Final, Kind, Metrics, Protocol, RoundSize, Score, Series, Step, Summary, VotingRuleExec,
         elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
     },
 };
@@ -98,6 +98,15 @@ where
     ) -> Result<(RuleOutcome, Metrics, Protocol), Self::Error> {
         let mut current_profile = profile.clone();
 
+        let mut steps = vec![];
+        let mut round_sizes = vec![];
+        let summary = Summary::builder()
+            .total_ballots(profile.n_voters())
+            .valid_ballots(profile.n_voters())
+            .invalid_ballots(0)
+            .candidates_count(profile.n_candidates())
+            .committee_size(0);
+
         loop {
             let scores = self
                 .scorer
@@ -116,17 +125,114 @@ where
                 .map_err(EliminationRuleError::TieBreakError)?;
             tracing::debug!(?outcome, "Calculated an");
 
+            let mut cur_step = Step::builder()
+                .step(steps.len() + 1)
+                .title(format!("Round {}", steps.len() + 1))
+                .action("recount".into())
+                .scores(
+                    scores
+                        .iter()
+                        .map(|(score, cand)| {
+                            Score::builder()
+                                .candidate_id(cand.to_string())
+                                .candidate_name("placeholder".into())
+                                .value(score.clone().into())
+                                .build()
+                        })
+                        .collect(),
+                )
+                .build();
+
+            let cur_round_size = RoundSize::builder()
+                .round(round_sizes.len() + 1)
+                .remaining_candidates(profile.n_candidates())
+                .build();
+            round_sizes.push(cur_round_size);
+
             if self.stop.should_stop(&scores, &outcome, profile) {
                 tracing::debug!("Stopping condition met, finishing elimination rounds");
-                return Ok(outcome);
+
+                cur_step.set_action("declare_winner");
+                steps.push(cur_step);
+                let protocol = Protocol::builder()
+                    .kind(Kind::EliminationRounds)
+                    .steps(steps.clone())
+                    .r#final(
+                        Final::builder()
+                            .winner_ids(
+                                outcome
+                                    .candidates()
+                                    .iter()
+                                    .map(ToString::to_string)
+                                    .collect(),
+                            )
+                            .build(),
+                    )
+                    .build();
+                let summary = summary
+                    .winner_count(outcome.candidates().len())
+                    .rounds_count(steps.len())
+                    .build();
+                let metrics = Metrics::builder()
+                    .summary(summary)
+                    .series(
+                        Series::builder()
+                            .round_sizes(round_sizes)
+                            .candidate_scores_final(
+                                scores
+                                    .iter()
+                                    .map(|(score, cand)| {
+                                        Score::builder()
+                                            .candidate_id(cand.to_string())
+                                            .candidate_name("placeholder".into())
+                                            .value(score.clone().into())
+                                            .build()
+                                    })
+                                    .collect(),
+                            )
+                            .build(),
+                    )
+                    .build();
+
+                return Ok((outcome, metrics, protocol));
             }
 
             let to_remove = self.eliminator.eliminate(&scores);
             tracing::debug!(?to_remove, "Removing candidates");
 
+            cur_step.set_eliminated(&to_remove);
+
             if to_remove.is_empty() {
                 tracing::debug!("Removed candidate set is empty, stopping on undecided state");
-                return Ok(RuleOutcome::MultipleWinners(vec![]));
+                steps.push(cur_step);
+                let protocol = Protocol::builder()
+                    .kind(Kind::EliminationRounds)
+                    .steps(steps.clone())
+                    .r#final(Final::builder().winner_ids(vec![]).build())
+                    .build();
+                let summary = summary.winner_count(0).rounds_count(steps.len()).build();
+                let metrics = Metrics::builder()
+                    .summary(summary)
+                    .series(
+                        Series::builder()
+                            .round_sizes(round_sizes)
+                            .candidate_scores_final(
+                                scores
+                                    .iter()
+                                    .map(|(score, cand)| {
+                                        Score::builder()
+                                            .candidate_id(cand.to_string())
+                                            .candidate_name("placeholder".into())
+                                            .value(score.clone().into())
+                                            .build()
+                                    })
+                                    .collect(),
+                            )
+                            .build(),
+                    )
+                    .build();
+
+                return Ok((RuleOutcome::MultipleWinners(vec![]), metrics, protocol));
             }
 
             current_profile = current_profile
@@ -134,11 +240,48 @@ where
                 .map_err(EliminationRuleError::CandidateRemovalError)?;
             tracing::debug!("Candidates left: {:?}", current_profile.active_candidates());
 
+            cur_step.set_remaining(&current_profile.active_candidates());
+
             if current_profile.active_candidates().len() == 1 {
                 tracing::debug!("Unique winner found, stopping elimination");
                 let winner = current_profile.active_candidates()[0];
-                return Ok(RuleOutcome::UniqueWinner(winner));
+
+                steps.push(cur_step);
+                let protocol = Protocol::builder()
+                    .kind(Kind::EliminationRounds)
+                    .steps(steps.clone())
+                    .r#final(
+                        Final::builder()
+                            .winner_ids(vec![winner.to_string()])
+                            .build(),
+                    )
+                    .build();
+                let summary = summary.winner_count(1).rounds_count(steps.len()).build();
+                let metrics = Metrics::builder()
+                    .summary(summary)
+                    .series(
+                        Series::builder()
+                            .round_sizes(round_sizes)
+                            .candidate_scores_final(
+                                scores
+                                    .iter()
+                                    .map(|(score, cand)| {
+                                        Score::builder()
+                                            .candidate_id(cand.to_string())
+                                            .candidate_name("placeholder".into())
+                                            .value(score.clone().into())
+                                            .build()
+                                    })
+                                    .collect(),
+                            )
+                            .build(),
+                    )
+                    .build();
+
+                return Ok((RuleOutcome::UniqueWinner(winner), metrics, protocol));
             }
+
+            steps.push(cur_step);
         }
     }
 
