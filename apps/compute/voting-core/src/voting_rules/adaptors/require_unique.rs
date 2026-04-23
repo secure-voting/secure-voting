@@ -105,8 +105,11 @@ mod tests {
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from(vec![vec![0, 2, 1]])
-            .expect("Profile is constructed incorrectly, revise test example.")
+        Profile::try_from((
+            vec![vec![0, 2, 1]],
+            vec!["A".into(), "B".into(), "C".into()],
+        ))
+        .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     #[test]
@@ -114,13 +117,13 @@ mod tests {
         let mut mock = MockVotingRule::new();
 
         mock.expect_execute().times(1).return_const(Ok((
-            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             Metrics::default(),
             Protocol::default(),
         )));
 
         assert_eq!(
-            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             RequireUnique::new(mock)
                 .execute(&fake_profile())
                 .expect("Shouldn't fail on a profile with a clear winner")
@@ -139,13 +142,12 @@ mod tests {
             Err(RequireUniqueError::RuleError(()))
         ));
     }
-
     #[test]
     fn error_non_unique() {
         let mut mock = MockVotingRule::new();
 
         mock.expect_execute().times(1).return_const(Ok((
-            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(1)]),
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B")]),
             Metrics::default(),
             Protocol::default(),
         )));

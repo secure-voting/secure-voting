@@ -26,7 +26,7 @@ impl<A: Decider<Input = T1>, T1: Clone + PartialOrd + Ord, T2: Clone + PartialOr
     type Error = A::Error;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
+        let new_score = scores.score().0.clone();
         let new_candidates = scores.candidates();
 
         self.action.decide(&Score::new(new_score, new_candidates))
@@ -48,7 +48,7 @@ impl<A: Decider<Input = T2>, T1: Clone + PartialOrd + Ord, T2: Clone + PartialOr
     type Error = A::Error;
 
     fn decide(&self, scores: &Score<Self::Input>) -> Result<Vec<CandidateId>, Self::Error> {
-        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
+        let new_score = scores.score().1.clone();
         let new_candidates = scores.candidates();
 
         self.action.decide(&Score::new(new_score, new_candidates))
@@ -71,7 +71,7 @@ impl<
     type Score = (T1, T2);
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
-        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
+        let new_score = scores.score().0.clone();
         let new_candidates = scores.candidates();
 
         self.action
@@ -95,7 +95,7 @@ impl<
     type Score = (T1, T2);
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
-        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
+        let new_score = scores.score().1.clone();
         let new_candidates = scores.candidates();
 
         self.action
@@ -123,7 +123,7 @@ impl<
         outcome: &RuleOutcome,
         profile: &Profile<Ballot>,
     ) -> bool {
-        let new_score = scores.score().iter().map(|(a, _)| a.clone()).collect();
+        let new_score = scores.score().0.clone();
         let new_candidates = scores.candidates();
 
         self.action
@@ -151,7 +151,7 @@ impl<
         outcome: &RuleOutcome,
         profile: &Profile<Ballot>,
     ) -> bool {
-        let new_score = scores.score().iter().map(|(_, b)| b.clone()).collect();
+        let new_score = scores.score().1.clone();
         let new_candidates = scores.candidates();
 
         self.action

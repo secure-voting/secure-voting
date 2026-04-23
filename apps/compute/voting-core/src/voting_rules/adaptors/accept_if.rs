@@ -100,48 +100,48 @@ mod tests {
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from(vec![vec![0, 2, 1]])
-            .expect("Profile is constructed incorrectly, revise test example.")
+        Profile::try_from((
+            vec![vec![0, 2, 1]],
+            vec!["A".into(), "B".into(), "C".into()],
+        ))
+        .expect("Profile is constructed incorrectly, revise test example.")
     }
-
     #[test]
     fn does_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
         mock.expect_execute().return_const(Ok((
-            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             Metrics::default(),
             Protocol::default(),
         )));
 
         assert_eq!(
-            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            RuleOutcome::UniqueWinner(CandidateId::new(1, "B")),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
                 .expect("Unexpected error")
                 .0
         );
     }
-
     #[test]
     fn doesnt_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
         mock.expect_execute().return_const(Ok((
-            RuleOutcome::MultipleWinners(vec![CandidateId::new(1), CandidateId::new(2)]),
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1, "B"), CandidateId::new(2, "C")]),
             Metrics::default(),
             Protocol::default(),
         )));
 
         assert_eq!(
-            RuleOutcome::MultipleWinners(vec![CandidateId::new(1), CandidateId::new(2)]),
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1, "B"), CandidateId::new(2, "C"),]),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
                 .expect("Unexpected error")
                 .0
         );
     }
-
     #[test]
     fn voting_rule_error_is_propagated() {
         let mut mock = MockSuccessfulVotingRule::new();
