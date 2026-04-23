@@ -26,6 +26,9 @@ import type {
   AdminUser,
   AdminSettings,
   AdminSettingsUpdateRequest,
+  ScoreEntry,
+  ProtocolStep,
+  ExperimentRunResultResp,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -661,7 +664,11 @@ export const api = {
     },
 
     async result(token: string, id: string, signal?: AbortSignal) {
-      return await request<unknown>(`/api/v1/experiment-runs/${id}/result`, { method: "GET", signal }, token);
+      return await request<ExperimentRunResultResp>(
+        `/api/v1/experiment-runs/${id}/result`,
+        { method: "GET", signal },
+        token
+      );
     },
 
     async download(token: string, id: string) {

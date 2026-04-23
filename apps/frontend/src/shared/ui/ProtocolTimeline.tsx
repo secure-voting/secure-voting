@@ -41,12 +41,31 @@ function normalizeScoreArray(value: unknown): string {
   return value
     .map((item) => {
       if (!isObject(item)) return compact(item);
+
       const candidateName =
         typeof item.candidate_name === "string" && item.candidate_name.trim()
           ? item.candidate_name.trim()
           : typeof item.candidate_id === "string" && item.candidate_id.trim()
             ? item.candidate_id.trim()
             : "Кандидат";
+
+      const scoreKind =
+        typeof item.score_kind === "string" && item.score_kind.trim()
+          ? item.score_kind.trim()
+          : null;
+
+      if (scoreKind === "vector" && Array.isArray(item.values)) {
+        return `${candidateName}: [${item.values.map((v) => compact(v)).join(", ")}]`;
+      }
+
+      if (scoreKind === "scalar") {
+        return `${candidateName}: ${compact(item.value)}`;
+      }
+
+      if (Array.isArray(item.values)) {
+        return `${candidateName}: [${item.values.map((v) => compact(v)).join(", ")}]`;
+      }
+
       const score = item.value ?? item.score ?? item.points ?? item.count;
       return `${candidateName}: ${compact(score)}`;
     })

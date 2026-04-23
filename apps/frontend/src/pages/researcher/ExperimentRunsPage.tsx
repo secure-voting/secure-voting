@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { Experiment, ExperimentRunItem } from "../../shared/api/types";
+import type { Experiment, ExperimentRunItem, ExperimentRunResultResp } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -72,6 +72,37 @@ function numericItems(value: unknown): Array<{ label: string; value: number }> {
       label: key,
       value: Number(val),
     }));
+}
+
+function vectorChartItems(value: unknown): Array<{ label: string; value: number }> {
+  if (!isObject(value)) return [];
+
+  const series = isObject(value.series) ? value.series : null;
+  if (!series || !Array.isArray(series.candidate_scores_final)) return [];
+
+  const items: Array<{ label: string; value: number }> = [];
+
+  for (const raw of series.candidate_scores_final) {
+    if (!isObject(raw)) continue;
+    if (!Array.isArray(raw.values)) continue;
+    if (!raw.values.every((v) => typeof v === "number" && Number.isFinite(v))) continue;
+
+    const baseLabel =
+      typeof raw.candidate_name === "string" && raw.candidate_name.trim()
+        ? raw.candidate_name.trim()
+        : typeof raw.candidate_id === "string" && raw.candidate_id.trim()
+          ? raw.candidate_id.trim()
+          : "Кандидат";
+
+    raw.values.forEach((v, index) => {
+      items.push({
+        label: `${baseLabel} [${index + 1}]`,
+        value: Number(v),
+      });
+    });
+  }
+
+  return items;
 }
 
 function numberFromRecordByKeys(value: unknown, keys: string[]): number | null {
@@ -146,6 +177,13 @@ function winnerList(value: unknown): string[] {
   if (value != null) return [prettyValue(value)];
   return [];
 }
+
+function resultErrorText(value: unknown): string | null {
+  if (!isObject(value)) return null;
+  const text = value.error_text;
+  return typeof text === "string" && text.trim() ? text.trim() : null;
+}
+
 
 type RunsLocationState = {
   createdRuns?: Array<{
@@ -350,14 +388,25 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   }
   lines.push("");
 
-  lines.push("Full result JSON:");
-  try {
-    lines.push(JSON.stringify(result ?? {}, null, 2));
-  } catch {
-    lines.push(String(result));
+  const protocol = isObject(resultRec) ? resultRec.protocol : null;
+  const errorText =
+    isObject(resultRec) && typeof resultRec.error_text === "string" && resultRec.error_text.trim()
+      ? resultRec.error_text.trim()
+      : "";
+
+  if (errorText) {
+    lines.push("Error:");
+    lines.push(errorText);
+    lines.push("");
+  }
+
+  lines.push("Protocol:");
+  if (protocol != null) {
+    lines.push(prettyValue(protocol));
+  } else {
+    lines.push("—");
   }
   lines.push("");
-
   return `${lines.join("\n")}`;
 }
 
@@ -367,7 +416,7 @@ export function ExperimentRunsPage() {
 
   const [items, setItems] = useState<ExperimentRunItem[]>([]);
   const [selected, setSelected] = useState<ExperimentRunItem | null>(null);
-  const [selectedResult, setSelectedResult] = useState<unknown>(null);
+  const [selectedResult, setSelectedResult] = useState<ExperimentRunResultResp | null>(null);
 
   const [experimentIdFilter, setExperimentIdFilter] = useState("");
   const [batchPayload, setBatchPayload] = useState("{\n  \n}");
@@ -632,8 +681,10 @@ export function ExperimentRunsPage() {
   const artifactsSummary = useMemo(() => summaryItems(resultRecord?.artifacts), [resultRecord]);
   const winners = useMemo(() => winnerList(resultRecord?.winners), [resultRecord]);
   const canonical = useMemo(() => canonicalIndicators(selectedResult), [selectedResult]);
+  const errorText = useMemo(() => resultErrorText(selectedResult), [selectedResult]);
 
   const metricChartItems = useMemo(() => numericItems(resultRecord?.metrics), [resultRecord]);
+  const vectorMetricChartItems = useMemo(() => vectorChartItems(resultRecord?.metrics), [resultRecord]);
   const timingsChartItems = useMemo(() => numericItems(resultRecord?.timings), [resultRecord]);
 
   const counters = useMemo(() => {
@@ -963,6 +1014,22 @@ export function ExperimentRunsPage() {
       <div style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Результат запуска</h3>
         {resultLoading ? <div style={styles.muted}>Загрузка…</div> : null}
+        
+
+        {errorText ? (
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #fecaca",
+              background: "#fef2f2",
+              color: "#991b1b",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Ошибка выполнения</div>
+            <div>{errorText}</div>
+          </div>
+        ) : null}
 
         {resultRecord ? (
           <div style={{ display: "grid", gap: 12 }}>
@@ -1021,6 +1088,12 @@ export function ExperimentRunsPage() {
               emptyText="Нет числовых метрик для графика"
             />
 
+            <SimpleBarChart
+              title="Векторные оценки кандидатов"
+              items={vectorMetricChartItems}
+              emptyText="Нет векторных оценок для графика"
+            />
+
             <div>
               <h4 style={{ marginBottom: 8 }}>Временные показатели</h4>
               {timingsSummary.length > 0 ? (
@@ -1056,11 +1129,6 @@ export function ExperimentRunsPage() {
               ) : (
                 <div style={styles.muted}>Протокол отсутствует</div>
               )}
-            </div>
-
-            <div>
-              <h4 style={{ marginBottom: 8 }}>Полный JSON</h4>
-              <JsonBlock value={selectedResult} />
             </div>
           </div>
         ) : (

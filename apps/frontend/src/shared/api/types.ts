@@ -327,6 +327,49 @@ export type ExperimentRunItem = Record<string, unknown> & {
   finished_at?: string | null;
 };
 
+export type ScoreEntry =
+  | {
+      candidate_id: string;
+      candidate_name?: string;
+      score_kind: "scalar";
+      value: number;
+    }
+  | {
+      candidate_id: string;
+      candidate_name?: string;
+      score_kind: "vector";
+      values: number[];
+    };
+
+export type ProtocolStep = {
+  step?: number;
+  round?: number;
+  title?: string;
+  action?: string;
+  remaining_candidate_ids?: string[];
+  selected_candidate_ids?: string[];
+  eliminated_candidate_ids?: string[];
+  scores?: ScoreEntry[];
+  note?: string;
+  [key: string]: unknown;
+};
+
+export type ExperimentRunResultResp = {
+  run_id: string;
+  status?: "done" | "error" | string;
+  error_text?: string;
+  winners?: string[];
+  metrics?: Record<string, unknown>;
+  protocol?: {
+    kind?: string;
+    steps?: ProtocolStep[];
+    final?: Record<string, unknown>;
+    [key: string]: unknown;
+  } | ProtocolStep[] | Record<string, unknown> | null;
+  timings?: Record<string, unknown>;
+  artifacts?: Record<string, unknown>;
+};
+
 export type JobItem = Record<string, unknown> & {
   id?: string;
   kind?: string;

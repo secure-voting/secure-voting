@@ -180,6 +180,37 @@ function numericItemsFromMetrics(value: unknown): Array<{ label: string; value: 
   return [];
 }
 
+function vectorChartItemsFromMetrics(value: unknown): Array<{ label: string; value: number }> {
+  if (!isObject(value)) return [];
+
+  const series = isObject(value.series) ? value.series : null;
+  if (!series || !Array.isArray(series.candidate_scores_final)) return [];
+
+  const items: Array<{ label: string; value: number }> = [];
+
+  for (const raw of series.candidate_scores_final) {
+    if (!isObject(raw)) continue;
+    if (!Array.isArray(raw.values)) continue;
+    if (!raw.values.every((v) => typeof v === "number" && Number.isFinite(v))) continue;
+
+    const baseLabel =
+      typeof raw.candidate_name === "string" && raw.candidate_name.trim()
+        ? raw.candidate_name.trim()
+        : typeof raw.candidate_id === "string" && raw.candidate_id.trim()
+          ? raw.candidate_id.trim()
+          : "Кандидат";
+
+    raw.values.forEach((v, index) => {
+      items.push({
+        label: `${baseLabel} [${index + 1}]`,
+        value: Number(v),
+      });
+    });
+  }
+
+  return items;
+}
+
 function hasDisplayableProtocol(protocol: unknown): boolean {
   if (protocol == null) return false;
   if (Array.isArray(protocol)) return protocol.length > 0;
@@ -312,6 +343,7 @@ export function ResultsPage() {
   const metricsSummary = useMemo(() => summaryItemsFromMetrics(res?.metrics), [res?.metrics]);
   const paramsSummary = useMemo(() => paramsItems(res?.params), [res?.params]);
   const metricChartItems = useMemo(() => numericItemsFromMetrics(res?.metrics), [res?.metrics]);
+  const vectorMetricChartItems = useMemo(() => vectorChartItemsFromMetrics(res?.metrics), [res?.metrics]);
   const showProtocolBlock = hasDisplayableProtocol(res?.protocol);
 
   return (
@@ -417,14 +449,20 @@ export function ResultsPage() {
                 {metricsSummary.length > 0 ? (
                   <SummaryGrid items={metricsSummary} />
                 ) : (
-                  <div style={styles.muted}>Дополнительные метрики не предоставлены</div>
+                  <div style={styles.muted}>Сводные показатели не предоставлены</div>
                 )}
               </div>
 
               <SimpleBarChart
-                title="Числовые метрики"
+                title="Скалярные числовые метрики"
                 items={metricChartItems}
-                emptyText="Числовые метрики для графика отсутствуют"
+                emptyText="Скалярные числовые метрики для графика отсутствуют"
+              />
+
+              <SimpleBarChart
+                title="Векторные оценки кандидатов"
+                items={vectorMetricChartItems}
+                emptyText="Векторные оценки для графика отсутствуют"
               />
             </div>
 
