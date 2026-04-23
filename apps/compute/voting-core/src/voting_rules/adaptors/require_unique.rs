@@ -99,7 +99,7 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for VotingRule {
             type Error = ();
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
@@ -113,15 +113,18 @@ mod tests {
     fn unique_winner_propagation() {
         let mut mock = MockVotingRule::new();
 
-        mock.expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        mock.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
             RuleOutcome::UniqueWinner(CandidateId::new(1)),
             RequireUnique::new(mock)
                 .execute(&fake_profile())
                 .expect("Shouldn't fail on a profile with a clear winner")
+                .0
         );
     }
 
@@ -141,12 +144,11 @@ mod tests {
     fn error_non_unique() {
         let mut mock = MockVotingRule::new();
 
-        mock.expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        mock.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(1)]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert!(matches!(
             RequireUnique::new(mock).execute(&fake_profile()),

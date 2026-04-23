@@ -133,10 +133,11 @@ mod tests {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(0))));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(0)),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         fallback.expect_execute().times(0);
 
@@ -145,7 +146,7 @@ mod tests {
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.expect("The rule shouldn't fail"),
+            result.expect("The rule shouldn't fail").0,
             RuleOutcome::UniqueWinner(CandidateId::new(0))
         );
     }
@@ -155,25 +156,24 @@ mod tests {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(1)]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
-        fallback
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        fallback.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         let rule = Fallback::new(primary, fallback);
 
         let result = rule.execute(&fake_profile());
 
         assert_eq!(
-            result.expect("The rule shouldn't fail"),
+            result.expect("The rule shouldn't fail").0,
             RuleOutcome::UniqueWinner(CandidateId::new(1))
         );
     }
@@ -205,13 +205,11 @@ mod tests {
         let mut primary = MockVotingRule::new();
         let mut fallback = MockVotingRule::new();
 
-        primary
-            .expect_execute()
-            .times(1)
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-            ])));
+        primary.expect_execute().times(1).return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(0), CandidateId::new(1)]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         fallback
             .expect_execute()

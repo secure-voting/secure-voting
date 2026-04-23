@@ -50,7 +50,11 @@ where
             Ok(outcome)
         } else {
             tracing::debug!("Predicate is false, rejecting outcome");
-            Ok(RuleOutcome::MultipleWinners(outcome.candidates()))
+            Ok((
+                RuleOutcome::MultipleWinners(outcome.0.candidates()),
+                outcome.1,
+                outcome.2,
+            ))
         }
     }
 
@@ -90,7 +94,7 @@ mod tests {
         impl VotingRuleExec<RankingBallot> for SuccessfulVotingRule {
             type Error = ();
 
-            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<RuleOutcome, <Self as VotingRuleExec<RankingBallot>>::Error>;
+            fn execute(&self, profile: &Profile<RankingBallot>) -> Result<(RuleOutcome, Metrics, Protocol), <Self as VotingRuleExec<RankingBallot>>::Error>;
             fn create_default() -> Self where Self: Sized;
         }
     }
@@ -104,13 +108,18 @@ mod tests {
     fn does_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
-        mock.expect_execute()
-            .return_const(Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))));
+        mock.expect_execute().return_const(Ok((
+            RuleOutcome::UniqueWinner(CandidateId::new(1)),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
-            Ok(RuleOutcome::UniqueWinner(CandidateId::new(1))),
+            RuleOutcome::UniqueWinner(CandidateId::new(1)),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect("Unexpected error")
+                .0
         );
     }
 
@@ -118,19 +127,18 @@ mod tests {
     fn doesnt_match_outcome() {
         let mut mock = MockSuccessfulVotingRule::new();
 
-        mock.expect_execute()
-            .return_const(Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(1),
-                CandidateId::new(2),
-            ])));
+        mock.expect_execute().return_const(Ok((
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1), CandidateId::new(2)]),
+            Metrics::default(),
+            Protocol::default(),
+        )));
 
         assert_eq!(
-            Ok(RuleOutcome::MultipleWinners(vec![
-                CandidateId::new(1),
-                CandidateId::new(2)
-            ])),
+            RuleOutcome::MultipleWinners(vec![CandidateId::new(1), CandidateId::new(2)]),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect("Unexpected error")
+                .0
         );
     }
 
@@ -141,9 +149,10 @@ mod tests {
         mock.expect_execute().return_const(Err(()));
 
         assert_eq!(
-            Err(()),
+            (),
             AcceptIf::new(mock, |outcome: &RuleOutcome| outcome.is_unique())
                 .execute(&fake_profile())
+                .expect_err("Unexpected success")
         );
     }
 }
