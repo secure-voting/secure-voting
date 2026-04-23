@@ -22,7 +22,7 @@ impl RuleOutcome {
     #[must_use]
     pub fn candidates(&self) -> Vec<CandidateId> {
         match self {
-            RuleOutcome::UniqueWinner(candidate_id) => vec![*candidate_id],
+            RuleOutcome::UniqueWinner(candidate_id) => vec![candidate_id.clone()],
             RuleOutcome::MultipleWinners(candidate_ids) => candidate_ids.clone(),
         }
     }
@@ -40,7 +40,7 @@ impl RuleOutcome {
 impl From<Vec<CandidateId>> for RuleOutcome {
     fn from(value: Vec<CandidateId>) -> Self {
         match value.len() {
-            1 => RuleOutcome::UniqueWinner(value[0]),
+            1 => RuleOutcome::UniqueWinner(value[0].clone()),
             _ => RuleOutcome::MultipleWinners(value),
         }
     }

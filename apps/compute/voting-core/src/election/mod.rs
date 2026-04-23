@@ -54,7 +54,7 @@ where
         .0
         .candidates()
         .iter()
-        .map(|x| id_to_cand[x.into_inner()].clone())
+        .map(|x| id_to_cand[x.get_id()].clone())
         .collect();
 
     unimplemented!("Placeholder for name resolution");
