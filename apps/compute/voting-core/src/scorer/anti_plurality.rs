@@ -80,7 +80,8 @@ mod tests {
     fn test_correct_anti_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = AntiPluralityScorer;
 
-        let names = (0..4).map(|i| format!("C{i}")).collect::<Vec<_>>();
+        let n = votes[0].len();
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect::<Vec<_>>();
         let profile = Profile::try_from((votes, names))
             .expect("Profile is constructed incorrectly, revise test examples.");
 
