@@ -10,7 +10,7 @@ use crate::{
 
 /// Helper Condorcet Voting rule type.
 type CondorcetRule<Ballot, TB = FallthroughTieBreaker> =
-    VotingRule<CondorcetScorer, CondorcetDecider, TB, Ballot>;
+    VotingRule<CondorcetScorer, CondorcetDecider, TB, Ballot, Vec<usize>>;
 
 /// Black Voting rule type.
 ///

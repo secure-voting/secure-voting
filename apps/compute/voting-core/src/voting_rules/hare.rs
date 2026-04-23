@@ -26,4 +26,5 @@ pub type HareRuleWith<TB, Ballot> = Elimination<
     TB,
     Ballot,
     MajorityStop,
+    usize,
 >;

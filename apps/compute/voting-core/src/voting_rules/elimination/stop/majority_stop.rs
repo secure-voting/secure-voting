@@ -13,10 +13,10 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct MajorityStop;
 
-impl EliminationStopCondition<usize, RankingBallot> for MajorityStop {
+impl EliminationStopCondition<Vec<usize>, RankingBallot> for MajorityStop {
     fn should_stop(
         &self,
-        scores: &Score<usize>,
+        scores: &Score<Vec<usize>>,
         _: &RuleOutcome,
         profile: &Profile<RankingBallot>,
     ) -> bool {
@@ -37,18 +37,40 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![1, 1, 1], vec![vec![0, 1, 2], vec![2, 0, 1], vec![1, 2, 0]], false; "no majority winner")]
-    #[test_case(vec![2, 1, 0], vec![vec![0, 1, 2], vec![0, 1, 2], vec![1, 2, 0]], true; "majority winner")]
-    fn test_majority_stop(scores: Vec<usize>, votes: Vec<Vec<usize>>, result: bool) {
+    #[test_case(
+    vec![1, 1, 1],
+    vec![vec![0, 1, 2], vec![2, 0, 1], vec![1, 2, 0]],
+    vec!["A".into(), "B".into(), "C".into()],
+    false;
+    "no majority winner"
+)]
+    #[test_case(
+    vec![2, 1, 0],
+    vec![vec![0, 1, 2], vec![0, 1, 2], vec![1, 2, 0]],
+    vec!["A".into(), "B".into(), "C".into()],
+    true;
+    "majority winner"
+)]
+    fn test_majority_stop(
+        scores: Vec<usize>,
+        votes: Vec<Vec<usize>>,
+        names: Vec<String>,
+        result: bool,
+    ) {
+        let candidates: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| CandidateId::new(i, name))
+            .collect();
+
+        let profile = Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example");
+
+        let score = Score::new(scores, &candidates);
+
         assert_eq!(
             result,
-            MajorityStop.should_stop(
-                &Score::new(scores, &(0..3).map(CandidateId::new).collect::<Vec<_>>()),
-                &RuleOutcome::MultipleWinners(vec![]),
-                &votes
-                    .try_into()
-                    .expect("Profile is constructed incorrectly, revise test example")
-            )
+            MajorityStop.should_stop(&score, &RuleOutcome::MultipleWinners(vec![]), &profile)
         );
     }
 }

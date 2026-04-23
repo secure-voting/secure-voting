@@ -18,7 +18,7 @@ pub type CopelandIRule = CopelandIRuleWith<FallthroughTieBreaker, RankingBallot>
 
 /// Copeland I Voting rule type with a custom tie-breaker.
 pub type CopelandIRuleWith<TB, Ballot> =
-    VotingRule<CopelandIScorer, MaxScoreDecider<usize>, TB, Ballot>;
+    VotingRule<CopelandIScorer, MaxScoreDecider<usize>, TB, Ballot, usize>;
 
 /// Copeland II Voting rule type.
 ///
@@ -28,7 +28,7 @@ pub type CopelandIIRule = CopelandIIRuleWith<FallthroughTieBreaker, RankingBallo
 
 /// Copeland I Voting rule type with a custom tie-breaker.
 pub type CopelandIIRuleWith<TB, Ballot> =
-    VotingRule<CopelandIIScorer, MaxScoreDecider<isize>, TB, Ballot>;
+    VotingRule<CopelandIIScorer, MaxScoreDecider<isize>, TB, Ballot, usize>;
 
 /// Copeland III Voting rule type.
 ///
@@ -37,4 +37,4 @@ pub type CopelandIIIRule = CopelandIIIRuleWith<FallthroughTieBreaker, RankingBal
 
 /// Copeland I Voting rule type with a custom tie-breaker.
 pub type CopelandIIIRuleWith<TB, Ballot> =
-    VotingRule<CopelandIIIScorer, MaxScoreDecider<isize>, TB, Ballot>;
+    VotingRule<CopelandIIIScorer, MaxScoreDecider<isize>, TB, Ballot, usize>;

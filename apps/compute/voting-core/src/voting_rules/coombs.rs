@@ -27,4 +27,5 @@ pub type CoombsRuleWith<TB, Ballot> = Elimination<
     TB,
     Ballot,
     ZipSelector<0, MajorityStop, Vec<usize>, Vec<usize>>,
+    usize,
 >;

@@ -60,7 +60,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
                 let winner_count = result.len();
                 let winners: Vec<CandidateId> = result
                     .iter()
-                    .map(|&i| profile.active_candidates()[i])
+                    .map(|&i| profile.active_candidates()[i].clone())
                     .collect();
                 return Ok((
                     RuleOutcome::from(winners.clone()),
@@ -115,47 +115,88 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    fn cand_ids(value: Vec<usize>) -> Vec<CandidateId> {
-        value.into_iter().map(CandidateId::new).collect()
-    }
-
-    #[test_case(vec![vec![0], vec![0]], 0; "single candidate")]
-    #[test_case(vec![vec![1, 0, 2]], 1; "degenerate majority")]
-    #[test_case(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], 0; "unanimous winner")]
-    fn unique_winner(voters: Vec<Vec<usize>>, winner: usize) {
-        let profile = Profile::try_from(voters)
+    #[test_case(
+    vec![vec![0], vec![0]],
+    vec!["A".into()],
+    (0, "A");
+    "single candidate"
+)]
+    #[test_case(
+    vec![vec![1, 0, 2]],
+    vec!["A".into(), "B".into(), "C".into()],
+    (1, "B");
+    "degenerate majority"
+)]
+    #[test_case(
+    vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]],
+    vec!["A".into(), "B".into(), "C".into()],
+    (0, "A");
+    "unanimous winner"
+)]
+    fn unique_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winner: (usize, &str)) {
+        let profile = Profile::try_from((voters, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimpleMajorityRule::<30>
             .execute(&profile)
             .expect("Unexpected error")
             .0;
+
         assert!(matches!(result, RuleOutcome::UniqueWinner(_)));
-        assert_eq!(result.candidates(), vec![CandidateId::new(winner)]);
+
+        assert_eq!(
+            result.candidates(),
+            vec![CandidateId::new(winner.0, winner.1)]
+        );
     }
 
-    #[test_case(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]], vec![0, 1, 2]; "no majority agreement")]
-    #[test_case(vec![vec![0, 1, 2], vec![1, 0, 2]], vec![0, 1]; "early q=1 detection")]
-    #[test_case(vec![vec![0, 1, 2, 3], vec![1, 2, 0, 3], vec![2, 0, 1, 3]], vec![0, 1, 2]; "early q=2 detection")]
-    fn multiple_winner(voters: Vec<Vec<usize>>, winners: Vec<usize>) {
-        let profile = Profile::try_from(voters)
+    #[test_case(
+        vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]],
+        vec!["A".into(), "B".into(), "C".into()],
+        vec![(0, "A"), (1, "B"), (2, "C")];
+        "no majority agreement"
+    )]
+    #[test_case(
+        vec![vec![0, 1, 2], vec![1, 0, 2]],
+        vec!["A".into(), "B".into(), "C".into()],
+        vec![(0, "A"), (1, "B")];
+        "early q=1 detection"
+    )]
+    #[test_case(
+        vec![vec![0, 1, 2, 3], vec![1, 2, 0, 3], vec![2, 0, 1, 3]],
+        vec!["A".into(), "B".into(), "C".into(), "D".into()],
+        vec![(0, "A"), (1, "B"), (2, "C")];
+        "early q=2 detection"
+    )]
+    fn multiple_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winners: Vec<(usize, &str)>) {
+        let profile = Profile::try_from((voters, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimpleMajorityRule::<30>
             .execute(&profile)
             .expect("Unexpected error")
             .0;
+
         assert!(matches!(result, RuleOutcome::MultipleWinners(_)));
-        assert_eq!(result.candidates(), cand_ids(winners));
+
+        let expected: Vec<_> = winners
+            .into_iter()
+            .map(|(i, name)| CandidateId::new(i, name))
+            .collect();
+
+        assert_eq!(result.candidates(), expected);
     }
 
     #[test]
     fn combinatorial_explosion_filter() {
         let voters = vec![vec![0, 1, 2]; 40];
-        let profile = Profile::try_from(voters)
+        let names = vec!["A".into(), "B".into(), "C".into()];
+
+        let profile = Profile::try_from((voters, names))
             .expect("Profile was created incorrectly, revise test example");
 
         let result = SimpleMajorityRule::<30>.execute(&profile);
+
         assert!(matches!(
             result,
             Err(QParetianError::CombinatorialExplosion {

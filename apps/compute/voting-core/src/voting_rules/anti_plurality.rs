@@ -15,4 +15,4 @@ pub type AntiPluralityRule = AntiPluralityRuleWith<FallthroughTieBreaker, Rankin
 
 /// Anti-plurality Voting rule type with a custom tie-breaker.
 pub type AntiPluralityRuleWith<TB, Ballot> =
-    VotingRule<AntiPluralityScorer, MinScoreDecider<usize>, TB, Ballot>;
+    VotingRule<AntiPluralityScorer, MinScoreDecider<usize>, TB, Ballot, usize>;

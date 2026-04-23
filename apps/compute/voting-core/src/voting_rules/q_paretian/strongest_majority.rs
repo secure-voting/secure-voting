@@ -67,7 +67,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
             if !survivors.is_empty() {
                 let winners: Vec<CandidateId> = survivors
                     .iter()
-                    .map(|&i| profile.active_candidates()[i])
+                    .map(|&i| profile.active_candidates()[i].clone())
                     .collect();
 
                 return Ok((

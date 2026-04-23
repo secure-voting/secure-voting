@@ -13,4 +13,5 @@ use crate::{
 pub type MinmaxRule = MinmaxRuleWith<FallthroughTieBreaker, RankingBallot>;
 
 /// The minmax voting rule type with a custom tie-breaker.
-pub type MinmaxRuleWith<TB, Ballot> = VotingRule<MinmaxScorer, MinScoreDecider<isize>, TB, Ballot>;
+pub type MinmaxRuleWith<TB, Ballot> =
+    VotingRule<MinmaxScorer, MinScoreDecider<isize>, TB, Ballot, isize>;
