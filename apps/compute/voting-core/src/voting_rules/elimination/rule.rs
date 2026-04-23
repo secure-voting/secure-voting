@@ -138,7 +138,7 @@ where
                 .scores(
                     scores
                         .iter()
-                        .map(|(score, cand)| score.to_score(cand.to_string(), "placeholder".into()))
+                        .map(|(score, cand)| score.to_score(cand.to_string(), cand.get_name().to_owned()))
                         .collect(),
                 )
                 .build();
@@ -182,7 +182,7 @@ where
                                 scores
                                     .iter()
                                     .map(|(score, cand)| {
-                                        score.to_score(cand.to_string(), "placeholder".into())
+                                        score.to_score(cand.to_string(), cand.get_name().to_owned())
                                     })
                                     .collect(),
                             )
@@ -216,7 +216,7 @@ where
                                 scores
                                     .iter()
                                     .map(|(score, cand)| {
-                                        score.to_score(cand.to_string(), "placeholder".into())
+                                        score.to_score(cand.to_string(), cand.get_name().to_owned())
                                     })
                                     .collect(),
                             )
@@ -258,7 +258,7 @@ where
                                 scores
                                     .iter()
                                     .map(|(score, cand)| {
-                                        score.to_score(cand.to_string(), "placeholder".into())
+                                        score.to_score(cand.to_string(), cand.get_name().to_owned())
                                     })
                                     .collect(),
                             )

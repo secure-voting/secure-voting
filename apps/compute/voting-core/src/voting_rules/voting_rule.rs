@@ -124,7 +124,7 @@ where
 
         let scores_array: Vec<_> = scores
             .iter()
-            .map(|(score, cand)| score.to_score(cand.to_string(), "placeholder".into()))
+            .map(|(score, cand)| score.to_score(cand.to_string(), cand.get_name().to_owned()))
             .collect();
 
         let metrics = Metrics::builder()
