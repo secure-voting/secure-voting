@@ -50,11 +50,22 @@ pub struct Numeric {
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, Clone, Default, Builder)]
-pub struct Score {
-    candidate_id: String,
-    candidate_name: String,
-    value: f64,
+#[cfg_attr(feature = "serde", serde(tag = "score_kind"))]
+#[derive(Debug, Clone)]
+pub enum Score {
+    #[cfg_attr(feature = "serde", serde(rename = "scalar"))]
+    Scalar {
+        candidate_id: String,
+        candidate_name: String,
+        value: f64,
+    },
+
+    #[cfg_attr(feature = "serde", serde(rename = "vector"))]
+    Vector {
+        candidate_id: String,
+        candidate_name: String,
+        values: Vec<f64>,
+    },
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -67,7 +78,9 @@ pub struct RoundSize {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, Builder)]
 pub struct Series {
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     candidate_scores_final: Option<Vec<Score>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     round_sizes: Option<Vec<RoundSize>>,
 }
 
@@ -75,11 +88,14 @@ pub struct Series {
 #[derive(Debug, Clone, Default, Builder)]
 pub struct Metrics {
     summary: Summary,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     numeric: Option<Numeric>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     series: Option<Series>,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[derive(Debug, Clone, Default)]
 pub enum Kind {
     #[default]
@@ -102,9 +118,13 @@ pub struct Step {
     step: usize,
     title: String,
     action: String,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     remaining_candidate_ids: Option<Vec<String>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     selected_candidate_ids: Option<Vec<String>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     eliminated_candidate_ids: Option<Vec<String>>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     scores: Option<Vec<Score>>,
     note: Option<String>,
 }
@@ -114,6 +134,7 @@ pub struct Step {
 pub struct Protocol {
     kind: Kind,
     steps: Vec<Step>,
+    #[cfg_attr(feature = "serde", serde(rename = "final"))]
     r#final: Final,
 }
 
@@ -132,7 +153,8 @@ impl Step {
 }
 
 impl Protocol {
-    pub fn add_step(&mut self, step: Step) {
+    pub fn add_step(&mut self, mut step: Step) {
+        step.step = self.steps.len() + 1;
         self.steps.push(step);
     }
 
@@ -143,6 +165,40 @@ impl Protocol {
         self.steps[orig_len..]
             .iter_mut()
             .for_each(|x| x.step += orig_len);
+    }
+}
+
+pub trait ToScore {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score;
+}
+
+impl ToScore for usize {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Scalar {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            value: *self as f64,
+        }
+    }
+}
+
+impl ToScore for isize {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Scalar {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            value: *self as f64,
+        }
+    }
+}
+
+impl ToScore for Vec<usize> {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Vector {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            values: self.iter().map(|&x| x as f64).collect(),
+        }
     }
 }
 
