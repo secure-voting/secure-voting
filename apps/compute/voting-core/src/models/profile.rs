@@ -84,15 +84,9 @@ mod tests {
     }
 
     fn profile_result(votes: Vec<Vec<usize>>) -> Result<Profile<RankingBallot>, ProfileError> {
-        let n = votes
-            .iter()
-            .flatten()
-            .copied()
-            .max()
-            .map(|m| m + 1)
-            .unwrap_or(0);
+        let ballot_len = votes.first().map(|b| b.len()).unwrap_or(0);
 
-        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+        let names: Vec<String> = (0..ballot_len).map(|i| format!("C{i}")).collect();
 
         Profile::try_from((votes, names))
     }

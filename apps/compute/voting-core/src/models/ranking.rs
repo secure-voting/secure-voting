@@ -142,7 +142,7 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
 
     /// Upholds these invariants:
     ///
-    /// - At least one voter
+/// - At least one voter
     /// - At least one candidate
     /// - All ballots have the same length
     /// - All candidates' IDs are valid
@@ -161,29 +161,31 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
             return Err(ProfileError::NoCandidates);
         }
 
-        if value[0].len() != names.len() {
-            return Err(ProfileError::CandidateLengthMismatch(
-                value.len(),
-                names.len(),
-            ));
-        }
-
         if (1..value.len()).any(|row| value[row].len() != value[0].len()) {
             return Err(ProfileError::DifferentVoteLengths);
         }
 
-        for vote in &value {
-            let mut candidates = vec![0; value[0].len()];
-            for &candidate in vote {
-                if candidate >= value[0].len() {
-                    return Err(ProfileError::InvalidCandidateId(candidate));
-                }
+        let max_id = value.iter().flat_map(|v| v.iter()).copied().max().unwrap_or(0);
+        if max_id >= names.len() {
+            return Err(ProfileError::InvalidCandidateId(max_id));
+        }
 
-                if candidates[candidate] != 0 {
+        if value[0].len() > names.len() {
+            return Err(ProfileError::CandidateLengthMismatch(
+                value[0].len(),
+                names.len(),
+            ));
+        }
+
+        // If we have more names than ballot positions, that's ok - those candidates simply weren't ranked.
+
+        for vote in &value {
+            let mut seen = vec![false; names.len()];
+            for &candidate in vote {
+                if seen[candidate] {
                     return Err(ProfileError::DoubleVote(candidate));
                 }
-
-                candidates[candidate] = 1;
+                seen[candidate] = true;
             }
         }
 
