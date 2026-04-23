@@ -126,9 +126,12 @@ mod tests {
         let profile = Profile::try_from(voters)
             .expect("Profile was created incorrectly, revise text example");
 
-        let result = SimpleMajorityRule::<30>.execute(&profile);
-        assert!(matches!(result, Ok(RuleOutcome::UniqueWinner(_))));
-        assert_eq!(result.unwrap().candidates(), vec![CandidateId::new(winner)]);
+        let result = SimpleMajorityRule::<30>
+            .execute(&profile)
+            .expect("Unexpected error")
+            .0;
+        assert!(matches!(result, RuleOutcome::UniqueWinner(_)));
+        assert_eq!(result.candidates(), vec![CandidateId::new(winner)]);
     }
 
     #[test_case(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]], vec![0, 1, 2]; "no majority agreement")]
@@ -138,9 +141,12 @@ mod tests {
         let profile = Profile::try_from(voters)
             .expect("Profile was created incorrectly, revise text example");
 
-        let result = SimpleMajorityRule::<30>.execute(&profile);
-        assert!(matches!(result, Ok(RuleOutcome::MultipleWinners(_))));
-        assert_eq!(result.unwrap().candidates(), cand_ids(winners));
+        let result = SimpleMajorityRule::<30>
+            .execute(&profile)
+            .expect("Unexpected error")
+            .0;
+        assert!(matches!(result, RuleOutcome::MultipleWinners(_)));
+        assert_eq!(result.candidates(), cand_ids(winners));
     }
 
     #[test]
