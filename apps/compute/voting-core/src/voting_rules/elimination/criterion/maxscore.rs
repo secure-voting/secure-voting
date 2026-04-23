@@ -14,7 +14,7 @@ use crate::{
 pub struct MaxScoreElimination;
 
 impl EliminationCriterion for MaxScoreElimination {
-    type Score = usize;
+    type Score = Vec<usize>;
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         #[allow(clippy::unwrap_used)]
@@ -22,7 +22,8 @@ impl EliminationCriterion for MaxScoreElimination {
         scores
             .iter()
             .filter(|(score, _)| max_score == *score)
-            .map(|(_, &id)| id)
+            .map(|(_, id)| id)
+            .cloned()
             .collect()
     }
 

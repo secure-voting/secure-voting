@@ -9,7 +9,7 @@ use crate::{
 pub struct BelowAverageElimination;
 
 impl EliminationCriterion for BelowAverageElimination {
-    type Score = usize;
+    type Score = Vec<usize>;
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         let score_len = scores.score().len();
@@ -18,7 +18,8 @@ impl EliminationCriterion for BelowAverageElimination {
         scores
             .iter()
             .filter(|(score, _)| *score * score_len < score_sum)
-            .map(|(_, &cand_id)| cand_id)
+            .map(|(_, cand_id)| cand_id)
+            .cloned()
             .collect()
     }
 
@@ -33,7 +34,7 @@ mod tests {
     use test_case::test_case;
 
     fn ids(value: &[CandidateId]) -> Vec<usize> {
-        value.iter().map(|x| x.into_inner()).collect()
+        value.iter().map(|x| x.clone().get_id()).collect()
     }
 
     #[test_case(vec![0, 4, 1], &[0, 2]; "clear winner gap")]
@@ -45,9 +46,9 @@ mod tests {
             ids(&BelowAverageElimination.eliminate(&Score::new(
                 scores,
                 &[
-                    CandidateId::new(0),
-                    CandidateId::new(1),
-                    CandidateId::new(2)
+                    CandidateId::new(0, "a"),
+                    CandidateId::new(1, "b"),
+                    CandidateId::new(2, "c")
                 ]
             )))
         );
