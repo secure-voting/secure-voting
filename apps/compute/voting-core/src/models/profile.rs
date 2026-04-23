@@ -70,18 +70,38 @@ mod tests {
     fn ids(votes: &[RankingBallot]) -> Vec<Vec<usize>> {
         votes
             .iter()
-            .map(|line| line.iter().map(|item| item.into_inner()).collect())
+            .map(|line| line.iter().map(|item| item.get_id()).collect())
             .collect()
+    }
+
+    fn profile(votes: Vec<Vec<usize>>) -> Profile<RankingBallot> {
+        let n = votes.iter().flatten().copied().max().unwrap_or(0) + 1;
+
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
+    fn profile_result(votes: Vec<Vec<usize>>) -> Result<Profile<RankingBallot>, ProfileError> {
+        let n = votes
+            .iter()
+            .flatten()
+            .copied()
+            .max()
+            .map(|m| m + 1)
+            .unwrap_or(0);
+
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
     }
 
     #[test]
     fn incorrect_no_voters() {
         let votes = vec![];
 
-        assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
-            Err(ProfileError::NoVoters)
-        ));
+        assert!(matches!(profile_result(votes), Err(ProfileError::NoVoters)));
     }
 
     #[test]
@@ -89,17 +109,17 @@ mod tests {
         let votes = vec![vec![]];
 
         assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
+            profile_result(votes),
             Err(ProfileError::NoCandidates)
         ));
     }
 
     #[test]
-    fn incorrect_different_vote_lenghts() {
+    fn incorrect_different_vote_lengths() {
         let votes = vec![vec![0, 1, 2], vec![0, 1, 2, 3]];
 
         assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
+            profile_result(votes),
             Err(ProfileError::DifferentVoteLengths)
         ));
     }
@@ -109,7 +129,7 @@ mod tests {
         let votes = vec![vec![0, 1, 3]];
 
         assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
+            profile_result(votes),
             Err(ProfileError::InvalidCandidateId(_))
         ));
     }
@@ -119,7 +139,7 @@ mod tests {
         let votes = vec![vec![0, 1, 4]];
 
         assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
+            profile_result(votes),
             Err(ProfileError::InvalidCandidateId(_))
         ));
     }
@@ -129,7 +149,7 @@ mod tests {
         let votes = vec![vec![0, 1, 2], vec![0, 1, 0]];
 
         assert!(matches!(
-            TryInto::<Profile<RankingBallot>>::try_into(votes),
+            profile_result(votes),
             Err(ProfileError::DoubleVote(_))
         ));
     }
@@ -137,23 +157,22 @@ mod tests {
     #[test]
     fn remove_single_candidate_middle() {
         let votes = vec![vec![0, 1, 2, 3], vec![3, 2, 1, 0]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
+
         let result = profile
-            .remove_candidates(vec![CandidateId::new(1)])
+            .remove_candidates(vec![CandidateId::new(1, "C1")])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
         let expected_votes = vec![
             vec![
-                CandidateId::new(0),
-                CandidateId::new(2),
-                CandidateId::new(3),
+                CandidateId::new(0, "C0"),
+                CandidateId::new(2, "C2"),
+                CandidateId::new(3, "C3"),
             ],
             vec![
-                CandidateId::new(3),
-                CandidateId::new(2),
-                CandidateId::new(0),
+                CandidateId::new(3, "C3"),
+                CandidateId::new(2, "C2"),
+                CandidateId::new(0, "C0"),
             ],
         ];
 
@@ -165,12 +184,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected_votes
         );
+
         assert_eq!(
             result.active_candidates,
             vec![
-                CandidateId::new(0),
-                CandidateId::new(2),
-                CandidateId::new(3)
+                CandidateId::new(0, "C0"),
+                CandidateId::new(2, "C2"),
+                CandidateId::new(3, "C3")
             ]
         );
     }
@@ -178,15 +198,13 @@ mod tests {
     #[test]
     fn remove_multiple_candidates() {
         let votes = vec![vec![0, 1, 2, 3]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
 
         let result = profile
-            .remove_candidates(vec![CandidateId::new(1), CandidateId::new(3)])
+            .remove_candidates(vec![CandidateId::new(1, "C1"), CandidateId::new(3, "C3")])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
-        let expected_votes = vec![vec![CandidateId::new(0), CandidateId::new(2)]];
+        let expected_votes = vec![vec![CandidateId::new(0, "C0"), CandidateId::new(2, "C2")]];
 
         assert_eq!(
             result
@@ -196,24 +214,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected_votes
         );
+
         assert_eq!(
             result.active_candidates,
-            vec![CandidateId::new(0), CandidateId::new(2)]
+            vec![CandidateId::new(0, "C0"), CandidateId::new(2, "C2")]
         );
     }
 
     #[test]
     fn remove_first_and_last_candidate() {
         let votes = vec![vec![0, 1, 2, 3]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
 
         let result = profile
-            .remove_candidates(vec![CandidateId::new(0), CandidateId::new(3)])
+            .remove_candidates(vec![CandidateId::new(0, "C0"), CandidateId::new(3, "C3")])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
-        let expected_votes = vec![vec![CandidateId::new(1), CandidateId::new(2)]];
+        let expected_votes = vec![vec![CandidateId::new(1, "C1"), CandidateId::new(2, "C2")]];
 
         assert_eq!(
             result
@@ -223,24 +240,23 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected_votes
         );
+
         assert_eq!(
             result.active_candidates,
-            vec![CandidateId::new(1), CandidateId::new(2)]
+            vec![CandidateId::new(1, "C1"), CandidateId::new(2, "C2")]
         );
     }
 
     #[test]
     fn remove_all_candidates() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
 
         let result = profile
             .remove_candidates(vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-                CandidateId::new(2),
+                CandidateId::new(0, "C0"),
+                CandidateId::new(1, "C1"),
+                CandidateId::new(2, "C2"),
             ])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
@@ -252,28 +268,27 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![vec![]]
         );
+
         assert_eq!(result.active_candidates, vec![]);
     }
 
     #[test]
     fn remove_no_candidates_returns_same_profile() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile<RankingBallot> = votes
-            .clone()
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
 
         let result = profile
             .remove_candidates(vec![])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
         assert_eq!(ids(&result.votes), votes);
+
         assert_eq!(
             result.active_candidates,
             vec![
-                CandidateId::new(0),
-                CandidateId::new(1),
-                CandidateId::new(2)
+                CandidateId::new(0, "C0"),
+                CandidateId::new(1, "C1"),
+                CandidateId::new(2, "C2")
             ]
         );
     }
@@ -281,34 +296,31 @@ mod tests {
     #[test]
     fn remove_candidate_invalid_id_returns_error() {
         let votes = vec![vec![0, 1, 2]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes.clone());
 
         let err = profile
-            .remove_candidates(vec![CandidateId::new(3)])
+            .remove_candidates(vec![CandidateId::new(3, "C3")])
             .expect_err("This candidate is incorrect, can't remove without error");
 
-        assert_eq!(err, CandidateRemovalError(CandidateId::new(3)));
+        assert_eq!(err, CandidateRemovalError(CandidateId::new(3, "C3")));
     }
 
     #[test]
     fn remove_candidates_preserves_order_multiple_removals() {
         let votes = vec![vec![0, 2, 1, 3], vec![3, 1, 2, 0]];
-        let profile: Profile<RankingBallot> = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(votes);
 
         let profile = profile
-            .remove_candidates(vec![CandidateId::new(2)])
+            .remove_candidates(vec![CandidateId::new(2, "C2")])
             .expect("Chosen candidate couldn't be removed from the given profile");
+
         let result = profile
-            .remove_candidates(vec![CandidateId::new(0)])
+            .remove_candidates(vec![CandidateId::new(0, "C0")])
             .expect("Chosen candidate couldn't be removed from the given profile");
 
         let expected_votes = vec![
-            vec![CandidateId::new(1), CandidateId::new(3)],
-            vec![CandidateId::new(3), CandidateId::new(1)],
+            vec![CandidateId::new(1, "C1"), CandidateId::new(3, "C3")],
+            vec![CandidateId::new(3, "C3"), CandidateId::new(1, "C1")],
         ];
 
         assert_eq!(
@@ -319,9 +331,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             expected_votes
         );
+
         assert_eq!(
             result.active_candidates,
-            vec![CandidateId::new(1), CandidateId::new(3),]
+            vec![CandidateId::new(1, "C1"), CandidateId::new(3, "C3")]
         );
     }
 }
