@@ -53,7 +53,7 @@ func loadConfig() Config {
 		CACertPath: env("COMPUTE_TLS_CA"),
 		ServerName: envOr("COMPUTE_TLS_SERVER_NAME", "rust-compute"),
 
-		RunTimeout: 120 * time.Second,
+		RunTimeout: 30 * time.Minute,
 
 		KafkaMinBytes:        1_000,
 		KafkaMaxBytes:        10_000_000,
