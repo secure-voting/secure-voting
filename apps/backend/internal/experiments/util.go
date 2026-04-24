@@ -43,6 +43,9 @@ var allowedTallyRules = map[string]bool{
 	"nanson":               true,
 	"coombs":               true,
 	"threshold":            true,
+	"q-paretian-strong-simple-majority":    true,
+	"q-paretian-strongest-simple-majority": true,
+	"q-paretian-strong-plurality":          true,
 }
 
 func norm(s string) string {

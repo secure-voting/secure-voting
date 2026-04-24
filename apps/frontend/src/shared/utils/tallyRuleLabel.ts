@@ -29,6 +29,9 @@ export function tallyRuleLabel(value: string | null | undefined): string {
     "practical-condorcet": "Practical Condorcet",
     "practical_condorcet": "Practical Condorcet",
     "threshold": "Threshold",
+    "q-paretian-strong-simple-majority": "Q-Paretian Strong Simple Majority",
+    "q-paretian-strongest-simple-majority": "Q-Paretian Strongest Simple Majority",
+    "q-paretian-strong-plurality": "Q-Paretian Strong Plurality",
   };
 
   if (fixed[raw]) return fixed[raw];
