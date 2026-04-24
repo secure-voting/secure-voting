@@ -180,9 +180,9 @@ impl Compute for ComputeService {
             Ok(result) => Ok(Response::new(create_winner_response(
                 result.0, result.1, result.2,
             ))),
-            Err(AlgorithmError::NoSuchAlgorithm) => Ok(Response::new(create_error_type(
+            Err(AlgorithmError::NoSuchAlgorithm(a)) => Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
-                "No such algorithm",
+                format!("No such algorithm: {a}"),
             ))),
             Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => Ok(
                 Response::new(create_error_type(tonic::Code::InvalidArgument, e)),

@@ -15,7 +15,7 @@ pub enum AlgorithmError {
     /// The provided ballot string cannot be converted into a ballot type.
     InvalidBallotType(String),
     /// The name of the algorithm doesn't correspond to anything registered.
-    NoSuchAlgorithm,
+    NoSuchAlgorithm(String),
     /// The provided algorithm doesn't support execution with this ballot type.
     UnsupportedBallotForAlgorithm {
         /// Algorithm's name.
@@ -124,7 +124,7 @@ impl Registry {
 
     /// Add an algorithm with a ballot-type constraint to a registry.
     pub fn add(&mut self, algorithm: impl Algorithm + 'static, ballot_type: BallotType) -> bool {
-        let alias = algorithm.alias().to_lowercase();
+        let alias = algorithm.alias().to_lowercase().replace(' ', "-");
 
         let ballot_map = self.alias_map.entry(alias).or_default();
 
@@ -153,12 +153,12 @@ impl Registry {
         ballot_type: &str,
     ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError> {
         let ballot_type = BallotType::try_from(ballot_type)?;
-        let alias_lower = alias.to_lowercase();
+        let alias_lower = alias.to_lowercase().replace(' ', "-");
 
         let ballot_map = self
             .alias_map
             .get(&alias_lower)
-            .ok_or(AlgorithmError::NoSuchAlgorithm)?;
+            .ok_or(AlgorithmError::NoSuchAlgorithm(alias_lower.clone()))?;
 
         let algorithm =
             ballot_map
@@ -185,7 +185,7 @@ impl Registry {
     /// by the chosen algorithm.
     pub fn supported_ballots(&self, alias: &str) -> impl Iterator<Item = BallotType> + '_ {
         self.alias_map
-            .get(&alias.to_lowercase())
+            .get(&alias.to_lowercase().replace(' ', "-"))
             .into_iter()
             .flat_map(|m| m.keys().copied())
     }
@@ -243,7 +243,7 @@ mod tests {
             .execute(vec![], "does_not_exist", "ranking")
             .unwrap_err();
 
-        assert!(matches!(err, AlgorithmError::NoSuchAlgorithm));
+        assert!(matches!(err, AlgorithmError::NoSuchAlgorithm(_)));
     }
 
     #[test]
