@@ -183,8 +183,11 @@ impl_algorithm!(
     true,
     false
 );
+
+const LIMIT: usize = 50;
+
 impl_algorithm!(
-    QParetianStrongSimpleMajorityRule::<30>,
+    QParetianStrongSimpleMajorityRule::<LIMIT>,
     "q-Paretian Strong Simple Majority",
     true,
     true,
@@ -195,7 +198,7 @@ impl_algorithm!(
     false
 );
 impl_algorithm!(
-    QParetianStrongPluralityRule::<30>,
+    QParetianStrongPluralityRule::<LIMIT>,
     "q-Paretian Strong Plurality",
     true,
     true,
@@ -206,7 +209,7 @@ impl_algorithm!(
     false
 );
 impl_algorithm!(
-    QParetianStrongestSimpleMajorityRule::<30>,
+    QParetianStrongestSimpleMajorityRule::<LIMIT>,
     "q-Paretian Strongest Simple Majority",
     true,
     true,
