@@ -269,6 +269,16 @@ impl ToScore for Vec<usize> {
     }
 }
 
+impl ToScore for Vec<bool> {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Vector {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            values: self.iter().map(|&x| if x { 1.0 } else { 0.0 }).collect(),
+        }
+    }
+}
+
 /// Trait for all the voting rules, simple and complex ones.
 pub trait VotingRuleExec<Ballot> {
     /// Returned if the voting pipeline can't be completed.
