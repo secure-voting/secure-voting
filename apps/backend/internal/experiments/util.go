@@ -25,28 +25,31 @@ var allowedQuotaTypes = map[string]bool{
 }
 
 var allowedTallyRules = map[string]bool{
-	"plurality":           true,
-	"approval":            true,
-	"inverse_plurality":   true,
-	"borda":               true,
-	"black":               true,
-	"copeland_i":          true,
-	"copeland_ii":         true,
-	"copeland_iii":        true,
-	"simpson":             true,
-	"minmax":              true,
-	"minimax":             true,
-	"hare":                true,
-	"inverse_borda":       true,
-	"nanson":              true,
-	"coombs":              true,
-	"practical_condorcet": true,
-	"condorcet_practical": true,
-	"threshold":           true,
+	"plurality":            true,
+	"approval":             true,
+	"approval-2":           true,
+	"approval-3":           true,
+	"inverse-plurality":    true,
+	"borda":                true,
+	"black":                true,
+	"copeland-i":           true,
+	"copeland-ii":          true,
+	"copeland-iii":         true,
+	"simpson":              true,
+	"minmax":               true,
+	"minimax":              true,
+	"hare":                 true,
+	"inverse-borda":        true,
+	"nanson":               true,
+	"coombs":               true,
+	"threshold":            true,
 }
 
 func norm(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+	v := strings.ToLower(strings.TrimSpace(s))
+	v = strings.ReplaceAll(v, "_", "-")
+	v = strings.ReplaceAll(v, " ", "-")
+	return v
 }
 
 func asInt64(v any) (int64, bool) {
