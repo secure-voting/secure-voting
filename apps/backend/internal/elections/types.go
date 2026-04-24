@@ -73,6 +73,9 @@ func requiresCommitteeSize(rule string) bool {
 		"nanson",
 		"coombs",
 		"practical_condorcet",
+		"q_paretian_strong_simple_majority",
+		"q_paretian_strongest_simple_majority",
+		"q_paretian_strong_plurality",
 		"threshold":
 		return true
 	default:
