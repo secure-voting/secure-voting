@@ -44,6 +44,7 @@ export function ElectionsPage() {
   }, [reload]);
 
   const isVoter = me?.role === "voter";
+  const isAdmin = me?.role === "admin";
 
   return (
     <div style={styles.card}>
@@ -89,9 +90,18 @@ export function ElectionsPage() {
             </div>
 
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Link to={`/elections/${e.id}`} style={{ textDecoration: "none" }}>
-                <button style={styles.btnPrimary}>Открыть</button>
+              <Link
+                to={isAdmin ? `/admin/elections/${e.id}` : `/elections/${e.id}`}
+                style={{ textDecoration: "none" }}
+              >
+                <button style={styles.btnPrimary}>{isAdmin ? "Управление" : "Открыть"}</button>
               </Link>
+
+              {isAdmin ? (
+                <Link to={`/admin/elections/${e.id}/rules`} style={{ textDecoration: "none" }}>
+                  <button style={styles.btn}>Настройки</button>
+                </Link>
+              ) : null}
 
               {isVoter ? (
                 <Link to={`/elections/${e.id}/vote`} style={{ textDecoration: "none" }}>

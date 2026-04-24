@@ -48,15 +48,16 @@ type ElectionTallyResult struct {
 
 func normalizeExternalTallyRule(rule string) string {
 	v := strings.ToLower(strings.TrimSpace(rule))
-	v = strings.ReplaceAll(v, "-", "_")
+	v = strings.ReplaceAll(v, "_", "-")
+	v = strings.ReplaceAll(v, " ", "-")
 
 	switch v {
-	case "anti_plurality":
-		return "inverse_plurality"
+	case "anti-plurality":
+		return "inverse-plurality"
 	case "minimax":
 		return "minmax"
-	case "condorcet_practical":
-		return "practical_condorcet"
+	case "condorcet-practical":
+		return "practical-condorcet"
 	default:
 		return v
 	}

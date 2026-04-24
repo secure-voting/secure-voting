@@ -18,6 +18,7 @@ import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
 import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
 import { isValidEmail, parseEmailsFromText, uniqueEmails } from "../../shared/utils/email";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -495,10 +496,10 @@ export function AdminElectionPage() {
             </div>
 
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Badge text={`status: ${item.status}`} />
-              <Badge text={`access: ${item.access_mode}`} />
-              <Badge text={`format: ${item.ballot_format}`} />
-              <Badge text={`rule: ${item.tally_rule}`} />
+              <Badge text={`Статус: ${item.status}`} />
+              <Badge text={`Доступ: ${item.access_mode}`} />
+              <Badge text={`Формат: ${item.ballot_format}`} />
+              <Badge text={`Правило: ${tallyRuleLabel(item.tally_rule)}`} />
             </div>
 
             <div style={{ marginTop: 12 }}>

@@ -8,6 +8,7 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
 import { downloadJsonFile } from "../../shared/utils/export";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 function statusLabel(status?: string) {
   switch (status) {
@@ -302,7 +303,7 @@ export function ElectionPage() {
               <Badge text={`Статус: ${statusLabel(item.status)}`} />
               <Badge text={`Доступ: ${accessLabel(item.access_mode)}`} />
               <Badge text={`Формат: ${formatLabel(item.ballot_format)}`} />
-              <Badge text={`Правило: ${item.tally_rule}`} />
+              <Badge text={`Правило: ${tallyRuleLabel(item.tally_rule)}`} />
             </div>
 
             {isAdmin && item.status === "results_ready" ? (
