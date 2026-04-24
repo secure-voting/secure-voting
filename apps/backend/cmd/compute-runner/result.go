@@ -45,6 +45,9 @@ func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, 
 	if len(resp.GetMetricsJson()) > 0 {
 		_ = json.Unmarshal(resp.GetMetricsJson(), &metrics)
 	}
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
 
 	var protocol any
 	if len(resp.GetProtocolJson()) > 0 {
@@ -55,10 +58,16 @@ func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, 
 	if len(resp.GetTimingsJson()) > 0 {
 		_ = json.Unmarshal(resp.GetTimingsJson(), &timings)
 	}
+	if timings == nil {
+		timings = map[string]any{}
+	}
 
 	var artifacts map[string]any
 	if len(resp.GetArtifactsJson()) > 0 {
 		_ = json.Unmarshal(resp.GetArtifactsJson(), &artifacts)
+	}
+	if artifacts == nil {
+		artifacts = map[string]any{}
 	}
 
 	return status, errText, winners, metrics, protocol, timings, artifacts
@@ -79,8 +88,18 @@ func makeErrorResult(runID, errText string) worker.ExperimentRunResult {
 	}
 }
 
-func makeDoneResult(runID string, winners []string, metrics, timings, artifacts map[string]any) worker.ExperimentRunResult {
+func makeDoneResult(runID string, winners []string, metrics map[string]any, protocol any, timings map[string]any, artifacts map[string]any) worker.ExperimentRunResult {
 	runID = strings.TrimSpace(runID)
+
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
+	if timings == nil {
+		timings = map[string]any{}
+	}
+	if artifacts == nil {
+		artifacts = map[string]any{}
+	}
 
 	return worker.ExperimentRunResult{
 		Kind:      resultKind,
@@ -89,6 +108,7 @@ func makeDoneResult(runID string, winners []string, metrics, timings, artifacts 
 		ErrorText: "",
 		Winners:   winners,
 		Metrics:   metrics,
+		Protocol:  protocol,
 		Timings:   timings,
 		Artifacts: artifacts,
 	}
@@ -118,14 +138,17 @@ func makeElectionErrorResult(task worker.ElectionTallyTask, errText string) work
 	}
 }
 
-func makeElectionDoneResult(
-	task worker.ElectionTallyTask,
-	winners []string,
-	metrics map[string]any,
-	protocol any,
-	timings map[string]any,
-	artifacts map[string]any,
-) worker.ElectionTallyResult {
+func makeElectionDoneResult(task worker.ElectionTallyTask, winners []string, metrics map[string]any, protocol any, timings map[string]any, artifacts map[string]any) worker.ElectionTallyResult {
+	if metrics == nil {
+		metrics = map[string]any{}
+	}
+	if timings == nil {
+		timings = map[string]any{}
+	}
+	if artifacts == nil {
+		artifacts = map[string]any{}
+	}
+
 	var approvalMax *int32
 	if task.ApprovalMaxChoices != nil {
 		v := int32(*task.ApprovalMaxChoices)

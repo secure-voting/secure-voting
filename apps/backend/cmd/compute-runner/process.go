@@ -63,7 +63,7 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 		return makeErrorResult(task.RunID, "grpc close/recv failed: "+err.Error())
 	}
 
-	status, errText, winnersAny, metrics, _, timings, artifacts := parseRunResult(resp)
+	status, errText, winnersAny, metrics, protocol, timings, artifacts := parseRunResult(resp)
 
 	if status != "done" && status != "error" {
 		status = "error"
@@ -77,7 +77,7 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 	}
 
 	winners := anySliceToStringSlice(winnersAny)
-	return makeDoneResult(task.RunID, winners, metrics, timings, artifacts)
+	return makeDoneResult(task.RunID, winners, metrics, protocol, timings, artifacts)
 }
 
 func processElectionTallyTask(ctx context.Context, db *pgxpool.Pool, cfg Config, compute pb.ComputeClient, task worker.ElectionTallyTask) worker.ElectionTallyResult {

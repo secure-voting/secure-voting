@@ -53,23 +53,86 @@ function nowTimeLabel() {
   return d.toLocaleTimeString();
 }
 
+function metricLabel(key: string): string {
+  switch (key) {
+    case "total_ballots":
+      return "Всего бюллетеней";
+    case "valid_ballots":
+      return "Корректных бюллетеней";
+    case "invalid_ballots":
+      return "Некорректных бюллетеней";
+    case "candidates_count":
+      return "Число кандидатов";
+    case "winner_count":
+      return "Число победителей";
+    case "committee_size":
+      return "Размер комитета";
+    case "rounds_count":
+      return "Число раундов";
+    case "winner_score":
+      return "Баллы победителя";
+    case "runner_up_score":
+      return "Баллы второго места";
+    case "margin":
+      return "Отрыв";
+    case "average_score":
+      return "Средний балл";
+    default:
+      return key;
+  }
+}
+
 function summaryItems(value: unknown): Array<{ label: string; value: React.ReactNode }> {
   if (!isObject(value)) return [];
-  return Object.entries(value)
+
+  const summary = isObject(value.summary) ? value.summary : value;
+
+  return Object.entries(summary)
+    .filter(([, val]) => val != null && !isObject(val) && !Array.isArray(val))
     .slice(0, 12)
     .map(([key, val]) => ({
-      label: key,
+      label: metricLabel(key),
       value: prettyValue(val),
     }));
 }
 
 function numericItems(value: unknown): Array<{ label: string; value: number }> {
   if (!isObject(value)) return [];
-  return Object.entries(value)
+
+  const series = isObject(value.series) ? value.series : null;
+  const numeric = isObject(value.numeric) ? value.numeric : null;
+  const summary = isObject(value.summary) ? value.summary : null;
+
+  if (series && Array.isArray(series.candidate_scores_final)) {
+    const scalarItems = series.candidate_scores_final
+      .filter(
+        (item) =>
+          isObject(item) &&
+          typeof item.value === "number" &&
+          Number.isFinite(item.value)
+      )
+      .map((item) => ({
+        label:
+          typeof item.candidate_name === "string" && item.candidate_name.trim()
+            ? item.candidate_name.trim()
+            : typeof item.candidate_id === "string" && item.candidate_id.trim()
+              ? item.candidate_id.trim()
+              : "Кандидат",
+        value: Number(item.value),
+      }));
+
+    if (scalarItems.length > 0) {
+      return scalarItems;
+    }
+  }
+
+  const source = numeric ?? summary ?? value;
+
+  return Object.entries(source)
     .filter(([, val]) => typeof val === "number" && Number.isFinite(val))
     .slice(0, 12)
     .map(([key, val]) => ({
-      label: key,
+      label: metricLabel(key),
       value: Number(val),
     }));
 }

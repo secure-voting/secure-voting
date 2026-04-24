@@ -68,8 +68,11 @@ func (w *Worker) upsertExperimentResult(ctx context.Context, res ExperimentRunRe
 	update := bson.M{
 		"$set": bson.M{
 			"run_id":     res.RunID,
+			"status":     res.Status,
+			"error_text": res.ErrorText,
 			"winners":    res.Winners,
 			"metrics":    res.Metrics,
+			"protocol":   res.Protocol,
 			"timings":    res.Timings,
 			"artifacts":  res.Artifacts,
 			"updated_at": time.Now().UTC(),

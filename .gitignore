@@ -32,3 +32,5 @@ coverage/
 
 # cert artifacts
 scripts/certs/out/
+
+structure.md
