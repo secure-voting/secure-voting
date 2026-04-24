@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"os"
 	"time"
 
 	pb "secure-voting/apps/backend/internal/compute/pb"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -30,32 +32,58 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	var opt grpc.DialOption
+	var transportOpt grpc.DialOption
 
 	if cfg.UseTLS {
 		caPEM, err := os.ReadFile(cfg.CACertPath)
 		if err != nil {
 			return nil, err
 		}
+
 		pool := x509.NewCertPool()
-		_ = pool.AppendCertsFromPEM(caPEM)
+		if ok := pool.AppendCertsFromPEM(caPEM); !ok {
+			return nil, os.ErrInvalid
+		}
 
 		tlsCfg := &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    pool,
 			ServerName: cfg.ServerName,
 		}
-		opt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
+		transportOpt = grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))
 	} else {
-		opt = grpc.WithTransportCredentials(insecure.NewCredentials())
+		transportOpt = grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
 
-	conn, err := grpc.DialContext(ctx, cfg.Addr, opt)
+	conn, err := grpc.NewClient(cfg.Addr, transportOpt)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{conn: conn, client: pb.NewComputeClient(conn)}, nil
+	conn.Connect()
+
+	for {
+		state := conn.GetState()
+
+		if state == connectivity.Ready {
+			break
+		}
+
+		if state == connectivity.Shutdown {
+			_ = conn.Close()
+			return nil, fmt.Errorf("gRPC connection to %s entered shutdown state", cfg.Addr)
+		}
+
+		if !conn.WaitForStateChange(ctx, state) {
+			_ = conn.Close()
+			return nil, fmt.Errorf("gRPC connection to %s was not ready before timeout: %w", cfg.Addr, ctx.Err())
+		}
+	}
+
+	return &Client{
+		conn:   conn,
+		client: pb.NewComputeClient(conn),
+	}, nil
 }
 
 func (c *Client) Close() error {
@@ -67,4 +95,18 @@ func (c *Client) Close() error {
 
 func (c *Client) Compute() pb.ComputeClient {
 	return c.client
+}
+
+func (c *Client) ConnectivityState() string {
+	if c == nil || c.conn == nil {
+		return connectivity.Shutdown.String()
+	}
+	return c.conn.GetState().String()
+}
+
+func (c *Client) Ready() bool {
+	if c == nil || c.conn == nil {
+		return false
+	}
+	return c.conn.GetState() == connectivity.Ready
 }

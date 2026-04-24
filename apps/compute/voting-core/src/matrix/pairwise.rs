@@ -5,7 +5,7 @@
 use rayon::prelude::*;
 use thiserror::Error;
 
-use crate::profile::Profile;
+use crate::models::{profile::Profile, ranking::RankingBallot};
 
 /// Pairwise voting result matrix.
 ///
@@ -15,7 +15,8 @@ use crate::profile::Profile;
 /// 2. It is a non-empty matrix
 /// 3. It is a square-matrix
 /// 4. The diagonal is zero-ed out
-/// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n, if i != j and n is the number of voters.
+/// 5. The following identity is held: matrix\[i\]\[j\] + matrix\[j\]\[i\] = n,
+///    if i != j and n is the number of voters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct PairwiseMatrix {
@@ -172,8 +173,8 @@ fn sum_matrix(mut matrix_a: Vec<Vec<usize>>, matrix_b: &[Vec<usize>]) -> Vec<Vec
     matrix_a
 }
 
-impl From<&Profile> for PairwiseMatrix {
-    fn from(profile: &Profile) -> Self {
+impl From<&Profile<RankingBallot>> for PairwiseMatrix {
+    fn from(profile: &Profile<RankingBallot>) -> Self {
         let n_candidates = profile.n_candidates();
         let n_voters = profile.n_voters();
 
@@ -184,8 +185,7 @@ impl From<&Profile> for PairwiseMatrix {
 
                 for i in 0..n_candidates {
                     for j in i + 1..n_candidates {
-                        matrix[profile[voter_id][i].into_inner()]
-                            [profile[voter_id][j].into_inner()] = 1;
+                        matrix[profile[voter_id][i].get_id()][profile[voter_id][j].get_id()] = 1;
                     }
                 }
 

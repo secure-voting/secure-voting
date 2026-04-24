@@ -6,6 +6,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::PairwiseMatrix,
+    models::ranking::RankingBallot,
     prelude::Profile,
     scorer::{Score, Scorer},
 };
@@ -20,12 +21,15 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct CopelandIIScorer;
 
-impl Scorer for CopelandIIScorer {
+impl Scorer<RankingBallot> for CopelandIIScorer {
     type Output = Vec<isize>;
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let pairwise = PairwiseMatrix::from(profile);
         let n_candidates = profile.n_candidates();
 
@@ -58,70 +62,65 @@ impl Scorer for CopelandIIScorer {
 mod tests {
     use super::*;
 
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
     #[test]
     fn copeland_single_vote_linear_order() {
-        let votes = vec![vec![0, 1, 2, 3]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2, 3]], 4);
 
         let scores = CopelandIIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![3, 1, -1, -3]);
+        assert_eq!(scores.consume_score(), vec![3, 1, -1, -3]);
     }
 
     #[test]
     fn copeland_condorcet_winner() {
-        let votes = vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], 3);
 
         let scores = CopelandIIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![2, 0, -2]);
+        assert_eq!(scores.consume_score(), vec![2, 0, -2]);
     }
 
     #[test]
     fn copeland_cycle() {
-        let votes = vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1, 2], vec![1, 2, 0], vec![2, 0, 1]], 3);
 
         let scores = CopelandIIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
+        assert_eq!(scores.consume_score(), vec![0, 0, 0]);
     }
 
     #[test]
     fn copeland_two_candidates() {
-        let votes = vec![vec![0, 1], vec![0, 1], vec![1, 0]];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(vec![vec![0, 1], vec![0, 1], vec![1, 0]], 2);
 
         let scores = CopelandIIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![1, -1]);
+        assert_eq!(scores.consume_score(), vec![1, -1]);
     }
 
     #[test]
     fn copeland_all_tied() {
-        let votes = vec![
-            vec![0, 1, 2],
-            vec![1, 2, 0],
-            vec![2, 0, 1],
-            vec![0, 2, 1],
-            vec![1, 0, 2],
-            vec![2, 1, 0],
-        ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
+        let profile = profile(
+            vec![
+                vec![0, 1, 2],
+                vec![1, 2, 0],
+                vec![2, 0, 1],
+                vec![0, 2, 1],
+                vec![1, 0, 2],
+                vec![2, 1, 0],
+            ],
+            3,
+        );
 
         let scores = CopelandIIScorer.compute_score(&profile).unwrap();
 
-        assert_eq!(scores.score().clone(), vec![0, 0, 0]);
+        assert_eq!(scores.consume_score(), vec![0, 0, 0]);
     }
 }

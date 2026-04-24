@@ -114,7 +114,6 @@ func TestValidateScoreBallot(t *testing.T) {
 		t.Fatalf("expected score_invalid_step, got %s", code)
 	}
 
-
 	scores4 := map[string]int{c1: 3, c2: 5}
 	if code := validateScoreBallot(scores4, candidates, cset, &min, &max, &step, false); code != "" {
 		t.Fatalf("expected ok, got %s", code)

@@ -1,6 +1,7 @@
 package experiments
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -10,6 +11,18 @@ import (
 	"secure-voting/apps/backend/internal/httpserver/httputil"
 	"secure-voting/apps/backend/internal/httpserver/middleware"
 )
+
+var createExperimentFn = func(svc *experiments.Service, ctx context.Context, uid string, req experiments.CreateReq) (string, string, error) {
+	return svc.Create(ctx, uid, req)
+}
+
+var listExperimentsFn = func(svc *experiments.Service, ctx context.Context, role, uid string, p experiments.ListParams) ([]experiments.Experiment, error) {
+	return svc.List(ctx, role, uid, p)
+}
+
+var getExperimentFn = func(svc *experiments.Service, ctx context.Context, role, uid, id string) (experiments.Experiment, string, error) {
+	return svc.Get(ctx, role, uid, id)
+}
 
 type Handlers struct {
 	svc *experiments.Service
@@ -28,7 +41,7 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, code, err := h.svc.Create(r.Context(), uid, req)
+	id, code, err := createExperimentFn(h.svc, r.Context(), uid, req)
 	if err != nil {
 		log.Printf("experiments.create error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "create experiment failed")
@@ -43,11 +56,14 @@ func (h *Handlers) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
+	role, _ := middleware.RoleFromContext(r.Context())
+	uid, _ := middleware.UserIDFromContext(r.Context())
+
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 
-	items, err := h.svc.List(r.Context(), experiments.ListParams{
+	items, err := listExperimentsFn(h.svc, r.Context(), role, uid, experiments.ListParams{
 		Type:   strings.TrimSpace(q.Get("type")),
 		Status: strings.TrimSpace(q.Get("status")),
 		Limit:  limit,
@@ -58,12 +74,16 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "list experiments failed")
 		return
 	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
+	role, _ := middleware.RoleFromContext(r.Context())
+	uid, _ := middleware.UserIDFromContext(r.Context())
+
 	id := strings.TrimSpace(r.PathValue("id"))
-	e, code, err := h.svc.Get(r.Context(), id)
+	e, code, err := getExperimentFn(h.svc, r.Context(), role, uid, id)
 	if err != nil {
 		log.Printf("experiments.get error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get experiment failed")
@@ -77,5 +97,6 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
 	httputil.WriteJSON(w, http.StatusOK, e)
 }

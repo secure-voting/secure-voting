@@ -61,4 +61,3 @@ func TestRequireRole_Forbid(t *testing.T) {
 		t.Fatalf("expected 403, got %d body=%s", rr.Code, rr.Body.String())
 	}
 }
-

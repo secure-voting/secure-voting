@@ -1,180 +1,300 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing $1"; exit 1; }; }
 need curl
 need jq
+need docker
 
-BASE="http://127.0.0.1:3001/api/v1"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
+
+if [[ ! -f "$ROOT_DIR/.env" ]]; then
+  echo "missing $ROOT_DIR/.env"
+  exit 1
+fi
+
+set -a
+. "$ROOT_DIR/.env"
+set +a
+
+: "${BOOTSTRAP_RESEARCHER_EMAIL:?missing BOOTSTRAP_RESEARCHER_EMAIL in .env}"
+: "${BOOTSTRAP_RESEARCHER_PASSWORD:?missing BOOTSTRAP_RESEARCHER_PASSWORD in .env}"
+
+BASE="${BASE:-http://127.0.0.1:3001/api/v1}"
+RUN_TIMEOUT_SECONDS="${RUN_TIMEOUT_SECONDS:-300}"
+BACKEND_HEALTH_TIMEOUT_SECONDS="${BACKEND_HEALTH_TIMEOUT_SECONDS:-120}"
+ASYNC_READY_TIMEOUT_SECONDS="${ASYNC_READY_TIMEOUT_SECONDS:-120}"
+
+dc() {
+  (
+    cd "$ROOT_DIR"
+    docker compose "$@"
+  )
+}
+
+dump_compose_debug() {
+  echo
+  echo "==== docker compose ps -a ===="
+  dc ps -a || true
+  echo
+  echo "==== docker compose logs --tail=300 worker compute-runner compute backend kafka db ===="
+  dc logs --tail=300 worker compute-runner compute backend kafka db || true
+  echo
+}
+
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  if [[ $rc -ne 0 ]]; then
+    echo
+    echo "E2E experiment failed with exit code $rc"
+    dump_compose_debug
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
 
 post_json() {
   local url="$1"; shift
   curl -sS -H "Content-Type: application/json" "$@" "$url"
 }
 
-auth_register_login() {
-  local role="$1"
-  local email="e2e+${role}+$(date +%s%N)@example.com"
-  local pass="Passw0rd!12345"
-
-  post_json "$BASE/auth/register" \
-    -d "{\"email\":\"$email\",\"password\":\"$pass\",\"role\":\"$role\"}" >/dev/null || true
-
-  local resp token
-  resp="$(post_json "$BASE/auth/login" -d "{\"email\":\"$email\",\"password\":\"$pass\"}")"
-  token="$(echo "$resp" | jq -r '.access_token // .token // .accessToken // empty')"
-
-  if [[ -z "$token" ]]; then
-    echo "login failed: $resp"
-    exit 1
-  fi
-
-  echo "$token"
+get_auth() {
+  local url="$1"; shift
+  local token="$1"; shift
+  curl -sS -H "Authorization: Bearer $token" "$url"
 }
 
-echo "[1/7] wait backend health"
-curl -fsS http://127.0.0.1:3001/health >/dev/null
+wait_http_ok() {
+  local url="$1"
+  local timeout="$2"
+  local started_at
+  started_at="$(date +%s)"
 
-echo "[2/7] login as researcher"
-RESEARCHER_TOKEN="$(auth_register_login researcher)"
+  while true; do
+    if curl -fsS "$url" >/dev/null 2>&1; then
+      return 0
+    fi
 
-ME="$(curl -sS -H "Authorization: Bearer $RESEARCHER_TOKEN" "$BASE/auth/me")"
-USER_ID="$(echo "$ME" | jq -r '.id // .user.id // empty')"
-if [[ -z "$USER_ID" || "$USER_ID" == "null" ]]; then
-  echo "cannot get user id from /auth/me: $ME"
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for HTTP endpoint: $url"
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+wait_service_running() {
+  local service="$1"
+  local timeout="$2"
+  local started_at
+  started_at="$(date +%s)"
+
+  while true; do
+    if dc ps --status running "$service" 2>/dev/null | grep -q "$service"; then
+      return 0
+    fi
+
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for service to be running: $service"
+      dc ps -a || true
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+wait_log_pattern() {
+  local service="$1"
+  local pattern="$2"
+  local timeout="$3"
+  local started_at
+  local logs
+
+  started_at="$(date +%s)"
+
+  while true; do
+    logs="$(dc logs --no-color "$service" 2>/dev/null || true)"
+
+    if grep -F -q -- "$pattern" <<<"$logs"; then
+      return 0
+    fi
+
+    if (( $(date +%s) - started_at >= timeout )); then
+      echo "timeout waiting for log pattern in service=$service pattern=$pattern"
+      dc logs --tail=200 "$service" || true
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+echo "[1/10] wait backend health"
+wait_http_ok "http://127.0.0.1:3001/health" "$BACKEND_HEALTH_TIMEOUT_SECONDS"
+
+echo "[2/10] wait worker container running"
+wait_service_running "worker" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[3/10] wait compute-runner container running"
+wait_service_running "compute-runner" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[4/10] wait worker readiness"
+wait_log_pattern "worker" "worker started:" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[5/10] wait compute-runner readiness"
+wait_log_pattern "compute-runner" "compute client connected:" "$ASYNC_READY_TIMEOUT_SECONDS"
+
+echo "[6/10] login as bootstrap researcher"
+LOGIN_JSON="$(post_json "$BASE/auth/login" -d "{
+  \"email\": \"${BOOTSTRAP_RESEARCHER_EMAIL}\",
+  \"password\": \"${BOOTSTRAP_RESEARCHER_PASSWORD}\"
+}")"
+RESEARCHER_TOKEN="$(echo "$LOGIN_JSON" | jq -r '.access_token // .token // .accessToken // empty')"
+
+if [[ -z "$RESEARCHER_TOKEN" ]]; then
+  echo "login failed:"
+  echo "$LOGIN_JSON" | jq .
   exit 1
 fi
-echo "user_id=$USER_ID"
 
-echo "[3/7] seed dataset into mongo (datasets + dataset_ballots)"
-MONGO_OUT="$(
-docker exec -i mongo-db mongosh --quiet \
-  --username root --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin <<'JS'
-const db = db.getSiblingDB("secure_voting");
+ME="$(get_auth "$BASE/auth/me" "$RESEARCHER_TOKEN")"
+USER_ID="$(echo "$ME" | jq -r '.id // .user.id // empty')"
+USER_ROLE="$(echo "$ME" | jq -r '.role // .user.role // empty')"
 
-const now = new Date();
-const ds = {
-  name: "e2e dataset",
-  description: "smoke inserted by script",
-  source: "generate",
-  format: "ranking",
-  candidates: [
-    { id: "c1", name: "A" },
-    { id: "c2", name: "B" },
-    { id: "c3", name: "C" },
-    { id: "c4", name: "D" }
-  ],
-  created_at: now,
-  seed: 42,
-  parameters: { voters: 30 }
-};
+if [[ -z "$USER_ID" || "$USER_ID" == "null" ]]; then
+  echo "cannot get user id from /auth/me:"
+  echo "$ME" | jq .
+  exit 1
+fi
 
-const ins = db.datasets.insertOne(ds);
-const datasetId = ins.insertedId;
+if [[ "$USER_ROLE" != "researcher" && "$USER_ROLE" != "admin" ]]; then
+  echo "expected bootstrap researcher/admin, got role=$USER_ROLE"
+  echo "$ME" | jq .
+  exit 1
+fi
 
-function ballot(i) {
-  const base = ["c1","c2","c3","c4"];
-  // простая вариативность ранжирования
-  const rot = i % base.length;
-  const r = base.slice(rot).concat(base.slice(0, rot));
-  return {
-    dataset_id: datasetId,
-    voter_ref: "v" + i,
-    ranking: r
-  };
-}
+echo "user_id=$USER_ID role=$USER_ROLE"
 
-const ballots = [];
-for (let i = 1; i <= 30; i++) ballots.push(ballot(i));
-db.dataset_ballots.insertMany(ballots);
+echo "[7/10] generate dataset via API"
+DATASET_NAME="e2e-exp-ranking-$(date +%s)"
+DATASET_JSON="$(post_json "$BASE/datasets/generate" \
+  -H "Authorization: Bearer $RESEARCHER_TOKEN" \
+  -d "{
+    \"name\": \"${DATASET_NAME}\",
+    \"description\": \"researcher smoke dataset\",
+    \"format\": \"ranking\",
+    \"candidates\": [
+      {\"id\": \"c1\", \"name\": \"Alice\"},
+      {\"id\": \"c2\", \"name\": \"Bob\"},
+      {\"id\": \"c3\", \"name\": \"Carol\"}
+    ],
+    \"voters\": 20,
+    \"seed\": 42
+  }")"
 
-print(datasetId.valueOf());
-JS
-)"
-DATASET_ID="$(echo "$MONGO_OUT" | tail -n 1 | tr -d '\r\n')"
-if [[ -z "$DATASET_ID" ]]; then
-  echo "failed to seed dataset in mongo"
+DATASET_ID="$(echo "$DATASET_JSON" | jq -r '.id // empty')"
+if [[ -z "$DATASET_ID" || "$DATASET_ID" == "null" ]]; then
+  echo "dataset generate failed:"
+  echo "$DATASET_JSON" | jq .
   exit 1
 fi
 echo "dataset_id=$DATASET_ID"
 
-echo "[4/7] seed experiment + experiment_run + job into postgres"
-PSQL_OUT="$(
-docker exec -i postgres-db psql -U admin -d secure-voting -At <<SQL
-WITH exp AS (
-  INSERT INTO experiments (id, type, params, created_by, created_at, status, seed)
-  VALUES (gen_random_uuid(), 'algo', '{}'::jsonb, '$USER_ID'::uuid, now(), 'draft', 123)
-  RETURNING id
-),
-run AS (
-  INSERT INTO experiment_runs (id, experiment_id, dataset_id, status)
-  SELECT gen_random_uuid(), exp.id, '$DATASET_ID', 'queued'
-  FROM exp
-  RETURNING id, experiment_id
-),
-job AS (
-  INSERT INTO jobs (id, kind, status, progress, created_by, experiment_id, experiment_run_id, payload, created_at)
-  SELECT
-    gen_random_uuid(),
-    'experiment_run',
-    'queued',
-    0,
-    '$USER_ID'::uuid,
-    run.experiment_id,
-    run.id,
-    jsonb_build_object('experiment_id', run.experiment_id::text, 'dataset_id', '$DATASET_ID', 'run_id', run.id::text),
-    now()
-  FROM run
-  RETURNING id
-)
-SELECT
-  (SELECT id::text FROM exp) || '|' ||
-  (SELECT id::text FROM run) || '|' ||
-  (SELECT id::text FROM job);
-SQL
-)"
-IFS='|' read -r EXPERIMENT_ID RUN_ID JOB_ID <<<"$PSQL_OUT"
-if [[ -z "$EXPERIMENT_ID" || -z "$RUN_ID" || -z "$JOB_ID" ]]; then
-  echo "failed to seed postgres: $PSQL_OUT"
+echo "[8/10] create experiment via API"
+EXPERIMENT_JSON="$(post_json "$BASE/experiments" \
+  -H "Authorization: Bearer $RESEARCHER_TOKEN" \
+  -d '{
+    "type": "algo",
+    "params": {
+      "ballot_format": "ranking",
+      "tally_rule": "plurality",
+      "committee_size": 1
+    },
+    "seed": 42
+  }')"
+
+EXPERIMENT_ID="$(echo "$EXPERIMENT_JSON" | jq -r '.id // empty')"
+if [[ -z "$EXPERIMENT_ID" || "$EXPERIMENT_ID" == "null" ]]; then
+  echo "experiment create failed:"
+  echo "$EXPERIMENT_JSON" | jq .
   exit 1
 fi
 echo "experiment_id=$EXPERIMENT_ID"
-echo "run_id=$RUN_ID"
-echo "job_id=$JOB_ID"
 
-echo "[5/7] poll jobs until experiment_run done/error (worker + kafka + compute-runner + grpc)"
-deadline=$(( $(date +%s) + 120 ))
-status=""
+echo "[9/10] create experiment run batch via API"
+BATCH_JSON="$(post_json "$BASE/experiment-runs/batch" \
+  -H "Authorization: Bearer $RESEARCHER_TOKEN" \
+  -d "{
+    \"experiment_id\": \"${EXPERIMENT_ID}\",
+    \"dataset_ids\": [\"${DATASET_ID}\"]
+  }")"
+
+RUN_ID="$(echo "$BATCH_JSON" | jq -r '.items[0].run_id // .runs[0].run_id // .[0].run_id // .run_id // empty')"
+JOB_ID="$(echo "$BATCH_JSON" | jq -r '.items[0].job_id // .runs[0].job_id // .[0].job_id // .job_id // empty')"
+
+if [[ -z "$RUN_ID" || "$RUN_ID" == "null" ]]; then
+  echo "batch create failed:"
+  echo "$BATCH_JSON" | jq .
+  exit 1
+fi
+echo "run_id=$RUN_ID"
+echo "job_id=${JOB_ID:-<none>}"
+
+echo "[10/10] poll run until done/error"
+deadline=$(( $(date +%s) + RUN_TIMEOUT_SECONDS ))
+RUN_JSON=""
+RUN_STATUS=""
 while [[ $(date +%s) -lt $deadline ]]; do
-  j="$(curl -sS -H "Authorization: Bearer $RESEARCHER_TOKEN" "$BASE/jobs/$JOB_ID" || true)"
-  status="$(echo "$j" | jq -r '.status // empty' 2>/dev/null || true)"
-  prog="$(echo "$j" | jq -r '.progress // empty' 2>/dev/null || true)"
-  echo "job status=$status progress=$prog"
-  if [[ "$status" == "done" || "$status" == "error" ]]; then
+  RUN_JSON="$(get_auth "$BASE/experiment-runs/$RUN_ID" "$RESEARCHER_TOKEN" || true)"
+  RUN_STATUS="$(echo "$RUN_JSON" | jq -r '.status // empty' 2>/dev/null || true)"
+  echo "run status=$RUN_STATUS"
+
+  if [[ "$RUN_STATUS" == "done" ]]; then
     break
   fi
-  sleep 1
+
+  if [[ "$RUN_STATUS" == "error" ]]; then
+    echo "run finished with error:"
+    echo "$RUN_JSON" | jq .
+    if [[ -n "${JOB_ID:-}" && "$JOB_ID" != "null" ]]; then
+      echo "job snapshot:"
+      get_auth "$BASE/jobs/$JOB_ID" "$RESEARCHER_TOKEN" | jq .
+    fi
+    exit 1
+  fi
+
+  sleep 2
 done
 
-if [[ "$status" != "done" ]]; then
-  echo "job did not finish as done (status=$status). job:"
-  echo "$j" | jq '.'
-  echo "tips: check docker logs go-worker / go-compute-runner / rust-compute and kafka topics consumers"
+if [[ "$RUN_STATUS" != "done" ]]; then
+  echo "run did not finish as done:"
+  echo "$RUN_JSON" | jq .
+  if [[ -n "${JOB_ID:-}" && "$JOB_ID" != "null" ]]; then
+    echo "job snapshot:"
+    get_auth "$BASE/jobs/$JOB_ID" "$RESEARCHER_TOKEN" | jq .
+  fi
   exit 1
 fi
 
-echo "[6/7] fetch experiment run result via API"
-res="$(curl -sS -H "Authorization: Bearer $RESEARCHER_TOKEN" "$BASE/experiment-runs/$RUN_ID/result" || true)"
-echo "$res" | jq '.'
+if [[ -n "${JOB_ID:-}" && "$JOB_ID" != "null" ]]; then
+  echo "[extra] fetch job snapshot"
+  JOB_JSON="$(get_auth "$BASE/jobs/$JOB_ID" "$RESEARCHER_TOKEN" || true)"
+  echo "$JOB_JSON" | jq .
+fi
 
-echo "[7/7] sanity check: mongo experiment_results has run_id"
-mongo_check="$(
-docker exec -i mongo-db mongosh --quiet \
-  --username root --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin <<JS
-const db = db.getSiblingDB("secure_voting");
-const doc = db.experiment_results.findOne({ run_id: "$RUN_ID" });
-print(doc ? "ok" : "missing");
-JS
-)"
-echo "$mongo_check" | tail -n 1
+echo "[extra] fetch experiment result via API"
+RESULT_JSON="$(get_auth "$BASE/experiment-runs/$RUN_ID/result" "$RESEARCHER_TOKEN" || true)"
+echo "$RESULT_JSON" | jq .
+
+RESULT_RUN_ID="$(echo "$RESULT_JSON" | jq -r '.run_id // empty' 2>/dev/null || true)"
+if [[ "$RESULT_RUN_ID" != "$RUN_ID" ]]; then
+  echo "unexpected result payload:"
+  echo "$RESULT_JSON" | jq .
+  exit 1
+fi
 
 echo "E2E experiment_run OK"

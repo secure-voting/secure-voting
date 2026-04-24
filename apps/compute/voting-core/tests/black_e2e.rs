@@ -10,9 +10,10 @@ fn wiki_example_condorcet_winner() {
     let scorer = BlackRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(NASHVILLE, "NASHVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }

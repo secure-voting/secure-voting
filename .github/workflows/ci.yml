@@ -1,0 +1,188 @@
+name: secure-voting-ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: secure-voting-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-fast:
+    name: backend fast checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache: true
+          cache-dependency-path: |
+            apps/backend/go.sum
+            apps/backend/go.mod
+
+      - name: Run go test
+        run: go test ./...
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run system status handler tests
+        run: go test ./internal/httpserver -run TestSystemStatus
+
+      - name: Run elections rule matrix contract tests
+        run: go test ./internal/elections -run 'Test(BuildRuleMatrix|ValidateRuleCompatibility)'
+
+      - name: Run capabilities handler tests
+        run: go test ./internal/httpserver/capabilities
+        
+      - name: Build backend binaries
+        run: |
+          go build ./cmd/api
+          go build ./cmd/worker
+          go build ./cmd/compute-runner
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.2
+          working-directory: apps/backend
+          args: --timeout=5m
+
+  frontend-fast:
+    name: frontend typecheck and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run typecheck
+        run: npm run typecheck
+
+      - name: Run build
+        run: npm run build
+
+  openapi-validate:
+    name: openapi validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/ci/*.sh scripts/*.sh
+
+      - name: Check capabilities OpenAPI contract
+        run: bash scripts/ci/check_openapi_capabilities.sh
+
+  integration-tests:
+    name: integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - backend-fast
+      - frontend-fast
+      - openapi-validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y curl jq
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/ci/*.sh scripts/*.sh
+
+      - name: Create .env.integration
+        run: |
+          cat > .env.integration <<'EOF2'
+          POSTGRES_USER=postgres
+          POSTGRES_PASSWORD=postgres
+          POSTGRES_DB=secure_voting
+
+          REDIS_PASSWORD=redispass
+
+          MONGO_INITDB_ROOT_USERNAME=root
+          MONGO_INITDB_ROOT_PASSWORD=mongopass
+
+          BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+          BOOTSTRAP_ADMIN_PASSWORD=AdminPass123!
+          BOOTSTRAP_RESEARCHER_EMAIL=researcher@example.com
+          BOOTSTRAP_RESEARCHER_PASSWORD=ResearcherPass123!
+
+          POSTGRES_DSN=postgres://postgres:postgres@127.0.0.1:15432/secure_voting?sslmode=disable
+          REDIS_ADDR=127.0.0.1:16379
+          REDIS_PASSWORD=redispass
+          MONGO_URI=mongodb://root:mongopass@127.0.0.1:17017/?authSource=admin
+
+          SECURE_VOTING_INTEGRATION=1
+          EOF2
+
+      - name: Run integration suite
+        run: bash scripts/ci/run_integration_suite.sh
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-artifacts
+          path: .ci-artifacts/
+          if-no-files-found: ignore
+
+  e2e-tests:
+    name: e2e tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs:
+      - backend-fast
+      - frontend-fast
+      - openapi-validate
+    env:
+      RUN_EXPERIMENT_E2E: "1"
+      RUN_OPTIONAL_VOTE_FORMATS_E2E: "0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y curl jq
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/ci/*.sh scripts/*.sh
+
+      - name: Run e2e suite
+        run: bash scripts/ci/run_e2e_suite.sh
+
+      - name: Upload e2e artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: .ci-artifacts/
+          if-no-files-found: ignore

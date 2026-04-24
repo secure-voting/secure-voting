@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io;
 
 use clap::Parser;
+use voting_core::models::ranking::RankingBallot;
 use voting_core::prelude::*;
 
 use crate::args::{Args, InputFormat, RuleName};
@@ -36,28 +37,32 @@ fn main() -> anyhow::Result<()> {
 fn get_profile_and_mappings<R: io::Read>(
     format: InputFormat,
     reader: R,
-) -> anyhow::Result<(Profile, HashMap<CandidateId, String>)> {
+) -> anyhow::Result<(Profile<RankingBallot>, HashMap<CandidateId, String>)> {
     match format {
         InputFormat::Cvr => Ok(CVRParser.parse(reader)?),
     }
 }
 
-fn compute_result(rule_enum: RuleName, input_data: &Profile) -> anyhow::Result<RuleOutcome> {
+fn compute_result(
+    rule_enum: RuleName,
+    input_data: &Profile<RankingBallot>,
+) -> anyhow::Result<RuleOutcome> {
     match rule_enum {
-        RuleName::Plurality => Ok(PluralityRule::default().execute(input_data)?),
-        RuleName::Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?),
-        RuleName::Approval3 => Ok(ApprovalRule::<3>::default().execute(input_data)?),
-        RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?),
-        RuleName::Borda => Ok(BordaRule::default().execute(input_data)?),
-        RuleName::Black => Ok(BlackRule::default().execute(input_data)?),
-        RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?),
-        RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?),
-        RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?),
-        RuleName::Simpson => Ok(SimpsonRule::default().execute(input_data)?),
-        RuleName::Minmax => Ok(MinmaxRule::default().execute(input_data)?),
-        RuleName::Hare => Ok(HareRule::default().execute(input_data)?),
-        RuleName::Nanson => Ok(NansonRule::default().execute(input_data)?),
-        RuleName::Coombs => Ok(CoombsRule::default().execute(input_data)?),
-        RuleName::InverseBorda => Ok(InverseBordaRule::default().execute(input_data)?),
+        RuleName::Plurality => Ok(PluralityRule::default().execute(input_data)?.0),
+        RuleName::Approval2 => Ok(ApprovalRule::<2>::default().execute(input_data)?.0),
+        RuleName::Approval3 => Ok(ApprovalRule::<3>::default().execute(input_data)?.0),
+        RuleName::InversePlurality => Ok(AntiPluralityRule::default().execute(input_data)?.0),
+        RuleName::Borda => Ok(BordaRule::default().execute(input_data)?.0),
+        // RuleName::Black => Ok(BlackRule::default().execute(input_data)?.0),
+        RuleName::CopelandI => Ok(CopelandIRule::default().execute(input_data)?.0),
+        RuleName::CopelandII => Ok(CopelandIIRule::default().execute(input_data)?.0),
+        RuleName::CopelandIII => Ok(CopelandIIIRule::default().execute(input_data)?.0),
+        RuleName::Simpson => Ok(SimpsonRule::default().execute(input_data)?.0),
+        RuleName::Minmax => Ok(MinmaxRule::default().execute(input_data)?.0),
+        RuleName::Hare => Ok(HareRule::default().execute(input_data)?.0),
+        RuleName::Nanson => Ok(NansonRule::default().execute(input_data)?.0),
+        // RuleName::Coombs => Ok(CoombsRule::default().execute(input_data)?.0),
+        RuleName::InverseBorda => Ok(InverseBordaRule::default().execute(input_data)?.0),
+        _ => Err(anyhow::format_err!("Unimplemented")),
     }
 }

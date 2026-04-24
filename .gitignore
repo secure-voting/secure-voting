@@ -1,25 +1,36 @@
-
 # moon
 .moon/cache
 .moon/docker
 
-# compute service
-
-apps/compute/target
+# compute
+apps/compute/target/
 apps/compute/**/inputs/
 
-# General stuff
+# frontend
+apps/frontend/node_modules/
+apps/frontend/dist/
 
+# env
 .env
+.env.integration
 
-# Docker volumes
+# CI artifacts
+.ci-artifacts/
+
+# Docker/local data
 db-data/
 cache/
 mongo-data/
 iggy/
 
-# Profiling artifacts
+# profiling / logs / coverage
 flamegraph.svg
 perf.data*
+*.log
+coverage.out
+coverage/
 
-apps/frontend/node_modules
+# cert artifacts
+scripts/certs/out/
+
+structure.md

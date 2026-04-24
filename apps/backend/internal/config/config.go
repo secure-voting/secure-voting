@@ -18,22 +18,40 @@ type Config struct {
 	RedisPassword  string
 	IdempotencyTTL time.Duration
 
+	AdminTrustedCIDRs []string
+	RedisTLS   bool
+	RedisTLSCA string
+
 	MongoURI    string
 	MongoDBName string
 
 	MaxUploadBytes int64
 
-	KafkaBrokers        []string
-	KafkaTasksTopic     string
-	KafkaResultsTopic   string
-	KafkaGroupID        string
-	WorkerPollInterval  time.Duration
+	KafkaBrokers           []string
+	KafkaTasksTopic        string
+	KafkaResultsTopic      string
+	KafkaGroupID           string
+	WorkerPollInterval     time.Duration
+	WorkerScheduleInterval time.Duration
+	KafkaTLS           bool
+	KafkaTLSCA         string
+	KafkaTLSServerName string
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
 	ComputeTLSCA         string
 	ComputeTLSServerName string
 
+	BootstrapAdminEmail         string
+	BootstrapAdminPassword      string
+	BootstrapResearcherEmail    string
+	BootstrapResearcherPassword string
+
+	AuthRateLimit    int
+	AuthRateLimitTTL time.Duration
+
+	WriteRateLimit    int
+	WriteRateLimitTTL time.Duration
 }
 
 func FromEnv() Config {
@@ -66,6 +84,18 @@ func FromEnv() Config {
 	redisPass := os.Getenv("REDIS_PASSWORD")
 	if redisPass == "" {
 		redisPass = "redis_dev_pass"
+	}
+
+	redisTLS := false
+	if s := strings.TrimSpace(os.Getenv("REDIS_TLS")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			redisTLS = true
+		}
+	}
+
+	redisTLSCA := strings.TrimSpace(os.Getenv("REDIS_TLS_CA"))
+	if redisTLS && redisTLSCA == "" {
+		redisTLSCA = "/certs/ca.pem"
 	}
 
 	idemTTL := 24 * time.Hour
@@ -120,6 +150,23 @@ func FromEnv() Config {
 		groupID = "secure-voting-backend-worker"
 	}
 
+	kafkaTLS := false
+	if s := strings.TrimSpace(os.Getenv("KAFKA_TLS")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			kafkaTLS = true
+		}
+	}
+
+	kafkaTLSCA := strings.TrimSpace(os.Getenv("KAFKA_TLS_CA"))
+	if kafkaTLS && kafkaTLSCA == "" {
+		kafkaTLSCA = "/certs/ca.pem"
+	}
+
+	kafkaTLSServerName := strings.TrimSpace(os.Getenv("KAFKA_TLS_SERVER_NAME"))
+	if kafkaTLS && kafkaTLSServerName == "" {
+		kafkaTLSServerName = "kafka"
+	}
+
 	poll := 1 * time.Second
 	if s := os.Getenv("WORKER_POLL_INTERVAL"); s != "" {
 		if d, err := time.ParseDuration(s); err == nil && d > 0 {
@@ -127,8 +174,25 @@ func FromEnv() Config {
 		}
 	}
 
+	schedulePoll := 5 * time.Second
+	if s := os.Getenv("WORKER_SCHEDULE_INTERVAL"); s != "" {
+		if d, err := time.ParseDuration(s); err == nil && d > 0 {
+			schedulePoll = d
+		}
+	}
+
+	computeDisabled := false
+	if s := strings.TrimSpace(os.Getenv("DISABLE_COMPUTE")); s != "" {
+		if s == "1" || strings.EqualFold(s, "true") {
+			computeDisabled = true
+		}
+	}
+	if strings.TrimSpace(os.Getenv("SECURE_VOTING_INTEGRATION")) == "1" {
+		computeDisabled = true
+	}
+
 	computeAddr := os.Getenv("COMPUTE_GRPC_ADDR")
-	if computeAddr == "" {
+	if computeAddr == "" && !computeDisabled {
 		computeAddr = "rust-compute:50051"
 	}
 
@@ -138,17 +202,58 @@ func FromEnv() Config {
 			computeTLS = false
 		}
 	}
+	if computeDisabled {
+		computeTLS = false
+	}
 
 	computeCA := os.Getenv("COMPUTE_TLS_CA")
-	if computeCA == "" {
+	if computeCA == "" && !computeDisabled {
 		computeCA = "/certs/ca.pem"
+	}
+	if computeDisabled {
+		computeCA = ""
 	}
 
 	computeSN := os.Getenv("COMPUTE_TLS_SERVER_NAME")
-	if computeSN == "" {
+	if computeSN == "" && !computeDisabled {
 		computeSN = "rust-compute"
 	}
+	if computeDisabled {
+		computeSN = ""
+	}
 
+	bootstrapAdminEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
+	bootstrapAdminPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"))
+	bootstrapResearcherEmail := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_EMAIL"))
+	bootstrapResearcherPassword := strings.TrimSpace(os.Getenv("BOOTSTRAP_RESEARCHER_PASSWORD"))
+
+	authRateLimit := 10
+	if s := os.Getenv("AUTH_RATE_LIMIT"); s != "" {
+		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+			authRateLimit = v
+		}
+	}
+
+	authRateLimitTTL := time.Minute
+	if s := os.Getenv("AUTH_RATE_LIMIT_TTL"); s != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil && d > 0 {
+			authRateLimitTTL = d
+		}
+	}
+
+	writeRateLimit := 30
+	if s := os.Getenv("WRITE_RATE_LIMIT"); s != "" {
+		if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+			writeRateLimit = v
+		}
+	}
+
+	writeRateLimitTTL := time.Minute
+	if s := os.Getenv("WRITE_RATE_LIMIT_TTL"); s != "" {
+		if d, err := time.ParseDuration(strings.TrimSpace(s)); err == nil && d > 0 {
+			writeRateLimitTTL = d
+		}
+	}
 
 	return Config{
 		HTTPAddr:        addr,
@@ -159,6 +264,8 @@ func FromEnv() Config {
 
 		RedisAddr:      redisAddr,
 		RedisPassword:  redisPass,
+		RedisTLS:       redisTLS,
+		RedisTLSCA:     redisTLSCA,
 		IdempotencyTTL: idemTTL,
 
 		MongoURI:    mongoURI,
@@ -166,17 +273,33 @@ func FromEnv() Config {
 
 		MaxUploadBytes: maxUpload,
 
-		KafkaBrokers:       brokers,
-		KafkaTasksTopic:    tasksTopic,
-		KafkaResultsTopic:  resultsTopic,
-		KafkaGroupID:       groupID,
-		WorkerPollInterval: poll,
+		KafkaBrokers:           brokers,
+		KafkaTasksTopic:        tasksTopic,
+		KafkaResultsTopic:      resultsTopic,
+		KafkaGroupID:           groupID,
+		WorkerPollInterval:     poll,
+		WorkerScheduleInterval: schedulePoll,
+		KafkaTLS:           kafkaTLS,
+		KafkaTLSCA:         kafkaTLSCA,
+		KafkaTLSServerName: kafkaTLSServerName,
 
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,
 		ComputeTLSCA:         computeCA,
 		ComputeTLSServerName: computeSN,
 
+		BootstrapAdminEmail:         bootstrapAdminEmail,
+		BootstrapAdminPassword:      bootstrapAdminPassword,
+		BootstrapResearcherEmail:    bootstrapResearcherEmail,
+		BootstrapResearcherPassword: bootstrapResearcherPassword,
+
+		AuthRateLimit:    authRateLimit,
+		AuthRateLimitTTL: authRateLimitTTL,
+
+		WriteRateLimit:    writeRateLimit,
+		WriteRateLimitTTL: writeRateLimitTTL,
+
+		AdminTrustedCIDRs: splitCSV(os.Getenv("ADMIN_TRUSTED_CIDRS")),
 	}
 }
 

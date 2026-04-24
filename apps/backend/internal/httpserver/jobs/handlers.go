@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"strconv"
@@ -8,15 +9,27 @@ import (
 
 	"secure-voting/apps/backend/internal/httpserver/httputil"
 	"secure-voting/apps/backend/internal/httpserver/middleware"
-	"secure-voting/apps/backend/internal/jobs"
+	corejobs "secure-voting/apps/backend/internal/jobs"
 )
 
+type listFunc func(ctx context.Context, role, uid string, f corejobs.ListFilter) (any, error)
+type getFunc func(ctx context.Context, role, uid, id string) (any, string, error)
+
 type Handlers struct {
-	svc *jobs.Service
+	list listFunc
+	get  getFunc
 }
 
-func NewHandlers(svc *jobs.Service) *Handlers {
-	return &Handlers{svc: svc}
+func NewHandlers(svc *corejobs.Service) *Handlers {
+	return &Handlers{
+		list: func(ctx context.Context, role, uid string, f corejobs.ListFilter) (any, error) {
+			items, err := svc.List(ctx, role, uid, f)
+			return items, err
+		},
+		get: func(ctx context.Context, role, uid, id string) (any, string, error) {
+			return svc.Get(ctx, role, uid, id)
+		},
+	}
 }
 
 func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +37,7 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 	uid, _ := middleware.UserIDFromContext(r.Context())
 
 	q := r.URL.Query()
-	var f jobs.ListFilter
+	var f corejobs.ListFilter
 
 	if s := strings.TrimSpace(q.Get("status")); s != "" {
 		f.Status = &s
@@ -43,7 +56,7 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	items, err := h.svc.List(r.Context(), role, uid, f)
+	items, err := h.list(r.Context(), role, uid, f)
 	if err != nil {
 		log.Printf("jobs.list error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "list jobs failed")
@@ -57,7 +70,7 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	id := strings.TrimSpace(r.PathValue("id"))
 
-	item, code, err := h.svc.Get(r.Context(), role, uid, id)
+	item, code, err := h.get(r.Context(), role, uid, id)
 	if err != nil {
 		log.Printf("jobs.get error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get job failed")

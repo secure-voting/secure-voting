@@ -1,0 +1,86 @@
+import type React from "react";
+
+export const styles: Record<string, React.CSSProperties> = {
+  page: {
+    fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+    padding: 20,
+    maxWidth: 1180,
+    margin: "0 auto",
+  },
+  topbar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    justifyContent: "space-between",
+    padding: "14px 16px",
+    border: "1px solid #e5e7eb",
+    borderRadius: 16,
+    marginBottom: 16,
+    background: "white",
+  },
+  title: {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 800,
+  },
+  btn: {
+    padding: "9px 14px",
+    borderRadius: 12,
+    border: "1px solid #d1d5db",
+    background: "white",
+    cursor: "pointer",
+  },
+  btnPrimary: {
+    padding: "9px 14px",
+    borderRadius: 12,
+    border: "1px solid #111827",
+    background: "#111827",
+    color: "white",
+    cursor: "pointer",
+  },
+  btnDanger: {
+    padding: "9px 14px",
+    borderRadius: 12,
+    border: "1px solid #991b1b",
+    background: "#991b1b",
+    color: "white",
+    cursor: "pointer",
+  },
+  input: {
+    padding: "8px 10px",
+    borderRadius: 10,
+    border: "1px solid #d1d5db",
+    width: "100%",
+    boxSizing: "border-box",
+    background: "white",
+  },
+  card: {
+    border: "1px solid #e5e7eb",
+    borderRadius: 14,
+    padding: 14,
+    background: "white",
+  },
+  grid2: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+  },
+  muted: {
+    color: "#6b7280",
+  },
+  hr: {
+    border: "none",
+    borderTop: "1px solid #e5e7eb",
+    margin: "12px 0",
+  },
+  pre: {
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    background: "#0b1020",
+    color: "#e5e7eb",
+    padding: 12,
+    borderRadius: 12,
+    fontSize: 12,
+    overflowX: "auto",
+  },
+};

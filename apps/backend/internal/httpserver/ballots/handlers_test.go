@@ -1,6 +1,8 @@
 package ballots
 
 import (
+	"secure-voting/apps/backend/internal/httpserver/httputil"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -70,7 +72,7 @@ func TestSubmit_Success(t *testing.T) {
 	h := NewHandlers(svc)
 	ver := fakeVerifier{uid: "u1", email: "voter1@example.com", role: "voter"}
 
-	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", http.HandlerFunc(h.Submit)))
+	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", httputil.Wrap(h.Submit)))
 
 	body := []byte(`{"approval_set":["c1"]}`)
 	req := httptest.NewRequest(http.MethodPost, "http://example/api/v1/elections/e1/ballots/submit", bytes.NewReader(body))
@@ -109,7 +111,7 @@ func TestSubmit_MissingIdempotencyKey_MapsTo400(t *testing.T) {
 
 	h := NewHandlers(svc)
 	ver := fakeVerifier{uid: "u1", email: "voter1@example.com", role: "voter"}
-	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", http.HandlerFunc(h.Submit)))
+	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", httputil.Wrap(h.Submit)))
 
 	req := httptest.NewRequest(http.MethodPost, "http://example/api/v1/elections/e1/ballots/submit", bytes.NewReader([]byte(`{"approval_set":["c1"]}`)))
 	req.SetPathValue("id", "e1")
@@ -123,8 +125,8 @@ func TestSubmit_MissingIdempotencyKey_MapsTo400(t *testing.T) {
 		t.Fatalf("expected 400, got %d body=%s", rr.Code, rr.Body.String())
 	}
 	er := decodeErr(t, rr)
-	if er.Error.Code != "bad_request" {
-		t.Fatalf("expected bad_request, got %s", er.Error.Code)
+	if er.Error.Code != "missing_idempotency_key" {
+		t.Fatalf("expected missing_idempotency_key, got %s", er.Error.Code)
 	}
 }
 
@@ -140,7 +142,7 @@ func TestSubmit_NotFound_MapsTo404(t *testing.T) {
 
 	h := NewHandlers(svc)
 	ver := fakeVerifier{uid: "u1", email: "voter1@example.com", role: "voter"}
-	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", http.HandlerFunc(h.Submit)))
+	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", httputil.Wrap(h.Submit)))
 
 	req := httptest.NewRequest(http.MethodPost, "http://example/api/v1/elections/e1/ballots/submit", bytes.NewReader([]byte(`{"approval_set":["c1"]}`)))
 	req.SetPathValue("id", "e1")
@@ -171,7 +173,7 @@ func TestMe_Success(t *testing.T) {
 
 	h := NewHandlers(svc)
 	ver := fakeVerifier{uid: "u1", email: "voter1@example.com", role: "voter"}
-	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", http.HandlerFunc(h.Me)))
+	handler := middleware.RequireAuth(ver, middleware.RequireRole("voter", httputil.Wrap(h.Me)))
 
 	req := httptest.NewRequest(http.MethodGet, "http://example/api/v1/elections/e1/ballots/me", nil)
 	req.SetPathValue("id", "e1")

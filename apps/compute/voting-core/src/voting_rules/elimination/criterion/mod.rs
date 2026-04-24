@@ -2,7 +2,7 @@
 //!
 //! This module defines the [`EliminationCriterion`] trait.
 
-use crate::{profile::CandidateId, scorer::Score};
+use crate::{models::candidate_id::CandidateId, scorer::Score};
 
 pub mod below_average_score;
 pub mod maxscore;

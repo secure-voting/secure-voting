@@ -1,7 +1,11 @@
 use std::{collections::HashMap, io};
 
 use thiserror::Error;
-use voting_core::profile::{CandidateId, Profile, ProfileError};
+use voting_core::models::{
+    candidate_id::CandidateId,
+    profile::Profile,
+    ranking::{ProfileError, RankingBallot},
+};
 
 use crate::models::ProfileParser;
 
@@ -31,13 +35,13 @@ const BALLOT_ID: usize = 0;
 const RANK: usize = 1;
 const CHOICE: usize = 2;
 
-impl ProfileParser for CVRParser {
+impl ProfileParser<RankingBallot> for CVRParser {
     type Error = CVRError;
 
     fn parse<R: io::Read>(
         &mut self,
         reader: R,
-    ) -> Result<(Profile, HashMap<CandidateId, String>), Self::Error> {
+    ) -> Result<(Profile<RankingBallot>, HashMap<CandidateId, String>), Self::Error> {
         let mut rdr = csv::Reader::from_reader(reader);
         let headers = rdr.headers()?;
 
@@ -85,7 +89,10 @@ impl ProfileParser for CVRParser {
 
                     if !candidate_mapping.contains_key(&choice) {
                         candidate_mapping.insert(choice.clone(), new_cand_id);
-                        reverse_map.insert(CandidateId::new(new_cand_id), choice.clone());
+                        reverse_map.insert(
+                            CandidateId::new(new_cand_id, choice.clone()),
+                            choice.clone(),
+                        );
                         new_cand_id += 1;
                     }
 
@@ -102,7 +109,10 @@ impl ProfileParser for CVRParser {
 
         let votes = vote_map.into_values().collect::<Vec<_>>();
 
-        Ok((Profile::try_from(votes)?, reverse_map))
+        Ok((
+            Profile::try_from((votes, candidate_mapping.keys().cloned().collect()))?,
+            reverse_map,
+        ))
     }
 }
 

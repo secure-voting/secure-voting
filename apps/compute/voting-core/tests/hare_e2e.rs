@@ -11,9 +11,10 @@ fn wiki_tennessee_example() {
     let scorer = HareRule::default();
 
     assert_eq!(
-        RuleOutcome::UniqueWinner(CandidateId::new(KNOXVILLE)),
+        RuleOutcome::UniqueWinner(CandidateId::new(KNOXVILLE, "KNOXVILLE")),
         scorer
             .execute(&profile)
             .expect("Scorer failed, but shouldn't have.")
+            .0
     );
 }

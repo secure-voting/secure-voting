@@ -2,7 +2,7 @@ use std::sync::Once;
 
 use ctor::ctor;
 use tracing_subscriber::{EnvFilter, fmt};
-use voting_core::profile::Profile;
+use voting_core::models::{profile::Profile, ranking::RankingBallot};
 
 pub const MEMPHIS: usize = 0;
 pub const NASHVILLE: usize = 1;
@@ -19,7 +19,7 @@ pub const KNOXVILLE: usize = 3;
     clippy::expect_used,
     reason = "This is a utility function solely used by tests. Expect here is justified."
 )]
-pub fn construct_tennessee_wiki_example() -> Profile {
+pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
     let mut votes = Vec::with_capacity(100);
 
     (0..42).for_each(|_| votes.push(vec![MEMPHIS, NASHVILLE, CHATTANOOGA, KNOXVILLE]));
@@ -27,7 +27,16 @@ pub fn construct_tennessee_wiki_example() -> Profile {
     (0..15).for_each(|_| votes.push(vec![CHATTANOOGA, KNOXVILLE, NASHVILLE, MEMPHIS]));
     (0..17).for_each(|_| votes.push(vec![KNOXVILLE, CHATTANOOGA, NASHVILLE, MEMPHIS]));
 
-    Profile::try_from(votes).expect("Profile is constructed incorrectly, revise test example.")
+    Profile::try_from((
+        votes,
+        vec![
+            "MEMPHIS".into(),
+            "NASHVILLE".into(),
+            "CHATTANOOGA".into(),
+            "KNOXVILLE".into(),
+        ],
+    ))
+    .expect("Profile is constructed incorrectly, revise test example.")
 }
 
 static INIT: Once = Once::new();

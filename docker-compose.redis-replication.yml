@@ -1,0 +1,58 @@
+services:
+  redis-primary:
+    image: redis:8.4
+    container_name: redis-primary
+    command:
+      - redis-server
+      - --port
+      - "6379"
+      - --appendonly
+      - "yes"
+      - --protected-mode
+      - "no"
+    networks:
+      - redis_replication_network
+    volumes:
+      - redis-primary-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis-replica:
+    image: redis:8.4
+    container_name: redis-replica
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+    command:
+      - redis-server
+      - --port
+      - "6379"
+      - --appendonly
+      - "yes"
+      - --protected-mode
+      - "no"
+      - --replicaof
+      - redis-primary
+      - "6379"
+    networks:
+      - redis_replication_network
+    volumes:
+      - redis-replica-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6379", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+networks:
+  redis_replication_network:
+    driver: bridge
+
+volumes:
+  redis-primary-data:
+    driver: local
+  redis-replica-data:
+    driver: local

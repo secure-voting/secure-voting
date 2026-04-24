@@ -1,0 +1,18 @@
+services:
+  db:
+    ports:
+      - "127.0.0.1:15432:5432"
+    networks:
+      - db_network
+      - app_network
+
+  cache:
+    ports:
+      - "127.0.0.1:16379:6380"
+
+  mongo:
+    ports:
+      - "127.0.0.1:17017:27017"
+    networks:
+      - db_network
+      - app_network

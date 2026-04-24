@@ -1,15 +1,37 @@
 package datasets
 
 import (
+	"context"
+	"errors"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strings"
-	"mime/multipart"
 
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
 	"secure-voting/apps/backend/internal/httpserver/httputil"
 )
+
+var listDatasetsFn = func(svc *datasets.Service, ctx context.Context) ([]datasets.ListItem, error) {
+	return svc.List(ctx)
+}
+
+var getDatasetFn = func(svc *datasets.Service, ctx context.Context, id string) (datasets.Dataset, string, error) {
+	return svc.Get(ctx, id)
+}
+
+var downloadDatasetFn = func(svc *datasets.Service, ctx context.Context, id string) ([]byte, string, string, string, error) {
+	return svc.Download(ctx, id)
+}
+
+var importDatasetFn = func(svc *datasets.Service, ctx context.Context, meta datasets.ImportMeta, fh *multipart.FileHeader, f multipart.File) (string, string, error) {
+	return svc.Import(ctx, meta, fh, f)
+}
+
+var generateDatasetFn = func(svc *datasets.Service, ctx context.Context, req datasets.GenerateReq) (string, string, error) {
+	return svc.Generate(ctx, req)
+}
 
 type Handlers struct {
 	svc *datasets.Service
@@ -21,7 +43,7 @@ func NewHandlers(svc *datasets.Service, cfg config.Config) *Handlers {
 }
 
 func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
-	items, err := h.svc.List(r.Context())
+	items, err := listDatasetsFn(h.svc, r.Context())
 	if err != nil {
 		log.Printf("datasets.list error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "list datasets failed")
@@ -32,7 +54,7 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
-	ds, code, err := h.svc.Get(r.Context(), id)
+	ds, code, err := getDatasetFn(h.svc, r.Context(), id)
 	if err != nil {
 		log.Printf("datasets.get error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "get dataset failed")
@@ -52,7 +74,7 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) Download(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
-	data, filename, mime, code, err := h.svc.Download(r.Context(), id)
+	data, filename, mime, code, err := downloadDatasetFn(h.svc, r.Context(), id)
 	if err != nil {
 		log.Printf("datasets.download error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "download dataset failed")
@@ -74,6 +96,11 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, h.cfg.MaxUploadBytes)
 
 	if err := r.ParseMultipartForm(h.cfg.MaxUploadBytes); err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			httputil.WriteError(w, http.StatusRequestEntityTooLarge, "payload_too_large", "uploaded file is too large")
+			return
+		}
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid multipart form")
 		return
 	}
@@ -93,9 +120,9 @@ func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "cannot open file")
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
-	id, code, err := h.svc.Import(r.Context(), datasets.ImportMeta{
+	id, code, err := importDatasetFn(h.svc, r.Context(), datasets.ImportMeta{
 		Name:        name,
 		Description: desc,
 		Format:      format,
@@ -120,7 +147,7 @@ func (h *Handlers) Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, code, err := h.svc.Generate(r.Context(), req)
+	id, code, err := generateDatasetFn(h.svc, r.Context(), req)
 	if err != nil {
 		log.Printf("datasets.generate error: %v", err)
 		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "generate dataset failed")

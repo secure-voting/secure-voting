@@ -1,8 +1,9 @@
 //! Anti-plurality voting rule implementation.
 
 use crate::{
-    decider::minscore::MinScoreDecider, scorer::anti_plurality::AntiPluralityScorer,
-    tie_breaker::fallthrough::FallthroughTieBreaker, voting_rules::voting_rule::VotingRule,
+    decider::minscore::MinScoreDecider, models::ranking::RankingBallot,
+    scorer::anti_plurality::AntiPluralityScorer, tie_breaker::fallthrough::FallthroughTieBreaker,
+    voting_rules::voting_rule::VotingRule,
 };
 
 /// Anti-plurality Voting rule type.
@@ -10,7 +11,8 @@ use crate::{
 /// Each voter gives one point to everyone except the bottom candidate.
 /// Winners are selected by the plurality among their score sums.
 /// If there are several winners, the result is left undecided.
-pub type AntiPluralityRule = AntiPluralityRuleWith<FallthroughTieBreaker>;
+pub type AntiPluralityRule = AntiPluralityRuleWith<FallthroughTieBreaker, RankingBallot>;
 
 /// Anti-plurality Voting rule type with a custom tie-breaker.
-pub type AntiPluralityRuleWith<TB> = VotingRule<AntiPluralityScorer, MinScoreDecider<usize>, TB>;
+pub type AntiPluralityRuleWith<TB, Ballot> =
+    VotingRule<AntiPluralityScorer, MinScoreDecider<usize>, TB, Ballot, usize>;

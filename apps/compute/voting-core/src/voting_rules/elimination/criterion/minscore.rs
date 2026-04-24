@@ -18,12 +18,17 @@ impl EliminationCriterion for MinScoreElimination {
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         #[allow(clippy::unwrap_used)]
-        let min_score = scores.iter().map(|(score, _)| score).min().unwrap();
-        scores
-            .iter()
-            .filter(|(score, _)| min_score == *score)
-            .map(|(_, &id)| id)
-            .collect()
+        let min_score = scores.iter().map(|(score, _)| score).min();
+        if let Some(min_score) = min_score {
+            scores
+                .iter()
+                .filter(|(score, _)| min_score == *score)
+                .map(|(_, id)| id)
+                .cloned()
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     fn new() -> Self {
@@ -37,59 +42,50 @@ mod tests {
 
     #[test]
     fn single_lowest_score() {
-        let scores = Score::new(
-            vec![0, 1, 2, 1],
-            &[
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(7),
-                CandidateId::new(5),
-            ],
-        );
+        let candidates = vec![
+            CandidateId::new(2, "A"),
+            CandidateId::new(9, "B"),
+            CandidateId::new(7, "C"),
+            CandidateId::new(5, "D"),
+        ];
+
+        let scores = Score::new(vec![0usize, 1, 2, 1], &candidates);
 
         assert_eq!(
-            vec![CandidateId::new(2)],
+            vec![CandidateId::new(2, "A")],
             MinScoreElimination.eliminate(&scores)
         );
     }
 
     #[test]
     fn multiple_lowest_scores() {
-        let scores = Score::new(
-            vec![3, 1, 2, 1],
-            &[
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(7),
-                CandidateId::new(5),
-            ],
-        );
+        let candidates = vec![
+            CandidateId::new(2, "A"),
+            CandidateId::new(9, "B"),
+            CandidateId::new(7, "C"),
+            CandidateId::new(5, "D"),
+        ];
+
+        let scores = Score::new(vec![3usize, 1, 2, 1], &candidates);
 
         assert_eq!(
-            vec![CandidateId::new(9), CandidateId::new(5)],
+            vec![CandidateId::new(9, "B"), CandidateId::new(5, "D"),],
             MinScoreElimination.eliminate(&scores)
         );
     }
 
     #[test]
     fn all_lowest_scores() {
-        let scores = Score::new(
-            vec![1, 1, 1, 1, 1],
-            &[
-                CandidateId::new(2),
-                CandidateId::new(9),
-                CandidateId::new(7),
-                CandidateId::new(5),
-                CandidateId::new(15),
-            ],
-        );
+        let candidates = vec![
+            CandidateId::new(2, "A"),
+            CandidateId::new(9, "B"),
+            CandidateId::new(7, "C"),
+            CandidateId::new(5, "D"),
+            CandidateId::new(15, "E"),
+        ];
 
-        assert_eq!(
-            [2, 9, 7, 5, 15]
-                .iter()
-                .map(|&x| CandidateId::new(x))
-                .collect::<Vec<_>>(),
-            MinScoreElimination.eliminate(&scores)
-        );
+        let scores = Score::new(vec![1usize, 1, 1, 1, 1], &candidates);
+
+        assert_eq!(candidates, MinScoreElimination.eliminate(&scores));
     }
 }

@@ -1,21 +1,49 @@
-use tonic::Response;
-use voting_core::prelude::*;
+//! Main computing service.
+//!
+//! Responds to requests for calulcation and the available algorithm list.
+//! Uses the voting-core library to calculate election results.
 
-use crate::securevoting::compute::v1::{
-    RunChunk, RunResult,
-    ballot::Payload,
-    compute_server::{Compute, ComputeServer},
-    run_chunk::Part,
+#![warn(missing_docs)]
+#![warn(clippy::missing_docs_in_private_items)]
+#![forbid(unsafe_code)]
+
+use std::sync::{Arc, RwLock};
+
+use tonic::{
+    Response,
+    transport::{Identity, server::ServerTlsConfig},
+};
+use voting_core::voting_rules::{Metrics, Protocol};
+
+use crate::{
+    registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
+    securevoting::compute::v1::{
+        ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
+        ballot::Payload,
+        compute_server::{Compute, ComputeServer},
+        run_chunk::Part,
+    },
 };
 
-#[allow(clippy::all)]
+#[allow(clippy::default_trait_access)]
+#[allow(clippy::doc_markdown)]
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::struct_excessive_bools)]
+#[allow(clippy::too_many_lines)]
+/// Generated proto-structs.
 pub mod securevoting {
+    #[allow(missing_docs)]
     pub mod compute {
         pub mod v1 {
             tonic::include_proto!("securevoting.compute.v1");
         }
     }
 }
+
+/// Registry module.
+///
+/// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
+pub mod registry;
 
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
     RunResult {
@@ -32,7 +60,8 @@ fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult
     }
 }
 
-fn create_winner_response(winners: Vec<String>) -> RunResult {
+#[allow(clippy::expect_used)]
+fn create_winner_response(winners: Vec<String>, metrics: Metrics, protocol: Protocol) -> RunResult {
     let winner_json = format!(
         "[{}]",
         winners
@@ -49,15 +78,17 @@ fn create_winner_response(winners: Vec<String>) -> RunResult {
         status: "done".to_owned(),
         error_text: String::new(),
         winners_json: winner_json.as_bytes().to_vec(),
-        metrics_json: vec![],
-        protocol_json: vec![],
+        metrics_json: serde_json::to_vec(&metrics).expect("Serialization failed"),
+        protocol_json: serde_json::to_vec(&protocol).expect("Serialization failed"),
         timings_json: vec![],
         artifacts_json: vec![],
     }
 }
 
 #[derive(Debug, Default)]
-struct ComputeService;
+struct ComputeService {
+    registry: Arc<RwLock<Registry>>,
+}
 
 #[tonic::async_trait]
 impl Compute for ComputeService {
@@ -120,7 +151,10 @@ impl Compute for ComputeService {
                     Payload::Ranking(ranking_ballot) => {
                         ballots.push(ranking_ballot.ranking);
                     }
-                    _ => {
+                    Payload::Approval(approval_ballot) => {
+                        ballots.push(approval_ballot.approvals);
+                    }
+                    Payload::Score(_) => {
                         return Ok(Response::new(create_error_type(
                             tonic::Code::Unimplemented,
                             "not yet supported",
@@ -130,55 +164,98 @@ impl Compute for ComputeService {
             }
         }
 
-        if header.ballot_format != "ranking" {
+        if header.ballot_format != "ranking" && header.ballot_format != "approval" {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
             )));
         }
 
-        let result = match header.tally_rule.as_str() {
-            "borda" => run_election(ballots, &BordaRule::default()),
-            "plurality" => run_election(ballots, &PluralityRule::default()),
-            "approval-2" => run_election(ballots, &ApprovalRule::<2>::default()),
-            "approval-3" => run_election(ballots, &ApprovalRule::<3>::default()),
-            "inverse-plurality" => run_election(ballots, &AntiPluralityRule::default()),
-            "black" => run_election(ballots, &BlackRule::default()),
-            "copeland-i" => run_election(ballots, &CopelandIRule::default()),
-            "copeland-ii" => run_election(ballots, &CopelandIIRule::default()),
-            "copeland-iii" => run_election(ballots, &CopelandIIIRule::default()),
-            "simpson" => run_election(ballots, &SimpsonRule::default()),
-            "Minmax" => run_election(ballots, &MinmaxRule::default()),
-            "hare" => run_election(ballots, &HareRule::default()),
-            "nanson" => run_election(ballots, &NansonRule::default()),
-            "coombs" => run_election(ballots, &CoombsRule::default()),
-            "inverse-borda" => run_election(ballots, &InverseBordaRule::default()),
-            _ => {
-                return Ok(Response::new(create_error_type(
-                    tonic::Code::Unimplemented,
-                    "not yet supported",
-                )));
-            }
-        };
-        match result {
-            Ok(voting_results) => Ok(Response::new(create_winner_response(voting_results))),
-            Err(e) => Ok(Response::new(create_error_type(
-                tonic::Code::InvalidArgument,
-                e.to_string(),
+        #[allow(clippy::expect_used)]
+        match self.registry.read().expect("RwLock is poisoned").execute(
+            ballots,
+            header.tally_rule.as_str(),
+            &header.ballot_format,
+        ) {
+            Ok(result) => Ok(Response::new(create_winner_response(
+                result.0, result.1, result.2,
             ))),
+            Err(AlgorithmError::NoSuchAlgorithm(a)) => Ok(Response::new(create_error_type(
+                tonic::Code::Unimplemented,
+                format!("No such algorithm: {a}"),
+            ))),
+            Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => Ok(
+                Response::new(create_error_type(tonic::Code::InvalidArgument, e)),
+            ),
+            Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
+                Ok(Response::new(create_error_type(
+                    tonic::Code::InvalidArgument,
+                    format!("Algorithm {algorithm} does not support ballot type {ballot}"),
+                )))
+            }
         }
+    }
+
+    #[allow(clippy::expect_used)]
+    async fn list_tally_rules(
+        &self,
+        _request: tonic::Request<()>,
+    ) -> Result<tonic::Response<ListTallyRulesResponse>, tonic::Status> {
+        Ok(tonic::Response::new(ListTallyRulesResponse {
+            rules: self
+                .registry
+                .read()
+                .expect("RwLock is poisoned")
+                .algorithms()
+                .map(|algo| TallyRuleInfo {
+                    id: algo.alias().to_lowercase().replace(' ', "-"),
+                    label: algo.alias().to_owned(),
+                    ballot_formats: self
+                        .registry
+                        .read()
+                        .expect("RwLock is poisoned")
+                        .supported_ballots(algo.alias())
+                        .map(|x| x.to_string())
+                        .collect(),
+                    supports_election_tally: algo.supports_election_tally(),
+                    supports_experiment_runs: algo.supports_experiment_runs(),
+                    requires_committee_size: algo.requires_committee_size(),
+                    supports_quota_type: algo.supports_quota_type(),
+                    requires_approval_max_choices: algo.requires_approval_max_choices(),
+                    supports_ranking_top_k: algo.supports_ranking_top_k(),
+                    requires_score_range: algo.requires_score_range(),
+                })
+                .collect(),
+        }))
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let registry = get_core_registry();
+
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
         .parse()?;
-    let greeter = ComputeService;
+    let server = ComputeService {
+        registry: Arc::new(RwLock::new(registry)),
+    };
+
+    let cert = std::fs::read_to_string(format!(
+        "{}/../../../scripts/certs/out/compute.pem",
+        env!("CARGO_MANIFEST_DIR")
+    ))?;
+    let key = std::fs::read_to_string(format!(
+        "{}/../../../scripts/certs/out/compute.key",
+        env!("CARGO_MANIFEST_DIR")
+    ))?;
+
+    let tls_config = ServerTlsConfig::new().identity(Identity::from_pem(&cert, &key));
 
     tonic::transport::Server::builder()
-        .add_service(ComputeServer::new(greeter))
+        .tls_config(tls_config)?
+        .concurrency_limit_per_connection(256)
+        .add_service(ComputeServer::new(server))
         .serve(addr)
         .await?;
 

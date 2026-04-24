@@ -78,7 +78,7 @@ func validateRankingBallot(ranking []string, cset map[string]struct{}, topK *int
 }
 
 func validateScoreBallot(scores map[string]int, candidates []string, cset map[string]struct{}, scoreMin, scoreMax, scoreStep *int, allowSkip bool) string {
-	if scores == nil || len(scores) == 0 {
+	if len(scores) == 0 {
 		return "invalid_ballot"
 	}
 	if scoreMin == nil || scoreMax == nil || scoreStep == nil || *scoreStep <= 0 {

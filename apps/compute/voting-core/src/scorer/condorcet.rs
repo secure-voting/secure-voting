@@ -6,7 +6,7 @@ use std::convert::Infallible;
 
 use crate::{
     matrix::{CondorcetMatrix, PairwiseMatrix},
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -16,7 +16,7 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct CondorcetScorer;
 
-impl Scorer for CondorcetScorer {
+impl Scorer<RankingBallot> for CondorcetScorer {
     /// Matrix of head-to-head preferences.
     ///
     /// Each row describes a candidate.
@@ -26,7 +26,10 @@ impl Scorer for CondorcetScorer {
 
     type Error = Infallible;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let vote_counts = PairwiseMatrix::from(profile);
         // The construction process ensures the invariants of the matrix are upheld
         Ok(Score::new(
@@ -44,53 +47,54 @@ impl Scorer for CondorcetScorer {
 mod tests {
     use super::*;
 
+    fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
+        let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+
+        Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.")
+    }
+
     #[test]
     fn correct_condorcet_matrix_single_vote() {
         let votes = vec![vec![1, 2, 0, 3]];
+
         let answer = vec![
             vec![false, false, false, true],
             vec![true, false, true, true],
             vec![true, false, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
 
-        assert_eq!(
-            answer,
-            Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
-            )
-        );
+        let profile = profile(votes, 4);
+
+        let result = CondorcetScorer
+            .compute_score(&profile)
+            .unwrap()
+            .score()
+            .clone();
+
+        assert_eq!(answer, Vec::<Vec<bool>>::from(result));
     }
 
     #[test]
     fn correct_condorcet_matrix_multiple_votes() {
         let votes = vec![vec![1, 2, 0, 3], vec![3, 0, 2, 1], vec![0, 2, 1, 3]];
+
         let answer = vec![
             vec![false, true, true, true],
             vec![false, false, false, true],
             vec![false, true, false, true],
             vec![false, false, false, false],
         ];
-        let profile = votes
-            .try_into()
-            .expect("Profile is constructed incorrectly, revise test example.");
 
-        assert_eq!(
-            answer,
-            Into::<Vec<Vec<bool>>>::into(
-                CondorcetScorer
-                    .compute_score(&profile)
-                    .unwrap()
-                    .score()
-                    .clone()
-            )
-        );
+        let profile = profile(votes, 4);
+
+        let result = CondorcetScorer
+            .compute_score(&profile)
+            .unwrap()
+            .score()
+            .clone();
+
+        assert_eq!(answer, Vec::<Vec<bool>>::from(result));
     }
 }

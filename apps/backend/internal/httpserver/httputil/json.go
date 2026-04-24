@@ -2,6 +2,8 @@ package httputil
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 )
 
@@ -29,8 +31,23 @@ func WriteError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+var errExtraJSON = errors.New("extra json data")
+
 func DecodeJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	return dec.Decode(dst)
+
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errExtraJSON
+		}
+		return err
+	}
+
+	return nil
 }

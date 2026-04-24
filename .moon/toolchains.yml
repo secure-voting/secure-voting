@@ -1,0 +1,21 @@
+rust:
+  version: '1.93.0'
+  bins:
+    - 'cargo-audit'
+    - 'cargo-deny'
+    - 'cargo-geiger'
+    - 'cargo-llvm-cov'
+    - 'cargo-machete'
+    - 'cargo-nextest'
+    - 'cargo-outdated'
+    - 'cargo-pgo'
+    # - 'cargo-public-api'
+    - 'cargo-vet'
+  components:
+    - 'clippy'
+    - 'rustfmt'
+    - 'rust-analyzer'
+    - 'llvm-tools-preview'
+  targets:
+    - 'x86_64-unknown-linux-gnu'
+  syncToolchainConfig: true

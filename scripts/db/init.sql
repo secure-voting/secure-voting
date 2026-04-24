@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS users (
   email text NOT NULL UNIQUE,
   password_hash text NOT NULL,
   role text NOT NULL CHECK (role IN ('admin', 'voter', 'researcher')),
+  full_name text NULL,
+  phone text NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -190,7 +192,7 @@ CREATE TABLE IF NOT EXISTS experiments (
 CREATE INDEX IF NOT EXISTS idx_experiments_created_by ON experiments(created_by);
 CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
 
--- 10) experiment_runs (вариант A, без job_id)
+-- 10) experiment_runs
 CREATE TABLE IF NOT EXISTS experiment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   experiment_id uuid NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
@@ -204,7 +206,7 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_experiment_id ON experiment_runs(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_status ON experiment_runs(status);
 
--- 11) jobs (связь по прогону хранится тут)
+-- 11) jobs
 CREATE TABLE IF NOT EXISTS jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   kind text NOT NULL CHECK (kind IN ('tally', 'import_dataset', 'generate_dataset', 'experiment_run', 'report')),
@@ -225,6 +227,40 @@ CREATE TABLE IF NOT EXISTS jobs (
   started_at timestamptz NULL,
   finished_at timestamptz NULL
 );
+
+-- notifications
+CREATE TABLE IF NOT EXISTS notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  message text NOT NULL,
+  details text NULL,
+  action_label text NULL,
+  action_to text NULL,
+  kind text NOT NULL CHECK (kind IN ('info', 'success', 'warning', 'error')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz NULL
+);
+
+
+CREATE TABLE IF NOT EXISTS admin_settings (
+  id int PRIMARY KEY CHECK (id = 1),
+  public_base_url text NULL,
+  tls_mode text NOT NULL CHECK (tls_mode IN ('disabled', 'lets_encrypt', 'custom')),
+  tls_domain text NULL,
+  tls_contact_email text NULL,
+  backup_enabled boolean NOT NULL DEFAULT false,
+  backup_schedule text NULL,
+  backup_retention_days int NULL CHECK (backup_retention_days IS NULL OR backup_retention_days > 0),
+  database_host text NULL,
+  database_name text NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid NULL REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created_at ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_read_at ON notifications(user_id, read_at);
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_kind ON jobs(kind);

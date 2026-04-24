@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use rayon::prelude::*;
 
 use crate::{
-    profile::Profile,
+    models::{profile::Profile, ranking::RankingBallot},
     scorer::{Score, Scorer},
 };
 
@@ -17,11 +17,14 @@ use crate::{
 #[derive(Debug, Clone, Copy)]
 pub struct PluralityScorer;
 
-impl Scorer for PluralityScorer {
+impl Scorer<RankingBallot> for PluralityScorer {
     type Error = Infallible;
     type Output = Vec<usize>;
 
-    fn compute_score(&self, profile: &Profile) -> Result<Score<Self::Output>, Self::Error> {
+    fn compute_score(
+        &self,
+        profile: &Profile<RankingBallot>,
+    ) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
@@ -32,7 +35,7 @@ impl Scorer for PluralityScorer {
             (0..n_voters)
                 .into_par_iter()
                 .map(|i| {
-                    let mut tmp = vec![0; n_candidates];
+                    let mut tmp = vec![0usize; n_candidates];
                     tmp[profile.index_of(&profile[i][0]).unwrap()] = 1;
 
                     tmp
@@ -55,21 +58,22 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(vec![vec![1, 0], vec![0, 1], vec![1, 0]], &[1, 2]; "simple plurality")]
+    #[test_case(
+    vec![vec![1, 0], vec![0, 1], vec![1, 0]],
+    &[1, 2];
+    "simple plurality"
+)]
     fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = PluralityScorer;
 
+        let names = vec!["A".into(), "B".into()];
+
+        let profile = Profile::try_from((votes, names))
+            .expect("Profile is constructed incorrectly, revise test example.");
+
         assert_eq!(
             answer,
-            scorer
-                .compute_score(
-                    &votes
-                        .try_into()
-                        .expect("Profile is constructed incorrectly, revise test example.")
-                )
-                .unwrap()
-                .score()
-                .clone()
+            scorer.compute_score(&profile).unwrap().consume_score()
         );
     }
 }
