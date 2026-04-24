@@ -115,9 +115,9 @@ impl_algorithm!(
     true,
     false
 );
-// impl_algorithm!(
-//     BlackRule, "Black", true, true, true, false, false, true, false
-// );
+impl_algorithm!(
+    BlackRule, "Black", true, true, true, false, false, true, false
+);
 impl_algorithm!(
     CopelandIRule,
     "Copeland I",
@@ -183,6 +183,39 @@ impl_algorithm!(
     true,
     false
 );
+impl_algorithm!(
+    QParetianStrongSimpleMajorityRule::<30>,
+    "q-Paretian Strong Simple Majority",
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+impl_algorithm!(
+    QParetianStrongPluralityRule::<30>,
+    "q-Paretian Strong Plurality",
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
+impl_algorithm!(
+    QParetianStrongestSimpleMajorityRule::<30>,
+    "q-Paretian Strongest Simple Majority",
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false
+);
 
 /// Return a registry with all the voting-core
 /// algorithms included for appropriate ballot types.
@@ -194,7 +227,7 @@ pub fn get_core_registry() -> Registry {
     registry.add(ApprovalRule::<2>::default(), BallotType::Ranking);
     registry.add(ApprovalRule::<3>::default(), BallotType::Ranking);
     registry.add(AntiPluralityRule::default(), BallotType::Ranking);
-    // registry.add(BlackRule::default(), BallotType::Ranking);
+    registry.add(BlackRule::default(), BallotType::Ranking);
     registry.add(CopelandIRule::default(), BallotType::Ranking);
     registry.add(CopelandIIRule::default(), BallotType::Ranking);
     registry.add(CopelandIIIRule::default(), BallotType::Ranking);
@@ -204,6 +237,9 @@ pub fn get_core_registry() -> Registry {
     registry.add(NansonRule::default(), BallotType::Ranking);
     // registry.add(CoombsRule::default(), BallotType::Ranking);
     registry.add(InverseBordaRule::default(), BallotType::Ranking);
+    registry.add(QParetianStrongSimpleMajorityRule, BallotType::Ranking);
+    registry.add(QParetianStrongPluralityRule, BallotType::Ranking);
+    registry.add(QParetianStrongestSimpleMajorityRule, BallotType::Ranking);
 
     registry.add(
         ApprovalRuleWith::<2, FallthroughTieBreaker, ApprovalBallot>::default(),
