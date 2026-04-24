@@ -8,6 +8,7 @@ import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
 import type { TallyRuleInfo } from "../../shared/api/types";
+import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -166,7 +167,8 @@ export function ExperimentCreatePage() {
     api.capabilities
       .tallyRules(token, ac.signal)
       .then((items) => {
-        const experimentRules = items.filter((item) => item.supports_experiment_runs);
+        const mergedItems = mergeRuleItems(items)
+        const experimentRules = mergedItems.filter((item) => item.supports_experiment_runs);
         setAvailableRules(experimentRules);
 
         if (experimentRules.length > 0 && !experimentRules.some((item) => item.id === tallyRule)) {

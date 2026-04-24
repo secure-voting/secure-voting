@@ -7,6 +7,7 @@ import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
+import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 
 function accessModeLabel(value: "open" | "invite") {
   return value === "open" ? "Открытый доступ" : "Только по приглашению";
@@ -155,7 +156,8 @@ export function ElectionRulesPage() {
     setRulesLoading(true);
     try {
       const items = await api.capabilities.tallyRules(token);
-      const electionRules = items.filter((item) => item.supports_election_tally);
+      const mergedItems = mergeRuleItems(items);
+      const electionRules = mergedItems.filter((item) => item.supports_election_tally);
       setAvailableRules(electionRules);
 
       if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {

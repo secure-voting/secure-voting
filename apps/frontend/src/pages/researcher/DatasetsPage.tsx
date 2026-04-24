@@ -8,6 +8,7 @@ import type {
   TallyRuleInfo,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
+import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { Badge } from "../../shared/ui/Badge";
@@ -246,7 +247,8 @@ export function DatasetsPage() {
     api.capabilities
       .tallyRules(token, ac.signal)
       .then((items) => {
-        const rankingExperimentRules = items.filter(
+        const mergedItems = mergeRuleItems(items);
+        const rankingExperimentRules = mergedItems.filter(
           (item) =>
             item.supports_experiment_runs &&
             item.ballot_formats.includes("ranking") &&

@@ -8,6 +8,7 @@ import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
 import type { CandidateDraft, CandidatePayload, TallyRuleInfo } from "../../shared/api/types";
+import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 
 const STEPS = [
   "Общие сведения",
@@ -197,7 +198,8 @@ export function AdminCreateElectionPage() {
     api.capabilities
       .tallyRules(token, ac.signal)
       .then((items) => {
-        const electionRules = items.filter((item) => item.supports_election_tally);
+        const mergedItems = mergeRuleItems(items);
+        const electionRules = mergedItems.filter((item) => item.supports_election_tally);
         setAvailableRules(electionRules);
 
         if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {
