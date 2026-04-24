@@ -18,13 +18,17 @@ impl EliminationCriterion for MaxScoreElimination {
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         #[allow(clippy::unwrap_used)]
-        let max_score = scores.iter().map(|(s, _)| s).max().unwrap();
-        scores
-            .iter()
-            .filter(|(score, _)| max_score == *score)
-            .map(|(_, id)| id)
-            .cloned()
-            .collect()
+        let max_score = scores.iter().map(|(s, _)| s).max();
+        if let Some(max_score) = max_score {
+            scores
+                .iter()
+                .filter(|(score, _)| max_score == *score)
+                .map(|(_, id)| id)
+                .cloned()
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     fn new() -> Self {

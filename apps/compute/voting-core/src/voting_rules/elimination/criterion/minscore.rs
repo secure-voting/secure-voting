@@ -18,13 +18,17 @@ impl EliminationCriterion for MinScoreElimination {
 
     fn eliminate(&self, scores: &Score<Self::Score>) -> Vec<CandidateId> {
         #[allow(clippy::unwrap_used)]
-        let min_score = scores.iter().map(|(score, _)| score).min().unwrap();
-        scores
-            .iter()
-            .filter(|(score, _)| min_score == *score)
-            .map(|(_, id)| id)
-            .cloned()
-            .collect()
+        let min_score = scores.iter().map(|(score, _)| score).min();
+        if let Some(min_score) = min_score {
+            scores
+                .iter()
+                .filter(|(score, _)| min_score == *score)
+                .map(|(_, id)| id)
+                .cloned()
+                .collect()
+        } else {
+            vec![]
+        }
     }
 
     fn new() -> Self {
