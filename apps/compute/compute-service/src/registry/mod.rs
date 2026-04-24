@@ -64,7 +64,7 @@ impl std::fmt::Display for BallotType {
 
 /// Unified algorithm trait.
 ///
-/// Voting-core library exposes the VotingRuleExec type,
+/// Voting-core library exposes the `VotingRuleExec` type,
 /// but it is not dyn-compatible.
 ///
 /// This trait serves as a bridge between the computation
@@ -182,7 +182,7 @@ impl Registry {
     /// Return the supported ballot types.
     ///
     /// Chooses the ballot types that are supported
-    /// by at least one algorithm in the registry.
+    /// by the chosen algorithm.
     pub fn supported_ballots(&self, alias: &str) -> impl Iterator<Item = BallotType> + '_ {
         self.alias_map
             .get(&alias.to_lowercase())

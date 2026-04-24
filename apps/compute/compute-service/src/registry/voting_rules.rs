@@ -63,7 +63,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<2>,
     "Approval-2",
-    false,
+    true,
     true,
     true,
     false,
@@ -74,7 +74,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRule::<3>,
     "Approval-3",
-    false,
+    true,
     true,
     true,
     false,
@@ -85,7 +85,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRuleWith::<2, FallthroughTieBreaker, ApprovalBallot>,
     "Approval-2",
-    false,
+    true,
     true,
     true,
     false,
@@ -96,7 +96,7 @@ impl_algorithm!(
 impl_algorithm!(
     ApprovalRuleWith::<3, FallthroughTieBreaker, ApprovalBallot>,
     "Approval-3",
-    false,
+    true,
     true,
     true,
     false,
