@@ -118,10 +118,16 @@ func normalizeComputeTallyRule(s string) string {
 		"approval-3",
 		"threshold",
 		"practical-condorcet",
-		"strong-q-paretian-simple-majority",
-		"strong-q-paretian-plurality",
-		"strongest-q-paretian-simple-majority":
+		"q-paretian-strong-simple-majority",
+		"q-paretian-strong-plurality",
+		"q-paretian-strongest-simple-majority":
 		return v
+	case "strong-q-paretian-simple-majority":
+		return "q-paretian-strong-simple-majority"
+	case "strong-q-paretian-plurality":
+		return "q-paretian-strong-plurality"
+	case "strongest-q-paretian-simple-majority":
+		return "q-paretian-strongest-simple-majority"
 	case "anti-plurality":
 		return "inverse-plurality"
 	case "minimax", "minmax":
