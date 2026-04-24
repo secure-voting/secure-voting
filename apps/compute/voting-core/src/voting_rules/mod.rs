@@ -279,6 +279,16 @@ impl ToScore for Vec<bool> {
     }
 }
 
+impl ToScore for f64 {
+    fn to_score(&self, cand_id: String, cand_name: String) -> Score {
+        Score::Scalar {
+            candidate_id: cand_id,
+            candidate_name: cand_name,
+            value: *self,
+        }
+    }
+}
+
 /// Trait for all the voting rules, simple and complex ones.
 pub trait VotingRuleExec<Ballot> {
     /// Returned if the voting pipeline can't be completed.

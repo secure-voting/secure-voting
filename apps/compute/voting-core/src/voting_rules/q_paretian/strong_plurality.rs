@@ -17,7 +17,7 @@ use crate::{
     prelude::CandidateId,
     tie_breaker::RuleOutcome,
     voting_rules::{
-        Final, Kind, Metrics, Protocol, Step, Summary, VotingRuleExec,
+        Final, Kind, Metrics, Protocol, Step, Summary, ToScore, VotingRuleExec,
         q_paretian::{QParetianError, build_pos, t_i_q_intersection},
     },
 };
@@ -79,6 +79,11 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                     .iter()
                     .map(|&i| profile.active_candidates()[i].clone())
                     .collect();
+                let scores = counts
+                    .iter()
+                    .zip(profile.active_candidates().iter())
+                    .map(|(score, cand)| (*score as f64).to_score(cand.to_string(), cand.get_name().to_owned()))
+                    .collect();
                 return Ok((
                     RuleOutcome::from(winners.clone()),
                     Metrics::builder()
@@ -101,6 +106,8 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                                 .step(1)
                                 .title("Round 1".to_owned())
                                 .action("declare_winner".to_owned())
+                                .remaining_candidate_ids(profile.active_candidates().iter().map(ToString::to_string).collect())
+                                .scores(scores)
                                 .build(),
                         ])
                         .r#final(

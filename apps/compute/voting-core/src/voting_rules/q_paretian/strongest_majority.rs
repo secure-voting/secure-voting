@@ -93,6 +93,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
                                 .step(1)
                                 .title("Round 1".to_owned())
                                 .action("declare_winner".to_owned())
+                                .remaining_candidate_ids(profile.active_candidates().iter().map(ToString::to_string).collect())
                                 .build(),
                         ])
                         .r#final(

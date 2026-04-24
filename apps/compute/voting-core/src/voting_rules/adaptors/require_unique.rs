@@ -8,7 +8,7 @@ use tracing::instrument;
 use crate::{
     models::profile::Profile,
     tie_breaker::RuleOutcome,
-    voting_rules::{Metrics, Protocol, VotingRuleExec},
+    voting_rules::{Metrics, Protocol, Step, VotingRuleExec},
 };
 
 /// Require unique adaptor.
@@ -59,7 +59,16 @@ impl<R: VotingRuleExec<Ballot>, Ballot> VotingRuleExec<Ballot> for RequireUnique
         match self.rule.execute(profile)? {
             outcome @ (RuleOutcome::UniqueWinner(_), _, _) => {
                 tracing::debug!("Rule returned a unique winner");
-                Ok(outcome)
+                let mut protocol = outcome.2;
+                let mut step = Step::builder()
+                    .step(protocol.steps.len() + 1)
+                    .title("Uniqueness check".into())
+                    .action("check_passed".into())
+                    .note("Unique winner confirmed".into())
+                    .build();
+                step.set_remaining(&outcome.0.candidates());
+                protocol.add_step(step);
+                Ok((outcome.0, outcome.1, protocol))
             }
             (RuleOutcome::MultipleWinners(_), _, _) => {
                 tracing::error!("Multiple winners detected, returning error");

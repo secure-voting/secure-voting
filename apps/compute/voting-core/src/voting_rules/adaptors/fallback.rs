@@ -7,7 +7,7 @@ use tracing::instrument;
 use crate::{
     prelude::Profile,
     tie_breaker::RuleOutcome,
-    voting_rules::{Metrics, Protocol, VotingRuleExec},
+    voting_rules::{Kind, Metrics, Protocol, Step, VotingRuleExec},
 };
 
 /// A fallback adaptor.
@@ -68,13 +68,32 @@ where
         match self.primary.execute(profile) {
             Ok(outcome @ (RuleOutcome::UniqueWinner(_), _, _)) => {
                 tracing::debug!("Primary rule returned a unique winner");
-                Ok(outcome)
+                let mut protocol = outcome.2;
+                protocol.kind = Kind::PairwiseComparison;
+                let mut step = Step::builder()
+                    .step(1)
+                    .title("Primary rule".into())
+                    .action("primary_succeeded".into())
+                    .build();
+                step.set_remaining(&outcome.0.candidates());
+                protocol.add_step(step);
+                Ok((outcome.0, outcome.1, protocol))
             }
             Ok((RuleOutcome::MultipleWinners(_), _, _)) => {
                 tracing::debug!("Primary rule can't decide winner, running fallback");
-                self.fallback
+                let mut outcome = self
+                    .fallback
                     .execute(profile)
-                    .map_err(FallbackError::FallbackError)
+                    .map_err(FallbackError::FallbackError)?;
+                outcome.2.kind = Kind::PairwiseComparison;
+                let mut step = Step::builder()
+                    .step(outcome.2.steps.len() + 1)
+                    .title("Primary rule".into())
+                    .action("primary_tied".into())
+                    .build();
+                step.set_remaining(&outcome.0.candidates());
+                outcome.2.add_step(step);
+                Ok(outcome)
             }
             Err(e) => Err(FallbackError::PrimaryError(e)),
         }

@@ -6,7 +6,7 @@ use tracing::instrument;
 
 use crate::models::profile::Profile;
 use crate::tie_breaker::RuleOutcome;
-use crate::voting_rules::{Metrics, Protocol, VotingRuleExec};
+use crate::voting_rules::{Metrics, Protocol, Step, VotingRuleExec};
 
 /// `AcceptIf` adaptor.
 ///
@@ -50,10 +50,19 @@ where
             Ok(outcome)
         } else {
             tracing::debug!("Predicate is false, rejecting outcome");
+            let mut protocol = outcome.2;
+            let mut step = Step::builder()
+                .step(protocol.steps.len() + 1)
+                .title("Predicate check".into())
+                .action("predicate_failed".into())
+                .note("Outcome rejected by predicate".into())
+                .build();
+            step.set_remaining(&outcome.0.candidates());
+            protocol.add_step(step);
             Ok((
                 RuleOutcome::MultipleWinners(outcome.0.candidates()),
                 outcome.1,
-                outcome.2,
+                protocol,
             ))
         }
     }
