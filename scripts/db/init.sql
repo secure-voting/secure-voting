@@ -1,13 +1,11 @@
 -- scripts/db/init.sql
--- Initial PostgreSQL schema for secure-voting (approved DB structure).
+-- Initial PostgreSQL schema for secure-voting.
 -- Runs only on first init of the postgres data volume.
 
 BEGIN;
 
--- UUID generation
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 1) users
 CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL UNIQUE,
@@ -18,19 +16,35 @@ CREATE TABLE IF NOT EXISTS users (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- 2) api_tokens
+CREATE TABLE IF NOT EXISTS auth_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  refresh_token_hash text NOT NULL UNIQUE,
+  user_agent text NULL,
+  ip_address text NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NULL,
+  expires_at timestamptz NOT NULL,
+  revoked_at timestamptz NULL,
+  revoked_reason text NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_active_user ON auth_sessions(user_id, revoked_at, expires_at);
+
 CREATE TABLE IF NOT EXISTS api_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash text NOT NULL,
+  session_id uuid NULL REFERENCES auth_sessions(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
   scopes text[] NOT NULL DEFAULT ARRAY[]::text[],
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_tokens_user_id ON api_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_session_id ON api_tokens(session_id);
 
--- 3) audit_log
 CREATE TABLE IF NOT EXISTS audit_log (
   id bigserial PRIMARY KEY,
   occurred_at timestamptz NOT NULL DEFAULT now(),
@@ -43,7 +57,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_occurred_at ON audit_log(occurred_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_event_type ON audit_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_log_actor_user_id ON audit_log(actor_user_id);
 
--- 4) elections
 CREATE TABLE IF NOT EXISTS elections (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   title text NOT NULL,
@@ -105,7 +118,6 @@ CREATE INDEX IF NOT EXISTS idx_elections_created_by ON elections(created_by);
 CREATE INDEX IF NOT EXISTS idx_elections_status ON elections(status);
 CREATE INDEX IF NOT EXISTS idx_elections_access_mode ON elections(access_mode);
 
--- 5) candidates
 CREATE TABLE IF NOT EXISTS candidates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   election_id uuid NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
@@ -116,7 +128,6 @@ CREATE TABLE IF NOT EXISTS candidates (
 
 CREATE INDEX IF NOT EXISTS idx_candidates_election_id ON candidates(election_id);
 
--- 6) ballots
 CREATE TABLE IF NOT EXISTS ballots (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   election_id uuid NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
@@ -144,7 +155,6 @@ CREATE TABLE IF NOT EXISTS ballots (
 
 CREATE INDEX IF NOT EXISTS idx_ballots_election_id ON ballots(election_id);
 
--- 7) results
 CREATE TABLE IF NOT EXISTS results (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   election_id uuid NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
@@ -162,7 +172,6 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_election_id ON results(election_id);
 
--- 8) election_invites
 CREATE TABLE IF NOT EXISTS election_invites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   election_id uuid NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
@@ -178,7 +187,6 @@ CREATE TABLE IF NOT EXISTS election_invites (
 
 CREATE INDEX IF NOT EXISTS idx_invites_election_id ON election_invites(election_id);
 
--- 9) experiments
 CREATE TABLE IF NOT EXISTS experiments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   type text NOT NULL CHECK (type IN ('algo', 'behavior')),
@@ -192,7 +200,6 @@ CREATE TABLE IF NOT EXISTS experiments (
 CREATE INDEX IF NOT EXISTS idx_experiments_created_by ON experiments(created_by);
 CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
 
--- 10) experiment_runs
 CREATE TABLE IF NOT EXISTS experiment_runs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   experiment_id uuid NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,
@@ -206,7 +213,6 @@ CREATE TABLE IF NOT EXISTS experiment_runs (
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_experiment_id ON experiment_runs(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_experiment_runs_status ON experiment_runs(status);
 
--- 11) jobs
 CREATE TABLE IF NOT EXISTS jobs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   kind text NOT NULL CHECK (kind IN ('tally', 'import_dataset', 'generate_dataset', 'experiment_run', 'report')),
@@ -228,7 +234,6 @@ CREATE TABLE IF NOT EXISTS jobs (
   finished_at timestamptz NULL
 );
 
--- notifications
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -241,7 +246,6 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at timestamptz NOT NULL DEFAULT now(),
   read_at timestamptz NULL
 );
-
 
 CREATE TABLE IF NOT EXISTS admin_settings (
   id int PRIMARY KEY CHECK (id = 1),

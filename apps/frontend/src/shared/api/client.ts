@@ -206,9 +206,15 @@ export const api = {
       return extractAuthTokens(resp);
     },
 
-    async login(email: string, password: string, inviteCode: string | null) {
+    async login(
+      email: string,
+      password: string,
+      inviteCode: string | null,
+      replaceExistingSession = false
+    ) {
       const body: Record<string, unknown> = { email, password };
       if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
+      if (replaceExistingSession) body.replace_existing_session = true;
 
       const resp = await request<any>(
         "/api/v1/auth/login",

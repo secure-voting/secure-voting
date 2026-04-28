@@ -34,7 +34,8 @@ services:
       - ./scripts/certs/out:/certs:ro
     environment:
       - HTTP_ADDR=:3001
-      - TOKEN_TTL=720h
+      - TOKEN_TTL=15m
+      - REFRESH_TOKEN_TTL=720h
       - MAX_UPLOAD_BYTES=10485760
 
       - POSTGRES_DSN=postgres://admin:${POSTGRES_PASSWORD}@db:5432/secure-voting?sslmode=verify-full&sslrootcert=/certs/ca.pem
