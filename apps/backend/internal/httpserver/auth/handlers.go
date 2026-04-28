@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"strings"
 
 	"secure-voting/apps/backend/internal/apperr"
 	asvc "secure-voting/apps/backend/internal/auth"
@@ -12,7 +14,7 @@ import (
 
 type AuthService interface {
 	Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error)
-	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Login(ctx context.Context, email, password, inviteCode string, opts asvc.LoginOptions) (asvc.AuthResult, string, error)
 	Refresh(ctx context.Context, refreshToken string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
@@ -74,13 +76,36 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) error {
 }
 
 type loginReq struct {
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-	InviteCode string `json:"invite_code,omitempty"`
+	Email                  string `json:"email"`
+	Password               string `json:"password"`
+	InviteCode             string `json:"invite_code,omitempty"`
+	ReplaceExistingSession bool   `json:"replace_existing_session,omitempty"`
 }
 
 type refreshReq struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+func clientIPAddress(r *http.Request) string {
+	forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if forwardedFor != "" {
+		parts := strings.Split(forwardedFor, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+
+	realIP := strings.TrimSpace(r.Header.Get("X-Real-IP"))
+	if realIP != "" {
+		return realIP
+	}
+
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+
+	return strings.TrimSpace(r.RemoteAddr)
 }
 
 func mapLoginCode(code string) error {
@@ -117,9 +142,22 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
-	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password, req.InviteCode)
+	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password, req.InviteCode, asvc.LoginOptions{
+		ReplaceExistingSession: req.ReplaceExistingSession,
+		UserAgent:              r.UserAgent(),
+		IPAddress:              clientIPAddress(r),
+	})
 	if err != nil {
 		return apperr.Internal(err, "login failed")
+	}
+	if code == "active_session_exists" {
+		httputil.WriteJSON(w, http.StatusConflict, map[string]any{
+			"error": map[string]any{
+				"code":    "active_session_exists",
+				"message": "active session already exists",
+			},
+		})
+		return nil
 	}
 	if code != "" {
 		return mapLoginCode(code)

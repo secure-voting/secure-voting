@@ -25,10 +25,10 @@ tags:
 
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: opaque-token
+  bearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: opaque-access-token
 
   schemas:
     ErrorEnvelope:
@@ -71,13 +71,22 @@ components:
 
     AuthResponse:
       type: object
-      required: [access_token, expires_at, user]
+      required: [access_token, expires_at, refresh_token, refresh_expires_at, user]
       properties:
         access_token:
           type: string
+          description: Short-lived opaque bearer token used in the Authorization header.
         expires_at:
           type: string
           format: date-time
+          description: Access token expiration timestamp.
+        refresh_token:
+          type: string
+          description: Long-lived opaque refresh token used only with /api/v1/auth/refresh.
+        refresh_expires_at:
+          type: string
+          format: date-time
+          description: Refresh token expiration timestamp.
         user:
           $ref: '#/components/schemas/User'
     
@@ -139,6 +148,14 @@ components:
           type: string
         invite_code:
           type: string
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: Opaque refresh token returned by register, login, or refresh.
 
     ChangePasswordRequest:
       type: object
@@ -1205,6 +1222,39 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate access and refresh tokens
+      description: >
+        Accepts a valid refresh token, invalidates the previous access token for the session,
+        rotates the refresh token, and returns a new token pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refresh succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid JSON body or malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Invalid, expired, or revoked refresh token
           content:
             application/json:
               schema:

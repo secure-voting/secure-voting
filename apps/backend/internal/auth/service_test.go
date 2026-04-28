@@ -524,12 +524,12 @@ func TestLoginBasicValidationAndCredentials(t *testing.T) {
 
 	svc := NewService(nil, time.Hour)
 
-	_, code, err := svc.Login(context.Background(), "bad", "12345678", "")
+	_, code, err := svc.Login(context.Background(), "bad", "12345678", "", LoginOptions{})
 	if err != nil || code != "invalid_email" {
 		t.Fatalf("unexpected invalid email result: %q %v", code, err)
 	}
 
-	_, code, err = svc.Login(context.Background(), "user@example.com", "", "")
+	_, code, err = svc.Login(context.Background(), "user@example.com", "", "", LoginOptions{})
 	if err != nil || code != "invalid_password" {
 		t.Fatalf("unexpected invalid password result: %q %v", code, err)
 	}
@@ -537,7 +537,7 @@ func TestLoginBasicValidationAndCredentials(t *testing.T) {
 	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
 		return fakeRow{scanFn: func(dest ...any) error { return pgx.ErrNoRows }}
 	}
-	_, code, err = svc.Login(context.Background(), "user@example.com", "12345678", "")
+	_, code, err = svc.Login(context.Background(), "user@example.com", "12345678", "", LoginOptions{})
 	if err != nil || code != "invalid_credentials" {
 		t.Fatalf("unexpected invalid credentials result: %q %v", code, err)
 	}
@@ -555,9 +555,194 @@ func TestLoginBasicValidationAndCredentials(t *testing.T) {
 			return nil
 		}}
 	}
-	_, code, err = svc.Login(context.Background(), "user@example.com", "wrong-pass", "")
+	_, code, err = svc.Login(context.Background(), "user@example.com", "wrong-pass", "", LoginOptions{})
 	if err != nil || code != "invalid_credentials" {
 		t.Fatalf("unexpected wrong password result: %q %v", code, err)
+	}
+}
+
+func TestLogin_ActiveSessionExists(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	hash, errHash := bcrypt.GenerateFromPassword([]byte("correct-pass"), 12)
+	if errHash != nil {
+		t.Fatalf("bcrypt error: %v", errHash)
+	}
+
+	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
+		return fakeRow{scanFn: func(dest ...any) error {
+			*(dest[0].(*string)) = "11111111-1111-1111-1111-111111111111"
+			*(dest[1].(*string)) = "user@example.com"
+			*(dest[2].(*string)) = "voter"
+			*(dest[3].(*string)) = string(hash)
+			return nil
+		}}
+	}
+
+	authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+		return &fakeTx{
+			queryRowFn: func(ctx context.Context, sqlText string, args ...any) rowScanner {
+				if strings.Contains(sqlText, "FROM users") && strings.Contains(sqlText, "FOR UPDATE") {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "11111111-1111-1111-1111-111111111111"
+						return nil
+					}}
+				}
+
+				if strings.Contains(sqlText, "FROM auth_sessions") {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "22222222-2222-2222-2222-222222222222"
+						return nil
+					}}
+				}
+
+				return fakeRow{scanFn: func(dest ...any) error {
+					return errors.New("unexpected query")
+				}}
+			},
+		}, nil
+	}
+
+	svc := NewServiceWithRefreshTTL(nil, 15*time.Minute, 30*24*time.Hour)
+	res, code, err := svc.Login(
+		context.Background(),
+		"user@example.com",
+		"correct-pass",
+		"",
+		LoginOptions{},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if code != "active_session_exists" {
+		t.Fatalf("unexpected code: %q", code)
+	}
+	if res != (AuthResult{}) {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestLogin_ReplaceExistingSession(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	nowFn = func() time.Time {
+		return time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)
+	}
+	randReadFn = func(b []byte) (int, error) {
+		for i := range b {
+			b[i] = byte((i % 16) + 1)
+		}
+		return len(b), nil
+	}
+
+	hash, errHash := bcrypt.GenerateFromPassword([]byte("correct-pass"), 12)
+	if errHash != nil {
+		t.Fatalf("bcrypt error: %v", errHash)
+	}
+
+	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
+		return fakeRow{scanFn: func(dest ...any) error {
+			*(dest[0].(*string)) = "11111111-1111-1111-1111-111111111111"
+			*(dest[1].(*string)) = "user@example.com"
+			*(dest[2].(*string)) = "voter"
+			*(dest[3].(*string)) = string(hash)
+			return nil
+		}}
+	}
+
+	sessionRevoked := false
+	oldTokensDeleted := false
+	newAccessTokenInserted := false
+	committed := false
+
+	authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+		return &fakeTx{
+			queryRowFn: func(ctx context.Context, sqlText string, args ...any) rowScanner {
+				if strings.Contains(sqlText, "FROM users") && strings.Contains(sqlText, "FOR UPDATE") {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "11111111-1111-1111-1111-111111111111"
+						return nil
+					}}
+				}
+
+				if strings.Contains(sqlText, "FROM auth_sessions") && strings.Contains(sqlText, "ORDER BY last_used_at") {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "22222222-2222-2222-2222-222222222222"
+						return nil
+					}}
+				}
+
+				if strings.Contains(sqlText, "INSERT INTO auth_sessions") {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*string)) = "33333333-3333-3333-3333-333333333333"
+						return nil
+					}}
+				}
+
+				return fakeRow{scanFn: func(dest ...any) error {
+					return errors.New("unexpected query")
+				}}
+			},
+			execFn: func(ctx context.Context, sqlText string, args ...any) (pgconn.CommandTag, error) {
+				switch {
+				case strings.Contains(sqlText, "UPDATE auth_sessions") && strings.Contains(sqlText, "replaced_by_new_login"):
+					sessionRevoked = true
+					return pgconn.NewCommandTag("UPDATE 1"), nil
+
+				case strings.Contains(sqlText, "DELETE FROM api_tokens"):
+					oldTokensDeleted = true
+					return pgconn.NewCommandTag("DELETE 1"), nil
+
+				case strings.Contains(sqlText, "INSERT INTO api_tokens"):
+					newAccessTokenInserted = true
+					return pgconn.NewCommandTag("INSERT 0 1"), nil
+
+				case strings.Contains(sqlText, "INSERT INTO audit_log"):
+					return pgconn.NewCommandTag("INSERT 0 1"), nil
+
+				default:
+					return pgconn.CommandTag{}, errors.New("unexpected exec")
+				}
+			},
+			commitFn: func(ctx context.Context) error {
+				committed = true
+				return nil
+			},
+		}, nil
+	}
+
+	svc := NewServiceWithRefreshTTL(nil, 15*time.Minute, 30*24*time.Hour)
+	res, code, err := svc.Login(
+		context.Background(),
+		"user@example.com",
+		"correct-pass",
+		"",
+		LoginOptions{
+			ReplaceExistingSession: true,
+			UserAgent:              "test-browser",
+			IPAddress:              "192.0.2.10",
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if code != "" {
+		t.Fatalf("unexpected code: %q", code)
+	}
+	if res.AccessToken == "" || res.RefreshToken == "" {
+		t.Fatalf("expected token pair, got %+v", res)
+	}
+	if !sessionRevoked {
+		t.Fatal("expected old session revocation")
+	}
+	if !oldTokensDeleted {
+		t.Fatal("expected old access tokens delete")
+	}
+	if !newAccessTokenInserted {
+		t.Fatal("expected new access token insert")
+	}
+	if !committed {
+		t.Fatal("expected commit")
 	}
 }
 

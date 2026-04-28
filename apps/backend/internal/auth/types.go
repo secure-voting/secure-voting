@@ -50,6 +50,12 @@ type RegisterInput struct {
 	InviteCode string
 }
 
+type LoginOptions struct {
+	ReplaceExistingSession bool
+	UserAgent              string
+	IPAddress              string
+}
+
 func ValidateEmail(email string) bool {
 	email = strings.TrimSpace(email)
 	if email == "" {

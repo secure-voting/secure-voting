@@ -32,6 +32,7 @@ type fakeAuthService struct {
 	lastRegisterInvite string
 	lastRegisterRole   string
 	lastLoginInvite    string
+	lastLoginOptions   asvc.LoginOptions
 	lastRefreshToken   string
 	lastLogoutToken    string
 	lastLogoutActor    *string
@@ -51,8 +52,9 @@ func (f *fakeAuthService) Register(ctx context.Context, email, password, role, i
 	return f.registerRes, f.registerCode, f.registerErr
 }
 
-func (f *fakeAuthService) Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error) {
+func (f *fakeAuthService) Login(ctx context.Context, email, password, inviteCode string, opts asvc.LoginOptions) (asvc.AuthResult, string, error) {
 	f.lastLoginInvite = inviteCode
+	f.lastLoginOptions = opts
 	return f.loginRes, f.loginCode, f.loginErr
 }
 
@@ -245,6 +247,83 @@ func TestLogin_InvitePassed(t *testing.T) {
 	}
 	if got.AccessToken != "token999" || got.RefreshToken != "refresh999" {
 		t.Fatalf("unexpected response: %+v", got)
+	}
+}
+
+func TestLogin_ActiveSessionExists(t *testing.T) {
+	svc := &fakeAuthService{loginCode: "active_session_exists"}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/login",
+		strings.NewReader(`{"email":"voter1@example.com","password":"S3curePass_2026!"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "test-browser")
+	req.RemoteAddr = "192.0.2.10:12345"
+
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.Login).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"active_session_exists"`) {
+		t.Fatalf("expected active_session_exists code, body=%s", rr.Body.String())
+	}
+	if svc.lastLoginOptions.ReplaceExistingSession {
+		t.Fatal("replace_existing_session should be false by default")
+	}
+	if svc.lastLoginOptions.UserAgent != "test-browser" {
+		t.Fatalf("unexpected user agent: %q", svc.lastLoginOptions.UserAgent)
+	}
+	if svc.lastLoginOptions.IPAddress != "192.0.2.10" {
+		t.Fatalf("unexpected ip address: %q", svc.lastLoginOptions.IPAddress)
+	}
+}
+
+func TestLogin_ReplaceExistingSessionPassed(t *testing.T) {
+	svc := &fakeAuthService{
+		loginRes: asvc.AuthResult{
+			AccessToken:      "token999",
+			ExpiresAt:        "2026-02-01T00:00:00Z",
+			RefreshToken:     "refresh999",
+			RefreshExpiresAt: "2026-03-01T00:00:00Z",
+			User: asvc.User{
+				ID:    "u1",
+				Email: "voter1@example.com",
+				Role:  "voter",
+			},
+		},
+	}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/login",
+		strings.NewReader(`{"email":"voter1@example.com","password":"S3curePass_2026!","replace_existing_session":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "test-browser")
+	req.Header.Set("X-Forwarded-For", "198.51.100.20, 10.0.0.1")
+
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.Login).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if !svc.lastLoginOptions.ReplaceExistingSession {
+		t.Fatal("expected replace_existing_session=true")
+	}
+	if svc.lastLoginOptions.UserAgent != "test-browser" {
+		t.Fatalf("unexpected user agent: %q", svc.lastLoginOptions.UserAgent)
+	}
+	if svc.lastLoginOptions.IPAddress != "198.51.100.20" {
+		t.Fatalf("unexpected ip address: %q", svc.lastLoginOptions.IPAddress)
 	}
 }
 
