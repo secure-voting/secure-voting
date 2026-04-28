@@ -26,6 +26,13 @@ export type Me = {
   phone?: string | null;
 };
 
+export type AuthTokens = {
+  access_token: string;
+  expires_at: string;
+  refresh_token: string;
+  refresh_expires_at: string;
+};
+
 export type NotificationKind = "info" | "success" | "warning" | "error";
 
 export type NotificationItem = {

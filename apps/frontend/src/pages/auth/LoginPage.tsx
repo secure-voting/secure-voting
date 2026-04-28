@@ -101,16 +101,16 @@ export function LoginPage() {
       const normalizedInviteCode = inviteCode.trim() ? inviteCode.trim() : null;
 
       if (mode === "register") {
-        const t = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
-        setToken(t);
+        const tokens = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
+        setToken(tokens);
         addNotification({
           kind: "success",
           title: "Регистрация завершена",
           message: `Учётная запись для ${normalizedEmail} успешно создана`,
         });
       } else {
-        const t = await api.auth.login(normalizedEmail, password, normalizedInviteCode);
-        setToken(t);
+        const tokens = await api.auth.login(normalizedEmail, password, normalizedInviteCode);
+        setToken(tokens);
         addNotification({
           kind: "success",
           title: "Вход выполнен",
