@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"database/sql"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
@@ -135,8 +137,11 @@ func TestIssueToken_Success(t *testing.T) {
 	if !expiresAt.Equal(wantExp) {
 		t.Fatalf("unexpected expiresAt: %v", expiresAt)
 	}
-	if len(gotArgs) != 4 {
+	if len(gotArgs) != 5 {
 		t.Fatalf("unexpected exec args: %#v", gotArgs)
+	}
+	if gotArgs[1] != nil {
+		t.Fatalf("legacy issueToken should not attach session_id, got %#v", gotArgs[1])
 	}
 }
 
@@ -174,6 +179,82 @@ func TestIssueToken_ExecError(t *testing.T) {
 	_, _, _, err := svc.issueToken(context.Background(), tx, "u")
 	if err == nil || !strings.Contains(err.Error(), "exec boom") {
 		t.Fatalf("expected exec boom, got %v", err)
+	}
+}
+
+func TestIssueTokenPair_Success(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	nowFn = func() time.Time {
+		return time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)
+	}
+	randReadFn = func(b []byte) (int, error) {
+		for i := range b {
+			b[i] = byte((i % 16) + 1)
+		}
+		return len(b), nil
+	}
+
+	sessionInserted := false
+	accessInserted := false
+
+	tx := &fakeTx{
+		queryRowFn: func(ctx context.Context, sqlText string, args ...any) rowScanner {
+			if strings.Contains(sqlText, "INSERT INTO auth_sessions") {
+				sessionInserted = true
+				return fakeRow{scanFn: func(dest ...any) error {
+					*(dest[0].(*string)) = "11111111-1111-1111-1111-111111111111"
+					return nil
+				}}
+			}
+			return fakeRow{scanFn: func(dest ...any) error {
+				return errors.New("unexpected query row")
+			}}
+		},
+		execFn: func(ctx context.Context, sqlText string, args ...any) (pgconn.CommandTag, error) {
+			if strings.Contains(sqlText, "INSERT INTO api_tokens") {
+				accessInserted = true
+				if len(args) != 5 {
+					t.Fatalf("unexpected api token args: %#v", args)
+				}
+				if args[1] != "11111111-1111-1111-1111-111111111111" {
+					t.Fatalf("expected session id in access token insert, got %#v", args[1])
+				}
+				return pgconn.NewCommandTag("INSERT 0 1"), nil
+			}
+			return pgconn.CommandTag{}, errors.New("unexpected exec")
+		},
+	}
+
+	svc := NewServiceWithRefreshTTL(nil, 15*time.Minute, 30*24*time.Hour)
+	pair, err := svc.issueTokenPair(
+		context.Background(),
+		tx,
+		"22222222-2222-2222-2222-222222222222",
+		"test-agent",
+		"127.0.0.1",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !sessionInserted {
+		t.Fatal("expected auth session insert")
+	}
+	if !accessInserted {
+		t.Fatal("expected access token insert")
+	}
+	if pair.SessionID != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("unexpected session id: %q", pair.SessionID)
+	}
+	if pair.AccessToken == "" || pair.RefreshToken == "" {
+		t.Fatalf("expected both access and refresh tokens")
+	}
+	if !pair.AccessExpiresAt.Equal(time.Date(2026, 4, 28, 10, 15, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected access expiration: %v", pair.AccessExpiresAt)
+	}
+	if !pair.RefreshExpiresAt.Equal(time.Date(2026, 5, 28, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected refresh expiration: %v", pair.RefreshExpiresAt)
 	}
 }
 
@@ -215,6 +296,32 @@ func TestVerifyAccessToken(t *testing.T) {
 	userID, email, role, ok, err = svc.VerifyAccessToken(context.Background(), "abc")
 	if err != nil || !ok || userID != "u1" || email != "user@example.com" || role != "voter" {
 		t.Fatalf("unexpected success result: %q %q %q %v %v", userID, email, role, ok, err)
+	}
+}
+
+func TestVerifyAccessToken_ChecksSessionState(t *testing.T) {
+	defer restoreAuthHooks()()
+
+	var gotSQL string
+
+	authDBQueryRowFn = func(ctx context.Context, _ any, q string, args ...any) rowScanner {
+		gotSQL = q
+		return fakeRow{scanFn: func(dest ...any) error {
+			return pgx.ErrNoRows
+		}}
+	}
+
+	svc := NewService(nil, time.Hour)
+	_, _, _, _, err := svc.VerifyAccessToken(context.Background(), "raw-token")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(gotSQL, "LEFT JOIN auth_sessions") {
+		t.Fatalf("VerifyAccessToken must check auth_sessions state, got sql: %s", gotSQL)
+	}
+	if !strings.Contains(gotSQL, "s.revoked_at IS NULL") {
+		t.Fatalf("VerifyAccessToken must reject revoked sessions, got sql: %s", gotSQL)
 	}
 }
 
@@ -464,16 +571,81 @@ func TestLogout(t *testing.T) {
 		t.Fatalf("unexpected empty logout result: %v %v", ok, err)
 	}
 
-	authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
-		return &fakeTx{
-			execFn: func(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-				return pgconn.NewCommandTag("DELETE 1"), nil
-			},
-		}, nil
+	t.Run("token not found", func(t *testing.T) {
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sqlText string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						return pgx.ErrNoRows
+					}}
+				},
+			}, nil
+		}
+
+		ok, err := svc.Logout(context.Background(), "missing-token", nil)
+		if err != nil || ok {
+			t.Fatalf("unexpected missing logout result: %v %v", ok, err)
+		}
+	})
+
+	t.Run("success revokes session", func(t *testing.T) {
+		sessionRevoked := false
+		committed := false
+
+		authBeginTxFn = func(ctx context.Context, _ any) (txLike, error) {
+			return &fakeTx{
+				queryRowFn: func(ctx context.Context, sqlText string, args ...any) rowScanner {
+					return fakeRow{scanFn: func(dest ...any) error {
+						*(dest[0].(*sql.NullString)) = sql.NullString{
+							String: "11111111-1111-1111-1111-111111111111",
+							Valid:  true,
+						}
+						*(dest[1].(*string)) = "22222222-2222-2222-2222-222222222222"
+						return nil
+					}}
+				},
+				execFn: func(ctx context.Context, sqlText string, args ...any) (pgconn.CommandTag, error) {
+					if strings.Contains(sqlText, "UPDATE auth_sessions") {
+						sessionRevoked = true
+						return pgconn.NewCommandTag("UPDATE 1"), nil
+					}
+					if strings.Contains(sqlText, "INSERT INTO audit_log") {
+						return pgconn.NewCommandTag("INSERT 0 1"), nil
+					}
+					return pgconn.CommandTag{}, errors.New("unexpected exec")
+				},
+				commitFn: func(ctx context.Context) error {
+					committed = true
+					return nil
+				},
+			}, nil
+		}
+
+		ok, err := svc.Logout(context.Background(), "raw-token", nil)
+		if err != nil || !ok {
+			t.Fatalf("unexpected success logout result: %v %v", ok, err)
+		}
+		if !sessionRevoked {
+			t.Fatal("expected session revocation")
+		}
+		if !committed {
+			t.Fatal("expected commit")
+		}
+	})
+}
+
+func TestRefresh_EmptyToken(t *testing.T) {
+	svc := NewService(nil, time.Hour)
+
+	res, code, err := svc.Refresh(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	ok, err = svc.Logout(context.Background(), "raw-token", nil)
-	if err != nil || !ok {
-		t.Fatalf("unexpected success logout result: %v %v", ok, err)
+	if code != "invalid_refresh_token" {
+		t.Fatalf("unexpected code: %q", code)
+	}
+	if res != (AuthResult{}) {
+		t.Fatalf("unexpected result: %+v", res)
 	}
 }
 

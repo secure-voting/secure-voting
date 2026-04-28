@@ -25,6 +25,7 @@ func TestFromEnv_Defaults(t *testing.T) {
 		"POSTGRES_PASSWORD",
 		"POSTGRES_DSN",
 		"TOKEN_TTL",
+		"REFRESH_TOKEN_TTL",
 		"REDIS_ADDR",
 		"REDIS_PASSWORD",
 		"IDEMPOTENCY_TTL",
@@ -59,8 +60,11 @@ func TestFromEnv_Defaults(t *testing.T) {
 	if cfg.PostgresDSN != "postgres://admin:postgres_dev_pass@db:5432/secure-voting?sslmode=disable" {
 		t.Fatalf("unexpected PostgresDSN: %q", cfg.PostgresDSN)
 	}
-	if cfg.TokenTTL != 30*24*time.Hour {
+	if cfg.TokenTTL != 15*time.Minute {
 		t.Fatalf("unexpected TokenTTL: %v", cfg.TokenTTL)
+	}
+	if cfg.RefreshTokenTTL != 30*24*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL: %v", cfg.RefreshTokenTTL)
 	}
 	if cfg.RedisAddr != "cache:6379" || cfg.RedisPassword != "redis_dev_pass" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
@@ -128,6 +132,7 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":9999")
 	t.Setenv("POSTGRES_DSN", "postgres://custom")
 	t.Setenv("TOKEN_TTL", "48h")
+	t.Setenv("REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("REDIS_ADDR", "redis:6380")
 	t.Setenv("REDIS_PASSWORD", "secret")
 	t.Setenv("IDEMPOTENCY_TTL", "12h")
@@ -163,6 +168,9 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	}
 	if cfg.TokenTTL != 48*time.Hour {
 		t.Fatalf("unexpected TokenTTL: %v", cfg.TokenTTL)
+	}
+	if cfg.RefreshTokenTTL != 720*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL: %v", cfg.RefreshTokenTTL)
 	}
 	if cfg.RedisAddr != "redis:6380" || cfg.RedisPassword != "secret" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
@@ -220,6 +228,7 @@ func TestFromEnv_CustomValues(t *testing.T) {
 
 func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	t.Setenv("TOKEN_TTL", "bad")
+	t.Setenv("REFRESH_TOKEN_TTL", "bad")
 	t.Setenv("IDEMPOTENCY_TTL", "bad")
 	t.Setenv("MAX_UPLOAD_BYTES", "-1")
 	t.Setenv("WORKER_POLL_INTERVAL", "bad")
@@ -231,8 +240,11 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 
 	cfg := FromEnv()
 
-	if cfg.TokenTTL != 30*24*time.Hour {
+	if cfg.TokenTTL != 15*time.Minute {
 		t.Fatalf("unexpected TokenTTL fallback: %v", cfg.TokenTTL)
+	}
+	if cfg.RefreshTokenTTL != 30*24*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL fallback: %v", cfg.RefreshTokenTTL)
 	}
 	if cfg.IdempotencyTTL != 24*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL fallback: %v", cfg.IdempotencyTTL)

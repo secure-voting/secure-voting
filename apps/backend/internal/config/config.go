@@ -11,8 +11,9 @@ type Config struct {
 	HTTPAddr        string
 	ShutdownTimeout time.Duration
 
-	PostgresDSN string
-	TokenTTL    time.Duration
+	PostgresDSN     string
+	TokenTTL        time.Duration
+	RefreshTokenTTL time.Duration
 
 	RedisAddr      string
 	RedisPassword  string
@@ -70,10 +71,17 @@ func FromEnv() Config {
 		dsn = "postgres://admin:" + pgPass + "@db:5432/secure-voting?sslmode=disable"
 	}
 
-	tokenTTL := 30 * 24 * time.Hour
+	tokenTTL := 15 * time.Minute
 	if ttlStr := os.Getenv("TOKEN_TTL"); ttlStr != "" {
 		if parsed, err := time.ParseDuration(ttlStr); err == nil {
 			tokenTTL = parsed
+		}
+	}
+
+	refreshTokenTTL := 30 * 24 * time.Hour
+	if ttlStr := os.Getenv("REFRESH_TOKEN_TTL"); ttlStr != "" {
+		if parsed, err := time.ParseDuration(ttlStr); err == nil {
+			refreshTokenTTL = parsed
 		}
 	}
 
@@ -259,8 +267,9 @@ func FromEnv() Config {
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
 
-		PostgresDSN: dsn,
-		TokenTTL:    tokenTTL,
+		PostgresDSN:      dsn,
+		TokenTTL:         tokenTTL,
+		RefreshTokenTTL:  refreshTokenTTL,
 
 		RedisAddr:      redisAddr,
 		RedisPassword:  redisPass,

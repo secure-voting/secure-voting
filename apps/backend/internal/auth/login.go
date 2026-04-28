@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -66,7 +65,7 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string)
 		})
 	}
 
-	token, _, expiresAt, err := s.issueToken(ctx, tx, userID)
+	pair, err := s.issueTokenPair(ctx, tx, userID, "", "")
 	if err != nil {
 		return AuthResult{}, "", err
 	}
@@ -87,13 +86,9 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string)
 		return AuthResult{}, "", err
 	}
 
-	return AuthResult{
-		AccessToken: token,
-		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
-		User: User{
-			ID:    userID,
-			Email: dbEmail,
-			Role:  role,
-		},
-	}, "", nil
+	return authResultFromPair(User{
+		ID:    userID,
+		Email: dbEmail,
+		Role:  role,
+	}, pair), "", nil
 }

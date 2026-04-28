@@ -10,12 +10,21 @@ import (
 )
 
 type Service struct {
-	db       *pgxpool.Pool
-	tokenTTL time.Duration
+	db              *pgxpool.Pool
+	tokenTTL        time.Duration
+	refreshTokenTTL time.Duration
 }
 
 func NewService(db *pgxpool.Pool, tokenTTL time.Duration) *Service {
-	return &Service{db: db, tokenTTL: tokenTTL}
+	return NewServiceWithRefreshTTL(db, tokenTTL, 30*24*time.Hour)
+}
+
+func NewServiceWithRefreshTTL(db *pgxpool.Pool, tokenTTL, refreshTokenTTL time.Duration) *Service {
+	return &Service{
+		db:              db,
+		tokenTTL:        tokenTTL,
+		refreshTokenTTL: refreshTokenTTL,
+	}
 }
 
 type User struct {
@@ -27,9 +36,11 @@ type User struct {
 }
 
 type AuthResult struct {
-	AccessToken string `json:"access_token"`
-	ExpiresAt   string `json:"expires_at"`
-	User        User   `json:"user"`
+	AccessToken      string `json:"access_token"`
+	ExpiresAt        string `json:"expires_at"`
+	RefreshToken     string `json:"refresh_token,omitempty"`
+	RefreshExpiresAt string `json:"refresh_expires_at,omitempty"`
+	User             User   `json:"user"`
 }
 
 type RegisterInput struct {

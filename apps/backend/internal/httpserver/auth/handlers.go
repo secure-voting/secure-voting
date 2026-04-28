@@ -13,6 +13,7 @@ import (
 type AuthService interface {
 	Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error)
 	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Refresh(ctx context.Context, refreshToken string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
 	GetProfile(ctx context.Context, userID string) (asvc.User, string, error)
@@ -78,6 +79,10 @@ type loginReq struct {
 	InviteCode string `json:"invite_code,omitempty"`
 }
 
+type refreshReq struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
 func mapLoginCode(code string) error {
 	switch code {
 	case "invalid_credentials":
@@ -97,6 +102,15 @@ func mapLoginCode(code string) error {
 	}
 }
 
+func mapRefreshCode(code string) error {
+	switch code {
+	case "invalid_refresh_token":
+		return apperr.Unauthorized("invalid refresh token")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
+}
+
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) error {
 	var req loginReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
@@ -109,6 +123,24 @@ func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 	if code != "" {
 		return mapLoginCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) error {
+	var req refreshReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.Refresh(r.Context(), req.RefreshToken)
+	if err != nil {
+		return apperr.Internal(err, "refresh token failed")
+	}
+	if code != "" {
+		return mapRefreshCode(code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, res)

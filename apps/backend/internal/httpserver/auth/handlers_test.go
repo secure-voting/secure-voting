@@ -22,12 +22,17 @@ type fakeAuthService struct {
 	loginCode string
 	loginErr  error
 
+	refreshRes  asvc.AuthResult
+	refreshCode string
+	refreshErr  error
+
 	logoutOK  bool
 	logoutErr error
 
 	lastRegisterInvite string
 	lastRegisterRole   string
 	lastLoginInvite    string
+	lastRefreshToken   string
 	lastLogoutToken    string
 	lastLogoutActor    *string
 
@@ -51,6 +56,11 @@ func (f *fakeAuthService) Login(ctx context.Context, email, password, inviteCode
 	return f.loginRes, f.loginCode, f.loginErr
 }
 
+func (f *fakeAuthService) Refresh(ctx context.Context, refreshToken string) (asvc.AuthResult, string, error) {
+	f.lastRefreshToken = refreshToken
+	return f.refreshRes, f.refreshCode, f.refreshErr
+}
+
 func (f *fakeAuthService) Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error) {
 	f.lastLogoutToken = rawToken
 	if actorUserID != nil {
@@ -69,6 +79,17 @@ func (f *fakeAuthService) ChangePassword(ctx context.Context, userID, currentPas
 	return "", nil
 }
 
+func (f *fakeAuthService) GetProfile(ctx context.Context, userID string) (asvc.User, string, error) {
+	return f.getProfileRes, f.getProfileCode, f.getProfileErr
+}
+
+func (f *fakeAuthService) UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error) {
+	if f.updateProfileFn != nil {
+		return f.updateProfileFn(ctx, userID, fullName, phone)
+	}
+	return asvc.User{}, "", nil
+}
+
 type fakeTokenVerifier struct {
 	userID string
 	email  string
@@ -84,8 +105,10 @@ func (f fakeTokenVerifier) VerifyAccessToken(ctx context.Context, rawToken strin
 func TestRegister_OK(t *testing.T) {
 	svc := &fakeAuthService{
 		registerRes: asvc.AuthResult{
-			AccessToken: "token123",
-			ExpiresAt:   "2026-02-01T00:00:00Z",
+			AccessToken:      "token123",
+			ExpiresAt:        "2026-02-01T00:00:00Z",
+			RefreshToken:     "refresh123",
+			RefreshExpiresAt: "2026-03-01T00:00:00Z",
 			User: asvc.User{
 				ID:    "u1",
 				Email: "voter1@example.com",
@@ -119,7 +142,7 @@ func TestRegister_OK(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("bad json: %v body=%s", err, rr.Body.String())
 	}
-	if got.AccessToken != "token123" || got.User.Email != "voter1@example.com" {
+	if got.AccessToken != "token123" || got.RefreshToken != "refresh123" || got.User.Email != "voter1@example.com" {
 		t.Fatalf("unexpected response: %+v", got)
 	}
 }
@@ -186,8 +209,10 @@ func TestLogin_Unauthorized(t *testing.T) {
 func TestLogin_InvitePassed(t *testing.T) {
 	svc := &fakeAuthService{
 		loginRes: asvc.AuthResult{
-			AccessToken: "token999",
-			ExpiresAt:   "2026-02-01T00:00:00Z",
+			AccessToken:      "token999",
+			ExpiresAt:        "2026-02-01T00:00:00Z",
+			RefreshToken:     "refresh999",
+			RefreshExpiresAt: "2026-03-01T00:00:00Z",
 			User: asvc.User{
 				ID:    "u1",
 				Email: "voter1@example.com",
@@ -212,6 +237,99 @@ func TestLogin_InvitePassed(t *testing.T) {
 	}
 	if svc.lastLoginInvite != "XYZ" {
 		t.Fatalf("expected invite_code to be passed, got %q", svc.lastLoginInvite)
+	}
+
+	var got asvc.AuthResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("bad json: %v body=%s", err, rr.Body.String())
+	}
+	if got.AccessToken != "token999" || got.RefreshToken != "refresh999" {
+		t.Fatalf("unexpected response: %+v", got)
+	}
+}
+
+func TestRefresh_OK(t *testing.T) {
+	svc := &fakeAuthService{
+		refreshRes: asvc.AuthResult{
+			AccessToken:      "access456",
+			ExpiresAt:        "2026-04-28T10:15:00Z",
+			RefreshToken:     "refresh456",
+			RefreshExpiresAt: "2026-05-28T10:00:00Z",
+			User: asvc.User{
+				ID:    "u1",
+				Email: "voter1@example.com",
+				Role:  "voter",
+			},
+		},
+	}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/refresh",
+		strings.NewReader(`{"refresh_token":"refresh123"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.Refresh).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if svc.lastRefreshToken != "refresh123" {
+		t.Fatalf("expected refresh token to be passed, got %q", svc.lastRefreshToken)
+	}
+
+	var got asvc.AuthResult
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("bad json: %v body=%s", err, rr.Body.String())
+	}
+	if got.AccessToken != "access456" {
+		t.Fatalf("unexpected access token: %+v", got)
+	}
+	if got.RefreshToken != "refresh456" {
+		t.Fatalf("unexpected refresh token: %+v", got)
+	}
+	if got.User.Email != "voter1@example.com" || got.User.Role != "voter" {
+		t.Fatalf("unexpected user: %+v", got.User)
+	}
+}
+
+func TestRefresh_InvalidToken(t *testing.T) {
+	svc := &fakeAuthService{refreshCode: "invalid_refresh_token"}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/refresh",
+		strings.NewReader(`{"refresh_token":"bad-refresh-token"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.Refresh).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+	if svc.lastRefreshToken != "bad-refresh-token" {
+		t.Fatalf("expected refresh token to be passed, got %q", svc.lastRefreshToken)
+	}
+}
+
+func TestRefresh_BadJSON(t *testing.T) {
+	svc := &fakeAuthService{}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", strings.NewReader(`{"refresh_token":`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	httputil.Wrap(h.Refresh).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d, body=%s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -458,17 +576,6 @@ func TestChangePassword_OK(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())
 	}
-}
-
-func (f *fakeAuthService) GetProfile(ctx context.Context, userID string) (asvc.User, string, error) {
-	return f.getProfileRes, f.getProfileCode, f.getProfileErr
-}
-
-func (f *fakeAuthService) UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error) {
-	if f.updateProfileFn != nil {
-		return f.updateProfileFn(ctx, userID, fullName, phone)
-	}
-	return asvc.User{}, "", nil
 }
 
 func TestUpdateProfile_Unauthorized(t *testing.T) {

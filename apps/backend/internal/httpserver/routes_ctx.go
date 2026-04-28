@@ -88,7 +88,7 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 		}
 	}
 
-	authSvc := asvc.NewService(db, cfg.TokenTTL)
+	authSvc := asvc.NewServiceWithRefreshTTL(db, cfg.TokenTTL, cfg.RefreshTokenTTL)
 	electionsSvc := elections.NewService(db, computeClient)
 	ballotsSvc := ballots.NewService(db, rdb, cfg.IdempotencyTTL)
 	resultsSvc := results.NewService(db)
