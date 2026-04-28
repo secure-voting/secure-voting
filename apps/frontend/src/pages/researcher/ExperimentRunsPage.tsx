@@ -12,6 +12,7 @@ import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
 import { styles } from "../../shared/ui/styles";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import {
   downloadCsvFile,
   downloadJsonFile,
@@ -46,6 +47,85 @@ function runId(item: ExperimentRunItem, index: number) {
 function runStatus(item: ExperimentRunItem) {
   const s = (item as any)?.status;
   return typeof s === "string" ? s : "unknown";
+}
+
+function runStatusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    queued: "В очереди",
+    running: "Выполняется",
+    done: "Завершен",
+    error: "Ошибка",
+    unknown: "Статус неизвестен",
+  };
+
+  return labels[raw] || raw || "Статус неизвестен";
+}
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function datasetLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  return raw ? `Набор данных ${shortId(raw)}` : "Набор данных не указан";
+}
+
+function experimentRunExperiment(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
+  const experimentID = typeof item.experiment_id === "string" ? item.experiment_id : "";
+  return experimentID ? experimentMap[experimentID] ?? null : null;
+}
+
+function experimentRunTitle(
+  item: ExperimentRunItem,
+  index: number,
+  experimentMap: Record<string, Experiment>
+) {
+  const exp = experimentRunExperiment(item, experimentMap);
+  const ruleLabel = experimentRuleLabel(exp);
+
+  if (ruleLabel && ruleLabel !== "—") {
+    return `Запуск ${ruleLabel}`;
+  }
+
+  return `Запуск эксперимента ${index + 1}`;
+}
+
+function experimentRunSubtitle(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
+  const parts: string[] = [];
+
+  const exp = experimentRunExperiment(item, experimentMap);
+  const ruleID = experimentRuleId(exp);
+  if (ruleID) {
+    parts.push(`правило ${tallyRuleLabel(ruleID)}`);
+  }
+
+  parts.push(datasetLabel(item.dataset_id));
+
+  const duration = runDurationSeconds(item);
+  if (duration != null) {
+    parts.push(`время выполнения ${duration.toFixed(3)} s`);
+  }
+
+  return parts.join(" · ");
 }
 
 function nowTimeLabel() {
@@ -259,27 +339,7 @@ type RunsLocationState = {
 };
 
 function ruleLabelRu(id: string) {
-  const map: Record<string, string> = {
-    plurality: "Плюральное правило",
-    borda: "Правило Борда",
-    black: "Правило Блэка",
-    simpson: "Правило Симпсона",
-    hare: "Правило Хэра",
-    nanson: "Правило Нэнсона",
-    coombs: "Правило Кумбса",
-    copeland_1: "Правило Коупленда I",
-    copeland_2: "Правило Коупленда II",
-    copeland_3: "Правило Коупленда III",
-    inverse_borda: "Обратное правило Борда",
-    inverse_plurality: "Обратное плюральное правило",
-    minmax: "Правило Minmax",
-    threshold: "Пороговое правило",
-    practical_condorcet: "Практическое правило Кондорсе",
-    approval_2: "Одобрение q=2",
-    approval_3: "Одобрение q=3",
-  };
-
-  return map[id] || id || "—";
+  return tallyRuleLabel(id);
 }
 
 function experimentParamsObject(value: unknown): Record<string, unknown> {
@@ -402,24 +462,25 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
 
   const lines: string[] = [];
 
-  lines.push("Experiment run report");
+  lines.push("Отчет по запуску эксперимента");
   lines.push("");
 
-  lines.push("Run:");
-  lines.push(`- id: ${prettyValue(runRec?.id)}`);
+  lines.push("Запуск:");
   lines.push(`- status: ${prettyValue(runRec?.status)}`);
-  lines.push(`- experiment_id: ${prettyValue(runRec?.experiment_id)}`);
-  lines.push(`- dataset_id: ${prettyValue(runRec?.dataset_id)}`);
+  lines.push(`- dataset: ${datasetLabel(runRec?.dataset_id)}`);
   lines.push(`- started_at: ${prettyValue(runRec?.started_at)}`);
   lines.push(`- finished_at: ${prettyValue(runRec?.finished_at)}`);
+  lines.push(`- technical_id: ${prettyValue(runRec?.id)}`);
+  lines.push(`- experiment_id: ${prettyValue(runRec?.experiment_id)}`);
+  lines.push(`- dataset_id: ${prettyValue(runRec?.dataset_id)}`);
   lines.push("");
 
-  lines.push("Canonical indicators:");
+  lines.push("Ключевые показатели:");
   lines.push(`- time_seconds: ${canonical.timeSeconds != null ? canonical.timeSeconds.toFixed(3) : "—"}`);
   lines.push(`- memory_bytes: ${canonical.memoryBytes != null ? canonical.memoryBytes.toFixed(0) : "—"}`);
   lines.push(`- speed_per_second: ${canonical.speedPerSecond != null ? canonical.speedPerSecond.toFixed(3) : "—"}`);
   lines.push("");
-  lines.push("Winners:");
+  lines.push("Победители:");
   if (winners.length > 0) {
     winners.forEach((winner, index) => lines.push(`${index + 1}. ${winner}`));
   } else {
@@ -427,7 +488,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   }
   lines.push("");
 
-  lines.push("Metrics:");
+  lines.push("Метрики:");
   if (metrics.length > 0) {
     metrics.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
   } else {
@@ -435,7 +496,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   }
   lines.push("");
 
-  lines.push("Timings:");
+  lines.push("Временные показатели:");
   if (timings.length > 0) {
     timings.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
   } else {
@@ -443,7 +504,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   }
   lines.push("");
 
-  lines.push("Artifacts:");
+  lines.push("Артефакты:");
   if (artifacts.length > 0) {
     artifacts.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
   } else {
@@ -458,12 +519,12 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
       : "";
 
   if (errorText) {
-    lines.push("Error:");
+    lines.push("Ошибка:");
     lines.push(errorText);
     lines.push("");
   }
 
-  lines.push("Protocol:");
+  lines.push("Протокол:");
   if (protocol != null) {
     lines.push(prettyValue(protocol));
   } else {
@@ -546,17 +607,21 @@ export function ExperimentRunsPage() {
 
           const prevS = prev.get(id);
           if (prevS && prevS !== s) {
+            const message = `${experimentRunTitle(run, index, nextExperimentMap)} · ${datasetLabel(
+              run.dataset_id
+            )}`;
+
             if (s === "done") {
               addNotification({
                 kind: "success",
                 title: "Запуск завершен",
-                message: id,
+                message,
               });
             } else if (s === "error") {
               addNotification({
                 kind: "error",
                 title: "Ошибка запуска",
-                message: id,
+                message,
               });
             }
           }
@@ -738,6 +803,9 @@ export function ExperimentRunsPage() {
     selected && typeof selected === "object" ? (selected as Record<string, unknown>) : null;
   const resultRecord =
     selectedResult && typeof selectedResult === "object" ? (selectedResult as Record<string, unknown>) : null;
+  const selectedExperimentID =
+    selected && typeof selected.experiment_id === "string" ? selected.experiment_id : "";
+  const selectedExperiment = selectedExperimentID ? experimentMap[selectedExperimentID] ?? null : null;
 
   const metricsSummary = useMemo(() => summaryItems(resultRecord?.metrics), [resultRecord]);
   const timingsSummary = useMemo(() => summaryItems(resultRecord?.timings), [resultRecord]);
@@ -775,24 +843,28 @@ export function ExperimentRunsPage() {
           const duration = runDurationSeconds(item);
           if (duration == null) return null;
           return {
-            label: runId(item, index).slice(0, 12),
+            label: experimentRunTitle(item, index, experimentMap),
             value: duration,
           };
         })
         .filter(Boolean) as Array<{ label: string; value: number }>,
-    [items]
+    [items, experimentMap]
   );
 
   const exportRunsCsv = () => {
     downloadCsvFile(
       "experiment-runs.csv",
       items.map((item, index) => ({
-        id: runId(item, index),
-        status: runStatus(item),
-        experiment_id: prettyValue((item as any)?.experiment_id),
-        dataset_id: prettyValue((item as any)?.dataset_id),
+        title: experimentRunTitle(item, index, experimentMap),
+        status: runStatusLabel(runStatus(item)),
+        rule: experimentRuleLabel(experimentRunExperiment(item, experimentMap)),
+        dataset: datasetLabel(item.dataset_id),
+        duration_seconds: runDurationSeconds(item) ?? "",
         started_at: prettyValue((item as any)?.started_at),
         finished_at: prettyValue((item as any)?.finished_at),
+        id: runId(item, index),
+        experiment_id: prettyValue((item as any)?.experiment_id),
+        dataset_id: prettyValue((item as any)?.dataset_id),
       }))
     );
   };
@@ -801,12 +873,16 @@ export function ExperimentRunsPage() {
     downloadXlsxFile(
       "experiment-runs.xlsx",
       items.map((item, index) => ({
-        id: runId(item, index),
-        status: runStatus(item),
-        experiment_id: prettyValue((item as any)?.experiment_id),
-        dataset_id: prettyValue((item as any)?.dataset_id),
+        title: experimentRunTitle(item, index, experimentMap),
+        status: runStatusLabel(runStatus(item)),
+        rule: experimentRuleLabel(experimentRunExperiment(item, experimentMap)),
+        dataset: datasetLabel(item.dataset_id),
+        duration_seconds: runDurationSeconds(item) ?? "",
         started_at: prettyValue((item as any)?.started_at),
         finished_at: prettyValue((item as any)?.finished_at),
+        id: runId(item, index),
+        experiment_id: prettyValue((item as any)?.experiment_id),
+        dataset_id: prettyValue((item as any)?.dataset_id),
       })),
       "Runs"
     );
@@ -834,7 +910,7 @@ export function ExperimentRunsPage() {
     if (!selectedResult) return;
     downloadPdfTextFile(
       "experiment-run-report.pdf",
-      "Experiment run report",
+      "Отчет по запуску эксперимента",
       buildRunReportText(selected, selectedResult)
     );
   };
@@ -904,11 +980,12 @@ export function ExperimentRunsPage() {
 
         <div style={{ marginTop: 12, ...styles.grid2 }}>
           <div>
-            <label>Фильтр по experiment_id</label>
+            <label>Фильтр по эксперименту</label>
             <input
               style={styles.input}
               value={experimentIdFilter}
               onChange={(e) => setExperimentIdFilter(e.target.value)}
+              placeholder="Введите ID эксперимента"
             />
           </div>
           <div style={{ display: "flex", alignItems: "end" }}>
@@ -941,7 +1018,7 @@ export function ExperimentRunsPage() {
 
         <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {Object.entries(counters).map(([k, v]) => (
-            <Badge key={k} text={`${k}: ${v}`} />
+            <Badge key={k} text={`${runStatusLabel(k)}: ${v}`} />
           ))}
         </div>
 
@@ -967,43 +1044,79 @@ export function ExperimentRunsPage() {
           {items.map((item, index) => {
             const id = runId(item, index);
             const status = runStatus(item);
-            const experimentId = prettyValue((item as any)?.experiment_id ?? "");
-            const datasetId = prettyValue((item as any)?.dataset_id ?? "");
             const rawExperimentId =
               typeof (item as any)?.experiment_id === "string"
                 ? String((item as any)?.experiment_id)
                 : "";
-
             const experiment = rawExperimentId ? experimentMap[rawExperimentId] : null;
             const ruleText = experimentRuleLabel(experiment);
 
             return (
               <div key={id} style={{ ...styles.card, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <div>
-                    <div style={{ fontWeight: 700 }}>{id}</div>
-                    <div style={styles.muted}>experiment_id: {experimentId || "—"}</div>
-                    <div style={styles.muted}>правило: {ruleText}</div>
-                    <div style={styles.muted}>dataset_id: {datasetId || "—"}</div>
+                    <div style={{ fontWeight: 800 }}>{experimentRunTitle(item, index, experimentMap)}</div>
+                    <div style={{ ...styles.muted, marginTop: 4 }}>
+                      {experimentRunSubtitle(item, experimentMap)}
+                    </div>
                   </div>
+
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Badge text={status} />
+                    <Badge text={runStatusLabel(status)} />
+                    {ruleText !== "—" ? <Badge text={ruleText} /> : null}
                   </div>
                 </div>
 
-                <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                  started_at: {prettyValue((item as any)?.started_at)} · finished_at: {prettyValue((item as any)?.finished_at)}
+                <div style={{ marginTop: 10 }}>
+                  <SummaryGrid
+                    items={[
+                      { label: "Статус", value: runStatusLabel(status) },
+                      { label: "Набор данных", value: datasetLabel((item as any)?.dataset_id) },
+                      { label: "Начало", value: formatDateTime((item as any)?.started_at) },
+                      { label: "Завершение", value: formatDateTime((item as any)?.finished_at) },
+                      {
+                        label: "Длительность",
+                        value:
+                          runDurationSeconds(item) != null
+                            ? `${runDurationSeconds(item)?.toFixed(3)} s`
+                            : "—",
+                      },
+                    ]}
+                  />
                 </div>
+
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: "pointer", ...styles.muted }}>
+                    Технические сведения
+                  </summary>
+                  <div style={{ marginTop: 8 }}>
+                    <KeyValueList
+                      items={[
+                        { label: "ID запуска", value: id },
+                        { label: "ID эксперимента", value: prettyValue((item as any)?.experiment_id) },
+                        { label: "ID набора данных", value: prettyValue((item as any)?.dataset_id) },
+                      ]}
+                    />
+                  </div>
+                </details>
 
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button style={styles.btnPrimary} onClick={() => loadDetail(id)} disabled={detailLoading}>
-                    Открыть
+                    Открыть карточку
                   </button>
                   <button style={styles.btn} onClick={() => loadResult(id)} disabled={resultLoading}>
-                    Результат
+                    Загрузить результат
                   </button>
                   <button style={styles.btn} onClick={() => handleDownload(id)}>
-                    Скачать
+                    Скачать результат
                   </button>
                 </div>
               </div>
@@ -1040,36 +1153,67 @@ export function ExperimentRunsPage() {
           {selectedRecord ? (
             <div style={{ display: "grid", gap: 12 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 18 }}>{prettyValue(selectedRecord.id)}</div>
-                <div style={styles.muted}>Информация о выполнении запуска</div>
+                <div style={{ fontWeight: 800, fontSize: 18 }}>
+                  {selected ? experimentRunTitle(selected, 0, experimentMap) : "Запуск эксперимента"}
+                </div>
+                {selected ? (
+                  <div style={{ ...styles.muted, marginTop: 4 }}>
+                    {experimentRunSubtitle(selected, experimentMap)}
+                  </div>
+                ) : (
+                  <div style={styles.muted}>Информация о выполнении запуска</div>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {selectedRecord.status != null ? <Badge text={prettyValue(selectedRecord.status)} /> : null}
+                {selectedRecord.status != null ? (
+                  <Badge text={runStatusLabel(selectedRecord.status)} />
+                ) : null}
+                {selectedExperiment ? <Badge text={experimentRuleLabel(selectedExperiment)} /> : null}
               </div>
 
-              <KeyValueList
+              <SummaryGrid
                 items={[
-                  { label: "Experiment ID", value: prettyValue(selectedRecord.experiment_id) },
-                  { label: "Dataset ID", value: prettyValue(selectedRecord.dataset_id) },
-                  { label: "Started at", value: prettyValue(selectedRecord.started_at) },
-                  { label: "Finished at", value: prettyValue(selectedRecord.finished_at) },
-                  { label: "Правило подсчета", value: experimentRuleLabel(
-                      typeof selectedRecord.experiment_id === "string"
-                        ? experimentMap[String(selectedRecord.experiment_id)]
-                        : null
-                    ) 
+                  { label: "Статус", value: runStatusLabel(selectedRecord.status) },
+                  {
+                    label: "Эксперимент",
+                    value: selectedExperiment ? experimentRuleLabel(selectedExperiment) : "—",
+                  },
+                  { label: "Набор данных", value: datasetLabel(selectedRecord.dataset_id) },
+                  { label: "Начало", value: formatDateTime(selectedRecord.started_at) },
+                  { label: "Завершение", value: formatDateTime(selectedRecord.finished_at) },
+                  {
+                    label: "Длительность",
+                    value:
+                      selected && runDurationSeconds(selected) != null
+                        ? `${runDurationSeconds(selected)?.toFixed(3)} s`
+                        : "—",
                   },
                 ]}
               />
 
-              <div>
-                <h4 style={{ marginBottom: 8 }}>Поля запуска</h4>
-                <JsonBlock value={selectedRecord} />
-              </div>
+              <details>
+                <summary style={{ cursor: "pointer", ...styles.muted }}>
+                  Технические сведения
+                </summary>
+                <div style={{ marginTop: 10, display: "grid", gap: 12 }}>
+                  <KeyValueList
+                    items={[
+                      { label: "ID запуска", value: prettyValue(selectedRecord.id) },
+                      { label: "ID эксперимента", value: prettyValue(selectedRecord.experiment_id) },
+                      { label: "ID набора данных", value: prettyValue(selectedRecord.dataset_id) },
+                    ]}
+                  />
+
+                  <div>
+                    <h4 style={{ marginBottom: 8 }}>Все поля запуска</h4>
+                    <JsonBlock value={selectedRecord} />
+                  </div>
+                </div>
+              </details>
             </div>
           ) : (
-            <div style={styles.muted}>Ничего не выбрано</div>
+            <div style={styles.muted}>Выберите запуск из списка</div>
           )}
         </div>
       </div>
