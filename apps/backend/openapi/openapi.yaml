@@ -25,10 +25,10 @@ tags:
 
 components:
   securitySchemes:
-  bearerAuth:
-    type: http
-    scheme: bearer
-    bearerFormat: opaque-access-token
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-access-token
 
   schemas:
     ErrorEnvelope:
