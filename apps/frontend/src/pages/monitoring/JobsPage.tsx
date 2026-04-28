@@ -5,6 +5,7 @@ import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
+import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
 import {
   downloadCsvFile,
@@ -34,6 +35,27 @@ function idOf(job: JobItem, index: number) {
 function nowTimeLabel() {
   const d = new Date();
   return d.toLocaleTimeString();
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
 }
 
 function kindLabel(kind: string) {
@@ -70,9 +92,8 @@ function statusLabel(status: string) {
 
 function jobsCsvRows(items: JobItem[]) {
   return items.map((job, index) => ({
-    id: idOf(job, index),
-    kind: kindOf(job),
-    status: statusOf(job),
+    title: kindLabel(kindOf(job)),
+    status_label: statusLabel(statusOf(job)),
     progress:
       typeof (job as any)?.progress === "number" && Number.isFinite((job as any)?.progress)
         ? String((job as any).progress)
@@ -80,6 +101,9 @@ function jobsCsvRows(items: JobItem[]) {
     created_at: str((job as any)?.created_at),
     started_at: str((job as any)?.started_at),
     finished_at: str((job as any)?.finished_at),
+    id: idOf(job, index),
+    kind: kindOf(job),
+    status: statusOf(job),
     election_id: str((job as any)?.election_id),
     experiment_id: str((job as any)?.experiment_id),
     experiment_run_id: str((job as any)?.experiment_run_id),
@@ -107,9 +131,9 @@ function buildJobsReportText(
 
   items.forEach((job, index) => {
     lines.push(
-      `${index + 1}. id=${idOf(job, index)} тип=${kindLabel(kindOf(job))} статус=${statusLabel(
+      `${index + 1}. ${kindLabel(kindOf(job))}; статус=${statusLabel(
         statusOf(job)
-      )} создано=${str((job as any)?.created_at)}`
+      )}; создано=${formatDateTime((job as any)?.created_at)}; ID=${idOf(job, index)}`
     );
   });
 
@@ -173,13 +197,13 @@ export function JobsPage() {
               addNotification({
                 kind: "success",
                 title: "Задача завершена",
-                message: `${kindLabel(kindOf(job))} · ${id}`,
+                message: `${kindLabel(kindOf(job))} · задача ${shortId(id)}`,
               });
             } else if (nextStatus === "error") {
               addNotification({
                 kind: "error",
                 title: "Ошибка выполнения задачи",
-                message: `${kindLabel(kindOf(job))} · ${id}`,
+                message: `${kindLabel(kindOf(job))} · задача ${shortId(id)}`,
               });
             }
           }
@@ -289,11 +313,21 @@ export function JobsPage() {
         <div style={{ marginTop: 12, ...styles.grid2 }}>
           <div>
             <label>Фильтр по статусу</label>
-            <input style={styles.input} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} />
+            <input
+              style={styles.input}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              placeholder="queued, running, done, error"
+            />
           </div>
           <div>
             <label>Фильтр по типу</label>
-            <input style={styles.input} value={kindFilter} onChange={(e) => setKindFilter(e.target.value)} />
+            <input
+              style={styles.input}
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value)}
+              placeholder="tally, experiment_run, import_dataset"
+            />
           </div>
         </div>
 
@@ -353,19 +387,36 @@ export function JobsPage() {
 
               return (
                 <div key={id} style={{ ...styles.card, padding: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      flexWrap: "wrap",
+                    }}
+                  >
                     <div>
-                      <div style={{ fontWeight: 700 }}>{kindLabel(kind)}</div>
-                      <div style={styles.muted}>{id}</div>
+                      <div style={{ fontWeight: 800 }}>{kindLabel(kind)}</div>
+                      <div style={{ ...styles.muted, marginTop: 4 }}>
+                        {hasProgress ? `Прогресс выполнения: ${progress}%` : "Задача ожидает обновления статуса"}
+                      </div>
                     </div>
+
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <Badge text={statusLabel(status)} />
-                      {hasProgress ? <Badge text={`Прогресс: ${progress}%`} /> : null}
+                      {hasProgress ? <Badge text={`${progress}%`} /> : null}
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                    создано: {createdAt || "—"} · запущено: {startedAt || "—"} · завершено: {finishedAt || "—"}
+                  <div style={{ marginTop: 10 }}>
+                    <KeyValueList
+                      items={[
+                        { label: "Создана", value: formatDateTime(createdAt) },
+                        { label: "Запущена", value: formatDateTime(startedAt) },
+                        { label: "Завершена", value: formatDateTime(finishedAt) },
+                      ]}
+                    />
                   </div>
 
                   {kind === "tally" && status === "done" ? (
@@ -375,10 +426,36 @@ export function JobsPage() {
                   ) : null}
 
                   {status === "error" && errorText ? (
-                    <div style={{ marginTop: 10, ...styles.card, background: "#fff1f2", borderColor: "#fecaca", color: "#7f1d1d" }}>
+                    <div
+                      style={{
+                        marginTop: 10,
+                        ...styles.card,
+                        background: "#fff1f2",
+                        borderColor: "#fecaca",
+                        color: "#7f1d1d",
+                      }}
+                    >
                       <b>Ошибка:</b> {errorText}
                     </div>
                   ) : null}
+
+                  <details style={{ marginTop: 10 }}>
+                    <summary style={{ cursor: "pointer", ...styles.muted }}>
+                      Технические сведения
+                    </summary>
+                    <div style={{ marginTop: 10 }}>
+                      <KeyValueList
+                        items={[
+                          { label: "ID задачи", value: id },
+                          { label: "Тип", value: kind },
+                          { label: "Статус", value: status },
+                          { label: "ID голосования", value: str((job as any)?.election_id) || "—" },
+                          { label: "ID эксперимента", value: str((job as any)?.experiment_id) || "—" },
+                          { label: "ID запуска эксперимента", value: str((job as any)?.experiment_run_id) || "—" },
+                        ]}
+                      />
+                    </div>
+                  </details>
                 </div>
               );
             })}
