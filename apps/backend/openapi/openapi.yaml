@@ -148,6 +148,11 @@ components:
           type: string
         invite_code:
           type: string
+        replace_existing_session:
+          type: boolean
+          description: >
+            When true, an existing active session for the same user is revoked and replaced
+            by the newly created session.
 
     RefreshRequest:
       type: object
@@ -1226,6 +1231,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Active session already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                activeSessionExists:
+                  value:
+                    error:
+                      code: active_session_exists
+                      message: active session already exists
   
   /api/v1/auth/refresh:
     post:
