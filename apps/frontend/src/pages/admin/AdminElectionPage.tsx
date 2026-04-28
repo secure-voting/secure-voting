@@ -15,6 +15,7 @@ import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
+import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
 import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
 import { isValidEmail, parseEmailsFromText, uniqueEmails } from "../../shared/utils/email";
@@ -132,6 +133,77 @@ function statusCardTone(ok: boolean): React.CSSProperties {
     background: "#fff1f2",
     borderColor: "#fecaca",
   };
+}
+
+function electionStatusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    draft: "Черновик",
+    scheduled: "Запланировано",
+    active: "Открыто",
+    paused: "Приостановлено",
+    closed: "Завершено",
+    results_ready: "Результаты готовы",
+    published: "Опубликовано",
+  };
+
+  return labels[raw] || raw || "Статус неизвестен";
+}
+
+function accessModeLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    open: "Открытый доступ",
+    invite: "По приглашениям",
+  };
+
+  return labels[raw] || raw || "Доступ не указан";
+}
+
+function ballotFormatLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    approval: "Approval",
+    ranking: "Ranking",
+    score: "Score",
+  };
+
+  return labels[raw] || raw || "Формат не указан";
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function boolLabel(value: boolean | null | undefined) {
+  return value ? "Да" : "Нет";
+}
+
+function lifecycleActionLabel(action: string) {
+  const labels: Record<string, string> = {
+    schedule: "Запланировать",
+    open: "Открыть",
+    pause: "Приостановить",
+    resume: "Возобновить",
+    close: "Завершить",
+    publish: "Опубликовать результаты",
+  };
+
+  return labels[action] || action;
 }
 
 function statusLabel(value: string) {
@@ -259,7 +331,7 @@ export function AdminElectionPage() {
       addNotification({
         kind: "success",
         title: "Действие выполнено",
-        message: `Операция ${action} успешно применена`,
+        message: `Операция "${lifecycleActionLabel(action)}" успешно применена`,
       });
       await load();
     } catch (e: any) {
@@ -457,13 +529,13 @@ export function AdminElectionPage() {
             flexWrap: "wrap",
           }}
         >
-          <h2 style={{ margin: 0 }}>Карточка голосования администратора</h2>
+          <h2 style={{ margin: 0 }}>Управление голосованием</h2>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link to="/dashboard/admin" style={{ textDecoration: "none" }}>
               <button style={styles.btn}>Назад</button>
             </Link>
             <Link to={`/elections/${electionId}`} style={{ textDecoration: "none" }}>
-              <button style={styles.btn}>Публичная карточка</button>
+              <button style={styles.btn}>Карточка участника</button>
             </Link>
             <Link to={`/elections/${electionId}/results`} style={{ textDecoration: "none" }}>
               <button style={styles.btn}>Результаты</button>
@@ -479,7 +551,7 @@ export function AdminElectionPage() {
                 style={styles.btn}
                 onClick={() => downloadJsonFile(`election-${electionId}.json`, item)}
               >
-                Export JSON
+                Экспорт JSON
               </button>
             ) : null}
           </div>
@@ -496,68 +568,111 @@ export function AdminElectionPage() {
             </div>
 
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Badge text={`Статус: ${item.status}`} />
-              <Badge text={`Доступ: ${item.access_mode}`} />
-              <Badge text={`Формат: ${item.ballot_format}`} />
-              <Badge text={`Правило: ${tallyRuleLabel(item.tally_rule)}`} />
+              <Badge text={electionStatusLabel(item.status)} />
+              <Badge text={accessModeLabel(item.access_mode)} />
+              <Badge text={ballotFormatLabel(item.ballot_format)} />
+              <Badge text={tallyRuleLabel(item.tally_rule)} />
             </div>
 
             <div style={{ marginTop: 12 }}>
               <SummaryGrid
                 items={[
-                  { label: "Organizer", value: item.organizer_email ?? item.created_by ?? "—" },
-                  { label: "Created at", value: item.created_at ?? "—" },
-                  { label: "Start at", value: item.start_at },
-                  { label: "End at", value: item.end_at },
-                  { label: "Publish at", value: item.publish_at ?? "—" },
-                  { label: "Published at", value: item.published_at ?? "—" },
-                  { label: "Committee size", value: String(item.committee_size ?? "—") },
-                  { label: "Quota type", value: item.quota_type ?? "—" },
-                  { label: "Show aggregates", value: item.show_aggregates ? "yes" : "no" },
-                  { label: "Candidates", value: String(item.candidates.length) },
+                  { label: "Организатор", value: item.organizer_email ?? item.created_by ?? "—" },
+                  { label: "Создано", value: formatDateTime(item.created_at) },
+                  { label: "Начало", value: formatDateTime(item.start_at) },
+                  { label: "Окончание", value: formatDateTime(item.end_at) },
+                  { label: "Запланированная публикация", value: formatDateTime(item.publish_at) },
+                  { label: "Фактическая публикация", value: formatDateTime(item.published_at) },
+                  { label: "Размер комитета", value: String(item.committee_size ?? "—") },
+                  { label: "Квота", value: item.quota_type ?? "—" },
+                  { label: "Показывать агрегаты", value: boolLabel(item.show_aggregates) },
+                  { label: "Кандидаты", value: String(item.candidates.length) },
                   {
-                    label: "Approval max choices",
+                    label: "Максимум одобрений",
                     value: item.ballot_format === "approval"
                       ? String(item.approval_max_choices ?? "—")
                       : "—",
                   },
                   {
-                    label: "Ranking top-k",
+                    label: "Глубина ранжирования",
                     value: item.ballot_format === "ranking"
                       ? String(item.ranking_top_k ?? "—")
                       : "—",
                   },
                   {
-                    label: "Score range",
+                    label: "Диапазон оценок",
                     value: item.ballot_format === "score"
                       ? `${item.score_min ?? "—"}..${item.score_max ?? "—"}`
                       : "—",
                   },
                   {
-                    label: "Score step",
+                    label: "Шаг оценки",
                     value: item.ballot_format === "score"
                       ? String(item.score_step ?? "—")
                       : "—",
                   },
                   {
-                    label: "Allow skip",
+                    label: "Можно пропускать оценки",
                     value: item.ballot_format === "score"
-                      ? (item.score_allow_skip ? "yes" : "no")
+                      ? boolLabel(item.score_allow_skip)
                       : "—",
                   },
-                  { label: "Submitted ballots", value: String(item.submitted_ballots_count ?? "—") },
-                  { label: "Invites total", value: item.access_mode === "invite" ? String(item.invites_total_count ?? "—") : "—" },
-                  { label: "Invites accepted", value: item.access_mode === "invite" ? String(item.invites_accepted_count ?? "—") : "—" },
-                  { label: "Invites pending", value: item.access_mode === "invite" ? String(item.invites_pending_count ?? "—") : "—" },
-                  { label: "Invites revoked", value: item.access_mode === "invite" ? String(item.invites_revoked_count ?? "—") : "—" },
-                  { label: "Invites failed", value: item.access_mode === "invite" ? String(item.invites_failed_count ?? "—") : "—" },
-                  { label: "Registration required", value: item.access_mode === "invite" ? String(item.invites_registration_required_count ?? "—") : "—" },
+                  { label: "Подано бюллетеней", value: String(item.submitted_ballots_count ?? "—") },
+                  {
+                    label: "Приглашений всего",
+                    value: item.access_mode === "invite" ? String(item.invites_total_count ?? "—") : "—",
+                  },
+                  {
+                    label: "Принято приглашений",
+                    value: item.access_mode === "invite" ? String(item.invites_accepted_count ?? "—") : "—",
+                  },
+                  {
+                    label: "Ожидают ответа",
+                    value: item.access_mode === "invite" ? String(item.invites_pending_count ?? "—") : "—",
+                  },
+                  {
+                    label: "Отозвано",
+                    value: item.access_mode === "invite" ? String(item.invites_revoked_count ?? "—") : "—",
+                  },
+                  {
+                    label: "Ошибок отправки",
+                    value: item.access_mode === "invite" ? String(item.invites_failed_count ?? "—") : "—",
+                  },
+                  {
+                    label: "Требуется регистрация",
+                    value: item.access_mode === "invite"
+                      ? String(item.invites_registration_required_count ?? "—")
+                      : "—",
+                  },
                 ]}
               />
+
+              <details style={{ marginTop: 12 }}>
+                <summary style={{ cursor: "pointer", ...styles.muted }}>
+                  Технические сведения
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  <KeyValueList
+                    items={[
+                      { label: "ID голосования", value: item.id },
+                      { label: "ID создателя", value: item.created_by ?? "—" },
+                      { label: "Статус", value: item.status },
+                      { label: "Режим доступа", value: item.access_mode },
+                      { label: "Формат бюллетеня", value: item.ballot_format },
+                      { label: "Правило подсчета", value: item.tally_rule },
+                      { label: "Создано", value: item.created_at ?? "—" },
+                      { label: "Начало", value: item.start_at },
+                      { label: "Окончание", value: item.end_at },
+                      { label: "Публикация", value: item.publish_at ?? "—" },
+                      { label: "Опубликовано", value: item.published_at ?? "—" },
+                    ]}
+                  />
+                </div>
+              </details>
             </div>
 
             <div style={{ marginTop: 12 }}>
-              <h3 style={{ marginTop: 0 }}>Состояние сервера подсчёта</h3>
+              <h3 style={{ marginTop: 0 }}>Состояние сервисов</h3>
 
               {systemStatus ? (
                 <div style={{ display: "grid", gap: 10 }}>
@@ -578,8 +693,8 @@ export function AdminElectionPage() {
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 700 }}>Backend</div>
-                        <div style={styles.muted}>HTTP API status endpoint</div>
+                        <div style={{ fontWeight: 700 }}>Сервер приложения</div>
+                        <div style={styles.muted}>Проверка доступности HTTP API</div>
                       </div>
                       <Badge text={statusLabel(systemStatus.backend.status)} />
                     </div>
@@ -602,19 +717,19 @@ export function AdminElectionPage() {
                       }}
                     >
                       <div>
-                        <div style={{ fontWeight: 700 }}>Compute</div>
-                        <div style={styles.muted}>gRPC connectivity</div>
+                        <div style={{ fontWeight: 700 }}>Вычислительный сервис</div>
+                        <div style={styles.muted}>Проверка gRPC-соединения</div>
                       </div>
                       <Badge text={statusLabel(systemStatus.compute.status)} />
                     </div>
 
                     <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                      checked_at: {systemStatus.checked_at}
+                      Проверено: {formatDateTime(systemStatus.checked_at)}
                     </div>
 
                     {systemStatus.compute.details ? (
                       <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                        addr: {compact(systemStatus.compute.details.addr)} · tls: {compact(systemStatus.compute.details.tls)}
+                        Адрес: {compact(systemStatus.compute.details.addr)} · TLS: {compact(systemStatus.compute.details.tls)}
                       </div>
                     ) : null}
                   </div>
@@ -651,7 +766,12 @@ export function AdminElectionPage() {
                     <div>
                       <div style={{ fontWeight: 700 }}>{candidate.name}</div>
                       {description ? <div style={{ ...styles.muted, marginTop: 4 }}>{description}</div> : null}
-                      <div style={{ ...styles.muted, marginTop: 4 }}>{candidate.id}</div>
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: "pointer", ...styles.muted }}>
+                          Технические сведения
+                        </summary>
+                        <div style={{ marginTop: 4, ...styles.muted }}>ID кандидата: {candidate.id}</div>
+                      </details>
                     </div>
                     {candidate.meta ? <Badge text="meta" /> : null}
                   </div>
@@ -661,25 +781,25 @@ export function AdminElectionPage() {
 
             <hr style={styles.hr} />
 
-            <h3 style={{ marginTop: 0 }}>Admin actions</h3>
+            <h3 style={{ marginTop: 0 }}>Управление жизненным циклом</h3>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button style={styles.btn} onClick={() => doAction("schedule")} disabled={actionLoading}>
-                schedule
+                {lifecycleActionLabel("schedule")}
               </button>
               <button style={styles.btn} onClick={() => doAction("open")} disabled={actionLoading}>
-                open
+                {lifecycleActionLabel("open")}
               </button>
               <button style={styles.btn} onClick={() => doAction("pause")} disabled={actionLoading}>
-                pause
+                {lifecycleActionLabel("pause")}
               </button>
               <button style={styles.btn} onClick={() => doAction("resume")} disabled={actionLoading}>
-                resume
+                {lifecycleActionLabel("resume")}
               </button>
               <button style={styles.btnDanger} onClick={() => doAction("close")} disabled={actionLoading}>
-                close
+                {lifecycleActionLabel("close")}
               </button>
               <button style={styles.btnPrimary} onClick={() => doAction("publish")} disabled={actionLoading}>
-                publish
+                {lifecycleActionLabel("publish")}
               </button>
             </div>
 
@@ -743,7 +863,7 @@ export function AdminElectionPage() {
                   onClick={() => downloadCsvFile(`election-invites-${electionId}.csv`, inviteCsvRows(invites))}
                   disabled={invites.length === 0}
                 >
-                  Export CSV
+                  Экспорт CSV
                 </button>
               </div>
             </div>
@@ -753,13 +873,13 @@ export function AdminElectionPage() {
                 <Badge key={status} text={`${status}: ${count}`} />
               ))}
               {typeof item?.invites_registration_required_count === "number" ? (
-                <Badge text={`registration_required: ${item.invites_registration_required_count}`} />
+                <Badge text={`требуется регистрация: ${item.invites_registration_required_count}`} />
               ) : null}
             </div>
 
             <div style={styles.grid2}>
               <div style={{ ...styles.card, padding: 12 }}>
-                <h4 style={{ marginTop: 0 }}>Одиночное приглашение</h4>
+                <h4 style={{ marginTop: 0 }}>Одно приглашение</h4>
 
                 <label>Email</label>
                 <input
@@ -776,12 +896,12 @@ export function AdminElectionPage() {
                   onClick={handleCreateSingleInvite}
                   disabled={inviteLoading}
                 >
-                  {inviteLoading ? "Создание…" : "Создать invite"}
+                  {inviteLoading ? "Создание…" : "Создать приглашение"}
                 </button>
 
                 {lastInviteCode ? (
                   <div style={{ marginTop: 12, ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                    <div style={{ fontWeight: 700 }}>Invite code</div>
+                    <div style={{ fontWeight: 700 }}>Код приглашения</div>
                     <div style={{ marginTop: 6, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
                       {lastInviteCode}
                     </div>
@@ -792,7 +912,7 @@ export function AdminElectionPage() {
               <div style={{ ...styles.card, padding: 12 }}>
                 <h4 style={{ marginTop: 0 }}>Массовое создание приглашений</h4>
 
-                <label>Email list</label>
+                <label>Список email</label>
                 <textarea
                   style={{
                     ...styles.input,
@@ -839,7 +959,7 @@ export function AdminElectionPage() {
                   onClick={handleCreateBulkInvites}
                   disabled={inviteLoading}
                 >
-                  {inviteLoading ? "Создание…" : "Создать invites bulk"}
+                  {inviteLoading ? "Создание…" : "Создать приглашения"}
                 </button>
               </div>
             </div>
@@ -848,12 +968,12 @@ export function AdminElectionPage() {
               <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
                 <SummaryGrid
                   items={[
-                    { label: "Total parsed", value: String(bulkSummary.total) },
-                    { label: "Valid emails", value: String(bulkSummary.valid) },
-                    { label: "Invite created", value: String(bulkSummary.inviteCreated.length) },
-                    { label: "Registration required", value: String(bulkSummary.registrationRequired.length) },
-                    { label: "Skipped", value: String(bulkSummary.skipped.length) },
-                    { label: "Failed", value: String(bulkSummary.failed.length) },
+                    { label: "Всего строк", value: String(bulkSummary.total) },
+                    { label: "Корректных email", value: String(bulkSummary.valid) },
+                    { label: "Создано приглашений", value: String(bulkSummary.inviteCreated.length) },
+                    { label: "Требуется регистрация", value: String(bulkSummary.registrationRequired.length) },
+                    { label: "Пропущено", value: String(bulkSummary.skipped.length) },
+                    { label: "Ошибок", value: String(bulkSummary.failed.length) },
                   ]}
                 />
 
