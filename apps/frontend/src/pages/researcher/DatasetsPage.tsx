@@ -9,6 +9,7 @@ import type {
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { Badge } from "../../shared/ui/Badge";
@@ -47,13 +48,6 @@ function extractCreatedRun(value: unknown): { runId: string; jobId: string } {
   return { runId, jobId };
 }
 
-type CreatedSyntheticRunNavState = {
-  rule: string;
-  experimentId: string;
-  runId: string;
-  jobId: string;
-};
-
 function formatLabel(value: string) {
   switch (value) {
     case "approval":
@@ -78,6 +72,47 @@ function sourceLabel(value: string) {
     default:
       return value;
   }
+}
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function boolLabel(value: unknown) {
+  return value === true ? "Да" : value === false ? "Нет" : String(value ?? "—");
+}
+
+function parameterLabel(key: string) {
+  const labels: Record<string, string> = {
+    generation_model: "Модель генерации",
+    approval_max_choices: "Максимум одобрений",
+    ranking_top_k: "Глубина ранжирования",
+    score_min: "Минимальная оценка",
+    score_max: "Максимальная оценка",
+    score_step: "Шаг оценки",
+    voters: "Число профилей",
+    candidates: "Кандидаты",
+    seed: "Seed",
+  };
+
+  return labels[key] || key;
 }
 
 function generationModelLabel(value: string) {
@@ -107,27 +142,8 @@ function generationModelDescription(value: string) {
 }
 
 function ruleLabelRu(id: string, fallback?: string) {
-  const map: Record<string, string> = {
-    plurality: "Плюральное правило",
-    borda: "Правило Борда",
-    black: "Правило Блэка",
-    simpson: "Правило Симпсона",
-    hare: "Правило Хэра",
-    nanson: "Правило Нэнсона",
-    coombs: "Правило Кумбса",
-    copeland_1: "Правило Коупленда I",
-    copeland_2: "Правило Коупленда II",
-    copeland_3: "Правило Коупленда III",
-    inverse_borda: "Обратное правило Борда",
-    inverse_plurality: "Обратное плюральное правило",
-    minmax: "Правило Minmax",
-    threshold: "Пороговое правило",
-    practical_condorcet: "Практическое правило Кондорсе",
-    approval_2: "Одобрение q=2",
-    approval_3: "Одобрение q=3",
-  };
-
-  return map[id] || fallback || id;
+  const label = tallyRuleLabel(id);
+  return label !== "—" ? label : fallback || id;
 }
 
 function getGenerationModelFromParameters(parameters?: Record<string, unknown>) {
@@ -149,11 +165,24 @@ function renderParameters(value: Record<string, unknown> | undefined) {
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      {Object.entries(value).map(([key, val]) => (
-        <div key={key}>
-          <b>{key}:</b> <span>{typeof val === "string" ? val : JSON.stringify(val)}</span>
-        </div>
-      ))}
+      {Object.entries(value).map(([key, val]) => {
+        let renderedValue: React.ReactNode =
+          typeof val === "string" ? val : JSON.stringify(val);
+
+        if (typeof val === "boolean") {
+          renderedValue = boolLabel(val);
+        }
+
+        if (key === "generation_model" && typeof val === "string") {
+          renderedValue = generationModelLabel(val);
+        }
+
+        return (
+          <div key={key}>
+            <b>{parameterLabel(key)}:</b> <span>{renderedValue}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -362,7 +391,7 @@ export function DatasetsPage() {
         file: importFile,
       });
 
-      setInfo(`Набор данных импортирован: ${id}`);
+      setInfo(`Набор данных импортирован. Технический ID: ${shortId(id)}`);
       setImportName("");
       setImportDescription("");
       setImportFile(null);
@@ -370,7 +399,7 @@ export function DatasetsPage() {
       addNotification({
         kind: "success",
         title: "Импорт набора данных завершен",
-        message: `Новый набор данных создан с id ${id}`,
+        message: `Новый набор данных создан. Технический ID: ${shortId(id)}`,
       });
 
       await loadList();
@@ -488,12 +517,12 @@ export function DatasetsPage() {
       }
 
       setCreatedRuns([]);
-      setInfo(`Синтетический набор данных создан: ${id}`);
+      setInfo(`Синтетический набор данных создан. Технический ID: ${shortId(id)}`);
 
       addNotification({
         kind: "success",
         title: "Синтетический набор данных создан",
-        message: `Создан набор данных с id ${id}`,
+        message: `Создан синтетический набор данных. Технический ID: ${shortId(id)}`,
       });
 
       await loadList();
@@ -633,6 +662,11 @@ export function DatasetsPage() {
     }
   };
 
+  const generatedCandidatesCount = genCandidatesText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean).length;
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
@@ -656,27 +690,59 @@ export function DatasetsPage() {
 
           {items.map((item) => (
             <div key={item.id} style={{ ...styles.card, padding: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  flexWrap: "wrap",
+                }}
+              >
                 <div>
-                  <div style={{ fontWeight: 700 }}>{item.name}</div>
-                  <div style={styles.muted}>{item.id}</div>
+                  <div style={{ fontWeight: 800 }}>{item.name}</div>
+                  <div style={{ ...styles.muted, marginTop: 4 }}>
+                    {sourceLabel(item.source)} · {formatLabel(item.format)}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Badge text={item.source} />
-                  <Badge text={item.format} />
+                  <Badge text={sourceLabel(item.source)} />
+                  <Badge text={formatLabel(item.format)} />
                 </div>
               </div>
 
-              <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                created_at: {item.created_at}
+              <div style={{ marginTop: 10 }}>
+                <KeyValueList
+                  items={[
+                    { label: "Создан", value: formatDateTime(item.created_at) },
+                    { label: "Формат", value: formatLabel(item.format) },
+                    { label: "Источник", value: sourceLabel(item.source) },
+                  ]}
+                />
               </div>
+
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", ...styles.muted }}>
+                  Технические сведения
+                </summary>
+                <div style={{ marginTop: 8 }}>
+                  <KeyValueList
+                    items={[
+                      { label: "ID набора данных", value: item.id },
+                      { label: "Источник", value: item.source },
+                      { label: "Формат", value: item.format },
+                      { label: "Создан", value: item.created_at },
+                    ]}
+                  />
+                </div>
+              </details>
 
               <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button style={styles.btnPrimary} onClick={() => loadDetail(item.id)} disabled={detailLoading}>
-                  Открыть
+                  Открыть карточку
                 </button>
                 <button style={styles.btn} onClick={() => handleDownload(item.id)}>
-                  Скачать
+                  Скачать файл
                 </button>
               </div>
             </div>
@@ -736,7 +802,7 @@ export function DatasetsPage() {
 
           {importFile ? (
             <div style={{ marginTop: 8, ...styles.muted }}>
-              {importFile.name} · {importFile.size} bytes
+              {importFile.name} · {importFile.size} байт
             </div>
           ) : null}
 
@@ -802,7 +868,7 @@ export function DatasetsPage() {
 
           <div style={{ height: 10 }} />
 
-          <label>Seed</label>
+          <label>Seed (зерно генерации)</label>
           <input style={styles.input} value={genSeed} onChange={(e) => setGenSeed(e.target.value)} />
           <div style={{ marginTop: 8, ...styles.muted }}>
             Если поле оставить пустым, сервер сгенерирует seed автоматически.
@@ -810,7 +876,7 @@ export function DatasetsPage() {
 
           <div style={{ height: 10 }} />
 
-          <label>Кандидаты (каждая строка: id,name)</label>
+          <label>Кандидаты (каждая строка: технический ID, имя)</label>
           <textarea
             style={{
               ...styles.input,
@@ -825,7 +891,7 @@ export function DatasetsPage() {
 
           {genFormat === "approval" ? (
             <>
-              <label>approval_max_choices</label>
+              <label>Максимум одобрений</label>
               <input
                 style={styles.input}
                 type="number"
@@ -860,7 +926,7 @@ export function DatasetsPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={parseCandidates().length}
+                    max={Math.max(1, generatedCandidatesCount)}
                     value={genRankingTopK}
                     onChange={(e) => setGenRankingTopK(Number(e.target.value))}
                   />
@@ -873,7 +939,7 @@ export function DatasetsPage() {
 
           {genFormat === "score" ? (
             <>
-              <label>score_min</label>
+              <label>Минимальная оценка</label>
               <input
                 style={styles.input}
                 type="number"
@@ -882,7 +948,7 @@ export function DatasetsPage() {
               />
               <div style={{ height: 10 }} />
 
-              <label>score_max</label>
+              <label>Максимальная оценка</label>
               <input
                 style={styles.input}
                 type="number"
@@ -891,7 +957,7 @@ export function DatasetsPage() {
               />
               <div style={{ height: 10 }} />
 
-              <label>score_step</label>
+              <label>Шаг оценки</label>
               <input
                 style={styles.input}
                 type="number"
@@ -937,11 +1003,29 @@ export function DatasetsPage() {
 
             <KeyValueList
               items={[
-                { label: "Идентификатор набора", value: selected.id },
-                { label: "Дата создания", value: selected.created_at },
+                { label: "Источник", value: sourceLabel(selected.source) },
+                { label: "Формат", value: formatLabel(selected.format) },
+                { label: "Дата создания", value: formatDateTime(selected.created_at) },
                 { label: "Число кандидатов", value: String(selected.candidates.length) },
+                { label: "Seed", value: selected.seed != null ? String(selected.seed) : "—" },
               ]}
             />
+
+            <details>
+              <summary style={{ cursor: "pointer", ...styles.muted }}>
+                Технические сведения
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                <KeyValueList
+                  items={[
+                    { label: "ID набора данных", value: selected.id },
+                    { label: "Источник", value: selected.source },
+                    { label: "Формат", value: selected.format },
+                    { label: "Создан", value: selected.created_at },
+                  ]}
+                />
+              </div>
+            </details>
 
             <div>
               <h4 style={{ marginBottom: 8 }}>Кандидаты</h4>
@@ -950,7 +1034,14 @@ export function DatasetsPage() {
                   {selected.candidates.map((candidate) => (
                     <div key={candidate.id} style={{ ...styles.card, padding: 10 }}>
                       <b>{candidate.name}</b>
-                      <div style={styles.muted}>{candidate.id}</div>
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: "pointer", ...styles.muted }}>
+                          Технические сведения
+                        </summary>
+                        <div style={{ marginTop: 4, ...styles.muted }}>
+                          ID кандидата: {candidate.id}
+                        </div>
+                      </details>
                     </div>
                   ))}
                 </div>
@@ -973,7 +1064,7 @@ export function DatasetsPage() {
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
-                                    <div>
+                  <div>
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
 
                     {rulesLoading ? (
@@ -1093,10 +1184,28 @@ export function DatasetsPage() {
 
                       {createdRuns.map((item) => (
                         <div key={`${item.rule}-${item.runId}`} style={{ ...styles.card, padding: 10 }}>
-                          <div><b>{item.rule}</b></div>
-                          <div style={styles.muted}>experiment_id: {item.experimentId}</div>
-                          <div style={styles.muted}>run_id: {item.runId}</div>
-                          <div style={styles.muted}>job_id: {item.jobId || "—"}</div>
+                          <div>
+                            <b>{ruleLabelRu(item.rule)}</b>
+                          </div>
+                          <div style={{ ...styles.muted, marginTop: 4 }}>
+                            Запуск создан и передан в очередь выполнения
+                          </div>
+
+                          <details style={{ marginTop: 8 }}>
+                            <summary style={{ cursor: "pointer", ...styles.muted }}>
+                              Технические сведения
+                            </summary>
+                            <div style={{ marginTop: 8 }}>
+                              <KeyValueList
+                                items={[
+                                  { label: "ID эксперимента", value: item.experimentId },
+                                  { label: "ID запуска", value: item.runId },
+                                  { label: "ID задачи", value: item.jobId || "—" },
+                                  { label: "Правило", value: item.rule },
+                                ]}
+                              />
+                            </div>
+                          </details>
                         </div>
                       ))}
                     </div>
