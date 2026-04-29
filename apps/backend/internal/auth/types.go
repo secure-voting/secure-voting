@@ -1,11 +1,11 @@
 package auth
 
 import (
+	"database/sql"
 	"net/mail"
 	"regexp"
 	"strings"
 	"time"
-	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -29,11 +29,11 @@ func NewServiceWithRefreshTTL(db *pgxpool.Pool, tokenTTL, refreshTokenTTL time.D
 }
 
 type User struct {
-	ID       string  `json:"id"`
-	Email    string  `json:"email"`
-	Role     string  `json:"role"`
-	FullName *string `json:"full_name,omitempty"`
-	Phone    *string `json:"phone,omitempty"`
+	ID              string  `json:"id"`
+	Email           string  `json:"email"`
+	Role            string  `json:"role"`
+	FullName        *string `json:"full_name,omitempty"`
+	Phone           *string `json:"phone,omitempty"`
 	EmailVerified   bool    `json:"email_verified"`
 	EmailVerifiedAt *string `json:"email_verified_at,omitempty"`
 }
@@ -44,6 +44,14 @@ type AuthResult struct {
 	RefreshToken     string `json:"refresh_token,omitempty"`
 	RefreshExpiresAt string `json:"refresh_expires_at,omitempty"`
 	User             User   `json:"user"`
+}
+
+type EmailVerificationRequestResult struct {
+	OK                bool   `json:"ok"`
+	AlreadyVerified   bool   `json:"already_verified"`
+	ExpiresAt         string `json:"expires_at,omitempty"`
+	VerificationToken string `json:"verification_token,omitempty"`
+	VerificationURL   string `json:"verification_url,omitempty"`
 }
 
 type RegisterInput struct {
