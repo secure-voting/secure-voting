@@ -21,7 +21,7 @@ function kindLabel(kind?: string) {
 }
 
 export function ProfilePage() {
-  const { me, authed, token } = useAuth();
+  const { me, authed, token, updateMe } = useAuth();
   const { unreadCount, items } = useNotifications();
 
   const [fullName, setFullName] = useState("");
@@ -98,6 +98,7 @@ export function ProfilePage() {
       setPhone(nextPhone);
       setSavedFullName(nextFullName);
       setSavedPhone(nextPhone);
+      updateMe(updated);
       setProfileSuccess("Контактные данные успешно сохранены.");
     } catch (err) {
       if (err instanceof ApiError) {

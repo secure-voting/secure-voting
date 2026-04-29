@@ -15,6 +15,7 @@ type AuthCtx = {
   bootLoading: boolean;
   bootError: string | null;
   setToken: (t: AuthTokens | string | null) => void;
+  updateMe: (next: Me) => void;
   logout: () => Promise<void>;
 };
 
@@ -87,6 +88,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     writeStoredAuthTokens(normalized);
     setAuthTokensState(normalized);
+  }, []);
+
+  const updateMe = useCallback((next: Me) => {
+    setMe(next);
   }, []);
 
   const refreshTokens = useCallback(async (refreshToken: string) => {
@@ -213,9 +218,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       bootLoading,
       bootError,
       setToken,
+      updateMe,
       logout,
     }),
-    [token, authTokens, me, authed, bootLoading, bootError, setToken, logout]
+    [token, authTokens, me, authed, bootLoading, bootError, setToken, updateMe, logout]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
