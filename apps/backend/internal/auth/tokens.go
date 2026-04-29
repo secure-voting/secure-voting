@@ -135,15 +135,16 @@ func (s *Service) Refresh(ctx context.Context, rawRefreshToken string) (AuthResu
 	var role string
 	var sessionExpiresAt time.Time
 	var revokedAt sql.NullTime
+	var emailVerifiedAt sql.NullTime
 
 	err = tx.QueryRow(ctx,
-		`SELECT s.id::text, s.user_id::text, u.email, u.role, s.expires_at, s.revoked_at
-		 FROM auth_sessions s
-		 JOIN users u ON u.id = s.user_id
-		 WHERE s.refresh_token_hash = $1
-		 FOR UPDATE OF s`,
+		`SELECT s.id::text, s.user_id::text, u.email, u.role, s.expires_at, s.revoked_at, u.email_verified_at
+		FROM auth_sessions s
+		JOIN users u ON u.id = s.user_id
+		WHERE s.refresh_token_hash = $1
+		FOR UPDATE OF s`,
 		refreshHash,
-	).Scan(&sessionID, &userID, &email, &role, &sessionExpiresAt, &revokedAt)
+	).Scan(&sessionID, &userID, &email, &role, &sessionExpiresAt, &revokedAt, &emailVerifiedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return AuthResult{}, "invalid_refresh_token", nil
@@ -206,10 +207,15 @@ func (s *Service) Refresh(ctx context.Context, rawRefreshToken string) (AuthResu
 		ExpiresAt:        accessExpiresAt.UTC().Format(time.RFC3339),
 		RefreshToken:     nextRefreshToken,
 		RefreshExpiresAt: nextRefreshExpiresAt.UTC().Format(time.RFC3339),
-		User: User{
-			ID:    userID,
-			Email: email,
-			Role:  role,
-		},
+		User: func() User {
+			emailVerified, emailVerifiedAtText := emailVerificationFields(emailVerifiedAt)
+			return User{
+				ID:              userID,
+				Email:           email,
+				Role:            role,
+				EmailVerified:   emailVerified,
+				EmailVerifiedAt: emailVerifiedAtText,
+			}
+		}(),
 	}, "", nil
 }

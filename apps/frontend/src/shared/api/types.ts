@@ -24,6 +24,8 @@ export type Me = {
   role?: "admin" | "voter" | "researcher" | string;
   full_name?: string | null;
   phone?: string | null;
+  email_verified?: boolean;
+  email_verified_at?: string | null;
 };
 
 export type AuthTokens = {

@@ -173,6 +173,7 @@ export function ProfilePage() {
         <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {me?.role ? <Badge text={`Роль: ${roleLabel(me.role)}`} /> : null}
           <Badge text={authed ? "Сессия активна" : "Сессия неактивна"} />
+          <Badge text={me?.email_verified ? "Почта подтверждена" : "Почта не подтверждена"} />
           <Badge text={`Непрочитанных уведомлений: ${unreadCount}`} />
         </div>
 
@@ -180,6 +181,12 @@ export function ProfilePage() {
           items={[
             { label: "ID пользователя", value: me?.id || "—" },
             { label: "Электронная почта", value: me?.email || "—" },
+            {
+              label: "Статус почты",
+              value: me?.email_verified
+                ? `Подтверждена${me.email_verified_at ? `: ${me.email_verified_at}` : ""}`
+                : "Не подтверждена",
+            },
             { label: "Роль", value: roleLabel(me?.role) },
             { label: "ФИО", value: savedFullName || "—" },
             { label: "Телефон", value: savedPhone || "—" },

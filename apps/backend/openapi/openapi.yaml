@@ -54,7 +54,7 @@ components:
 
     User:
       type: object
-      required: [id, email, role]
+      required: [id, email, role, email_verified]
       properties:
         id:
           type: string
@@ -68,6 +68,13 @@ components:
           type: string
         phone:
           type: string
+        email_verified:
+          type: boolean
+          description: Whether the user email has been verified.
+        email_verified_at:
+          type: string
+          format: date-time
+          description: Timestamp when the user email was verified.
 
     AuthResponse:
       type: object

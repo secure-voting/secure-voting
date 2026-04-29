@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -21,12 +22,13 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string,
 	}
 
 	var userID, dbEmail, role, passHash string
+	var emailVerifiedAt sql.NullTime
 	err := authDBQueryRowFn(ctx, s.db,
-		`SELECT id::text, email, role, password_hash
-		 FROM users
-		 WHERE email = $1`,
+		`SELECT id::text, email, role, password_hash, email_verified_at
+		FROM users
+		WHERE email = $1`,
 		email,
-	).Scan(&userID, &dbEmail, &role, &passHash)
+	).Scan(&userID, &dbEmail, &role, &passHash, &emailVerifiedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return AuthResult{}, "invalid_credentials", nil
@@ -144,9 +146,13 @@ func (s *Service) Login(ctx context.Context, email, password, inviteCode string,
 		return AuthResult{}, "", err
 	}
 
+	emailVerified, emailVerifiedAtText := emailVerificationFields(emailVerifiedAt)
+
 	return authResultFromPair(User{
-		ID:    userID,
-		Email: dbEmail,
-		Role:  role,
+		ID:              userID,
+		Email:           dbEmail,
+		Role:            role,
+		EmailVerified:   emailVerified,
+		EmailVerifiedAt: emailVerifiedAtText,
 	}, pair), "", nil
 }

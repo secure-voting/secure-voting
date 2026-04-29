@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"database/sql"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -33,6 +34,8 @@ type User struct {
 	Role     string  `json:"role"`
 	FullName *string `json:"full_name,omitempty"`
 	Phone    *string `json:"phone,omitempty"`
+	EmailVerified   bool    `json:"email_verified"`
+	EmailVerifiedAt *string `json:"email_verified_at,omitempty"`
 }
 
 type AuthResult struct {
@@ -54,6 +57,15 @@ type LoginOptions struct {
 	ReplaceExistingSession bool
 	UserAgent              string
 	IPAddress              string
+}
+
+func emailVerificationFields(verifiedAt sql.NullTime) (bool, *string) {
+	if !verifiedAt.Valid {
+		return false, nil
+	}
+
+	formatted := verifiedAt.Time.UTC().Format(time.RFC3339)
+	return true, &formatted
 }
 
 func ValidateEmail(email string) bool {
