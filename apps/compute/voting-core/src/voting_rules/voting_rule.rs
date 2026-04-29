@@ -137,6 +137,7 @@ where
                     .winner_count(winners.len())
                     .committee_size(0)
                     .rounds_count(1)
+                    .tie_detected(!results.is_unique())
                     .build(),
             )
             .series(

@@ -172,6 +172,7 @@ where
                 let summary = summary
                     .winner_count(outcome.candidates().len())
                     .rounds_count(steps.len())
+                    .tie_detected(!outcome.is_unique())
                     .build();
                 let metrics = Metrics::builder()
                     .summary(summary)
@@ -206,7 +207,7 @@ where
                     .steps(steps.clone())
                     .r#final(Final::builder().winner_ids(vec![]).build())
                     .build();
-                let summary = summary.winner_count(0).rounds_count(steps.len()).build();
+                let summary = summary.winner_count(0).rounds_count(steps.len()).tie_detected(false).build();
                 let metrics = Metrics::builder()
                     .summary(summary)
                     .series(
@@ -248,7 +249,7 @@ where
                             .build(),
                     )
                     .build();
-                let summary = summary.winner_count(1).rounds_count(steps.len()).build();
+                let summary = summary.winner_count(1).rounds_count(steps.len()).tie_detected(false).build();
                 let metrics = Metrics::builder()
                     .summary(summary)
                     .series(

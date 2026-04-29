@@ -96,6 +96,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                                 .winner_count(winners.len())
                                 .committee_size(0)
                                 .rounds_count(1)
+                                .tie_detected(winners.len() > 1)
                                 .build(),
                         )
                         .build(),
