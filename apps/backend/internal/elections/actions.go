@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"secure-voting/apps/backend/internal/computeclient"
 )
 
 func (s *Service) Action(ctx context.Context, electionID, adminUserID, action string) (string, error) {
@@ -77,8 +78,21 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 			return "", err
 		}
 
+		var rules []computeclient.TallyRuleInfo
+		if s.capabilities != nil {
+			rules, err = s.capabilities.ListTallyRules(ctx)
+			if err != nil {
+				return "", err
+			}
+
+			if !validateKnownTallyRule(tallyRule, rules) {
+				return "invalid_tally_rule", nil
+			}
+		}
+
+		committeeRequired := ruleRequiresCommitteeSize(tallyRule, rules, s.capabilities == nil)
 		if err := validateElectionReadyToOpen(
-			tallyRule,
+			committeeRequired,
 			ballotFormat,
 			committeeSize,
 			rankingTopK,
@@ -111,15 +125,6 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 		}
 
 		if s.capabilities != nil {
-			rules, err := s.capabilities.ListTallyRules(ctx)
-			if err != nil {
-				return "", err
-			}
-
-			if !validateKnownTallyRule(tallyRule, rules) {
-				return "invalid_tally_rule", nil
-			}
-
 			if err := validateRuleCompatibility(
 				tallyRule,
 				ballotFormat,
@@ -246,7 +251,7 @@ func (s *Service) Action(ctx context.Context, electionID, adminUserID, action st
 }
 
 func validateElectionReadyToOpen(
-	rule string,
+	committeeRequired bool,
 	ballotFormat string,
 	committeeSize *int,
 	rankingTopK *int,
@@ -256,7 +261,7 @@ func validateElectionReadyToOpen(
 		return errors.New("at least 2 candidates required")
 	}
 
-	if _, err := normalizeCommitteeSize(rule, committeeSize, candidateCount); err != nil {
+	if _, err := normalizeCommitteeSize(committeeRequired, committeeSize, candidateCount); err != nil {
 		return err
 	}
 

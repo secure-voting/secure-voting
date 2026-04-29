@@ -21,27 +21,19 @@ func TestNormalizeRuleName_More(t *testing.T) {
 	}
 }
 
-func TestRequiresCommitteeSize(t *testing.T) {
-	if !requiresCommitteeSize("plurality") {
-		t.Fatal("plurality should require committee size")
-	}
-	if requiresCommitteeSize("unknown_rule") {
-		t.Fatal("unknown_rule should not require committee size")
-	}
-}
 
-func TestNormalizeCommitteeSize(t *testing.T) {
-	if _, err := normalizeCommitteeSize("plurality", nil, 3); err == nil {
+func TestNormalizeCommitteeSize_More(t *testing.T) {
+	if _, err := normalizeCommitteeSize(true, nil, 3); err == nil {
 		t.Fatal("expected required committee_size error")
 	}
-	if _, err := normalizeCommitteeSize("plurality", intPtr(0), 3); err == nil {
+	if _, err := normalizeCommitteeSize(true, intPtr(0), 3); err == nil {
 		t.Fatal("expected invalid committee_size error")
 	}
-	if _, err := normalizeCommitteeSize("plurality", intPtr(5), 3); err == nil {
+	if _, err := normalizeCommitteeSize(true, intPtr(5), 3); err == nil {
 		t.Fatal("expected too large committee_size error")
 	}
 
-	got, err := normalizeCommitteeSize("plurality", intPtr(2), 3)
+	got, err := normalizeCommitteeSize(true, intPtr(2), 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,12 +41,12 @@ func TestNormalizeCommitteeSize(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", got)
 	}
 
-	got, err = normalizeCommitteeSize("unknown_rule", intPtr(2), 3)
+	got, err = normalizeCommitteeSize(false, intPtr(2), 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != nil {
-		t.Fatalf("expected nil for rule without committee_size, got %#v", got)
+		t.Fatalf("expected nil when committee_size is not required, got %#v", got)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"secure-voting/apps/backend/internal/computeclient"
 )
 
 func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectionInput) (string, string, error) {
@@ -59,7 +60,20 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 
 	candidateCount := len(normalizedCandidates)
 
-	committeeSize, err := normalizeCommitteeSize(tally, in.CommitteeSize, candidateCount)
+	var rules []computeclient.TallyRuleInfo
+	if s.capabilities != nil {
+		rules, err = s.capabilities.ListTallyRules(ctx)
+		if err != nil {
+			return "", "", err
+		}
+
+		if !validateKnownTallyRule(tally, rules) {
+			return "", "invalid_tally_rule", nil
+		}
+	}
+
+	committeeRequired := ruleRequiresCommitteeSize(tally, rules, s.capabilities == nil)
+	committeeSize, err := normalizeCommitteeSize(committeeRequired, in.CommitteeSize, candidateCount)
 	if err != nil {
 		return "", committeeSizeCode(err), nil
 	}
@@ -117,15 +131,6 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 	}
 
 	if s.capabilities != nil {
-		rules, err := s.capabilities.ListTallyRules(ctx)
-		if err != nil {
-			return "", "", err
-		}
-
-		if !validateKnownTallyRule(tally, rules) {
-			return "", "invalid_tally_rule", nil
-		}
-
 		if err := validateRuleCompatibility(
 			tally,
 			format,

@@ -142,6 +142,58 @@ func TestValidateKnownTallyRule_UsesCapabilitiesAsSourceOfTruth(t *testing.T) {
 	}
 }
 
+func TestValidateRuleCompatibility_AcceptsRuleKnownOnlyFromCapabilities(t *testing.T) {
+	t.Parallel()
+
+	committeeSize := 1
+	rules := []computeclient.TallyRuleInfo{
+		{
+			ID:                    "new_dynamic_rule",
+			Label:                 "New Dynamic Rule",
+			BallotFormats:         []string{"ranking"},
+			SupportsElectionTally: true,
+			RequiresCommitteeSize: true,
+			SupportsRankingTopK:   true,
+		},
+	}
+
+	params := map[string]any{
+		"committee_size": committeeSize,
+		"ranking_top_k":  nil,
+	}
+
+	if err := validateRuleCompatibility(
+		"new_dynamic_rule",
+		"ranking",
+		params,
+		rules,
+	); err != nil {
+		t.Fatalf("expected dynamic rule from capabilities to be accepted, got %v", err)
+	}
+}
+
+func TestNormalizeCommitteeSize_UsesCapabilityFlag(t *testing.T) {
+	t.Parallel()
+
+	size := 1
+
+	got, err := normalizeCommitteeSize(true, &size, 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil || *got != 1 {
+		t.Fatalf("expected committee size 1, got %v", got)
+	}
+
+	got, err = normalizeCommitteeSize(false, &size, 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil committee size when rule does not require it, got %v", *got)
+	}
+}
+
 func TestNormalizeRankingTopK(t *testing.T) {
 	t.Parallel()
 

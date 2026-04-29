@@ -56,39 +56,12 @@ func normalizeRuleName(rule string) string {
 	}
 }
 
-func requiresCommitteeSize(rule string) bool {
-	switch normalizeRuleName(rule) {
-	case "plurality",
-		"approval",
-		"inverse_plurality",
-		"borda",
-		"black",
-		"copeland_i",
-		"copeland_ii",
-		"copeland_iii",
-		"simpson",
-		"minmax",
-		"hare",
-		"inverse_borda",
-		"nanson",
-		"coombs",
-		"practical_condorcet",
-		"q_paretian_strong_simple_majority",
-		"q_paretian_strongest_simple_majority",
-		"q_paretian_strong_plurality",
-		"threshold":
-		return true
-	default:
-		return false
-	}
-}
-
-func normalizeCommitteeSize(rule string, committeeSize *int, candidateCount int) (*int, error) {
+func normalizeCommitteeSize(required bool, committeeSize *int, candidateCount int) (*int, error) {
 	if candidateCount < 2 {
 		return nil, errors.New("at least 2 candidates required")
 	}
 
-	if !requiresCommitteeSize(rule) {
+	if !required {
 		return nil, nil
 	}
 
@@ -106,6 +79,15 @@ func normalizeCommitteeSize(rule string, committeeSize *int, candidateCount int)
 
 	v := *committeeSize
 	return &v, nil
+}
+
+func ruleRequiresCommitteeSize(rule string, rules []computeclient.TallyRuleInfo, fallback bool) bool {
+	matrix := buildRuleMatrix(rules)
+	info, ok := matrix.get(rule)
+	if !ok {
+		return fallback
+	}
+	return info.RequiresCommitteeSize
 }
 
 func normalizeRankingTopK(ballotFormat string, rankingTopK *int, candidateCount int) (*int, error) {
