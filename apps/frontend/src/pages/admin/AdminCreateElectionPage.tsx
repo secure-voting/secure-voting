@@ -9,6 +9,7 @@ import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
 import type { CandidateDraft, CandidatePayload, TallyRuleInfo } from "../../shared/api/types";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const STEPS = [
   "Общие сведения",
@@ -140,6 +141,11 @@ function selectedRuleInfo(
   return rules.find((rule) => rule.id === ruleId);
 }
 
+function ruleDisplayLabel(rule: TallyRuleInfo | undefined, fallbackId: string) {
+  if (rule?.label?.trim()) return rule.label.trim();
+  return tallyRuleLabel(rule?.id || fallbackId);
+}
+
 function StepHeader({
   current,
   onGo,
@@ -202,9 +208,11 @@ export function AdminCreateElectionPage() {
         const electionRules = mergedItems.filter((item) => item.supports_election_tally);
         setAvailableRules(electionRules);
 
-        if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {
-          setTallyRule(electionRules[0].id);
-        }
+        setTallyRule((prev) => {
+          if (electionRules.length === 0) return "";
+          if (electionRules.some((item) => item.id === prev)) return prev;
+          return electionRules[0].id;
+        });
       })
       .catch((e: any) => {
         if (e?.status === 401) {
@@ -243,7 +251,7 @@ export function AdminCreateElectionPage() {
   const [importedCandidatesFileName, setImportedCandidatesFileName] = useState("");
 
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
-  const [tallyRule, setTallyRule] = useState("plurality");
+  const [tallyRule, setTallyRule] = useState("");
 
   const [committeeSize, setCommitteeSize] = useState<number>(1);
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
@@ -712,7 +720,12 @@ export function AdminCreateElectionPage() {
     ]);
     setImportedCandidatesFileName("");
     setBallotFormat("ranking");
-    setTallyRule(availableRules[0]?.id || "plurality");
+    const defaultRankingRule =
+      availableRules.find((rule) => supportsBallotFormat(rule, "ranking"))?.id ||
+      availableRules[0]?.id ||
+      "";
+
+    setTallyRule(defaultRankingRule);
     setCommitteeSize(1);
     setQuotaType("hare");
     setApprovalMax(2);
@@ -1053,7 +1066,7 @@ export function AdminCreateElectionPage() {
                 >
                   {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
-                      {rule.label}
+                      {ruleDisplayLabel(rule, rule.id)}
                     </option>
                   ))}
                 </select>
@@ -1358,7 +1371,7 @@ export function AdminCreateElectionPage() {
                 { label: "Название", value: title.trim() || "—" },
                 { label: "Описание", value: description.trim() || "—" },
                 { label: "Формат бюллетеня", value: reviewBallotFormatLabel(ballotFormat) },
-                { label: "Правило подсчета", value: currentRule?.label || tallyRule },
+                { label: "Правило подсчёта", value: ruleDisplayLabel(currentRule, tallyRule) },
                 {
                   label: "Размер комитета",
                   value: currentRule?.requires_committee_size ? String(committeeSize) : "Один победитель",

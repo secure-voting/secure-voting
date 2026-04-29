@@ -142,8 +142,10 @@ function generationModelDescription(value: string) {
 }
 
 function ruleLabelRu(id: string, fallback?: string) {
+  if (fallback?.trim()) return fallback.trim();
+
   const label = tallyRuleLabel(id);
-  return label !== "—" ? label : fallback || id;
+  return label !== "—" ? label : id;
 }
 
 function getGenerationModelFromParameters(parameters?: Record<string, unknown>) {
@@ -217,7 +219,7 @@ export function DatasetsPage() {
   const [genScoreMin, setGenScoreMin] = useState(0);
   const [genScoreMax, setGenScoreMax] = useState(10);
   const [genScoreStep, setGenScoreStep] = useState(1);
-  const [runRules, setRunRules] = useState<string[]>(["plurality", "borda", "black"]);
+  const [runRules, setRunRules] = useState<string[]>([]);
   const [runCommitteeSize, setRunCommitteeSize] = useState(1);
   const [runRankingTopK, setRunRankingTopK] = useState(3);
   const [runLoading, setRunLoading] = useState(false);
