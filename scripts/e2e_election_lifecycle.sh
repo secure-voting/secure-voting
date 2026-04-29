@@ -192,7 +192,7 @@ detect_api_base
 echo "== login bootstrap admin =="
 do_curl POST "$API_BASE/auth/login" \
   -H 'Content-Type: application/json' \
-  -d "{\"email\":\"$BOOTSTRAP_ADMIN_EMAIL\",\"password\":\"$BOOTSTRAP_ADMIN_PASSWORD\"}"
+  -d "{\"email\":\"$BOOTSTRAP_ADMIN_EMAIL\",\"password\":\"$BOOTSTRAP_ADMIN_PASSWORD\",\"replace_existing_session\":true}"
 assert_code 200
 
 ADMIN_TOKEN="$(extract_token "$HTTP_BODY")"

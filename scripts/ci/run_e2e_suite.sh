@@ -18,6 +18,37 @@ cleanup() {
 }
 trap cleanup EXIT
 
+force_clean_runtime() {
+  local containers=(
+    ts-frontend
+    go-backend
+    go-worker
+    go-compute-runner
+    rust-compute
+    kafka-init
+    kafka
+    postgres-db
+    mongo-db
+    redis-cache
+    postgres-webui
+    mongodb-webui
+    redis-webui
+    kafka-ui
+  )
+
+  for c in "${containers[@]}"; do
+    if docker ps -a --format '{{.Names}}' | grep -qx "$c"; then
+      docker update --restart=no "$c" >/dev/null 2>&1 || true
+      docker rm -f "$c" >/dev/null 2>&1 || true
+    fi
+  done
+
+  docker compose down -v --remove-orphans >/dev/null 2>&1 || true
+
+  docker volume ls --format '{{.Name}}' | grep '^secure-voting_' | xargs -r docker volume rm >/dev/null 2>&1 || true
+  docker network ls --format '{{.Name}}' | grep '^secure-voting_' | xargs -r docker network rm >/dev/null 2>&1 || true
+}
+
 if [[ ! -f .env && -f .env.example ]]; then
   cp .env.example .env
 fi
@@ -56,6 +87,9 @@ set +a
 
 export TLS_CA_CERT="$ROOT_DIR/scripts/certs/out/ca.pem"
 
+echo "== clean previous runtime stack =="
+force_clean_runtime
+
 echo "== generate local TLS certs =="
 bash scripts/certs/generate.sh
 
@@ -74,13 +108,29 @@ wait_http() {
   return 1
 }
 
+kafka_ssl_config_cmd='cat > /tmp/kafka-client-ssl.properties <<EOF
+security.protocol=SSL
+ssl.truststore.location=/etc/kafka/secrets/kafka.truststore.p12
+ssl.truststore.password=changeit
+ssl.truststore.type=PKCS12
+ssl.endpoint.identification.algorithm=
+EOF'
+
+kafka_topics_tls() {
+  docker compose run --rm --no-deps --entrypoint /bin/sh kafka-init -lc "
+    set -eu
+    $kafka_ssl_config_cmd
+    kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --list
+  "
+}
+
 wait_kafka_topic() {
   local topic="$1"
   local attempts="${2:-60}"
   local sleep_seconds="${3:-2}"
 
   for ((i=1; i<=attempts; i++)); do
-        if docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list 2>/dev/null | grep -qx "$topic"; then
+    if kafka_topics_tls 2>/dev/null | grep -qx "$topic"; then
       return 0
     fi
     sleep "$sleep_seconds"
@@ -119,13 +169,18 @@ echo "== wait for backend/frontend http/https =="
 wait_http "http://127.0.0.1:3001/health" 90 5
 wait_http "https://127.0.0.1:8080/" 90 5
 
-echo "== init kafka topics =="
-docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
-docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+echo "== init kafka topics over TLS =="
+docker compose run --rm --no-deps --entrypoint /bin/sh kafka-init -lc "
+  set -eu
+  $kafka_ssl_config_cmd
 
-echo "== verify kafka topics =="
-docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qx 'secure-voting.compute.tasks'
-docker compose exec -T kafka kafka-topics --bootstrap-server kafka:29092 --list | grep -qx 'secure-voting.compute.results'
+  kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
+  kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+"
+
+echo "== verify kafka topics over TLS =="
+kafka_topics_tls | grep -qx 'secure-voting.compute.tasks'
+kafka_topics_tls | grep -qx 'secure-voting.compute.results'
 
 echo "== wait for kafka topics =="
 wait_kafka_topic secure-voting.compute.tasks 60 2

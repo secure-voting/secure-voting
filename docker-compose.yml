@@ -53,6 +53,9 @@ services:
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
+      - KAFKA_TLS=true
+      - KAFKA_TLS_CA=/certs/ca.pem
+      - KAFKA_TLS_SERVER_NAME=kafka
       - WORKER_POLL_INTERVAL=1s
       
       - BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
@@ -99,10 +102,15 @@ services:
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
       - WORKER_POLL_INTERVAL=1s
+     
       - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-backend-worker
+      - KAFKA_TLS=true
+      - KAFKA_TLS_CA=/certs/ca.pem
+      - KAFKA_TLS_SERVER_NAME=kafka
+
       - REDIS_ADDR=cache:6380
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_TLS=true
@@ -333,6 +341,10 @@ services:
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
       - KAFKA_GROUP_ID=secure-voting-compute-runner
+      - KAFKA_TLS=true
+      - KAFKA_TLS_CA=/certs/ca.pem
+      - KAFKA_TLS_SERVER_NAME=kafka
+
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
       - COMPUTE_GRPC_ADDR=rust-compute:50051
@@ -361,22 +373,43 @@ services:
     networks:
       - kafka_network
     environment:
-      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
-      KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_NODE_ID: "1"
+      KAFKA_LISTENERS: "SSL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "SSL://kafka:29092,PLAINTEXT_HOST://kafka:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "SSL:SSL,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "SSL"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
-      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+
+      KAFKA_SSL_KEYSTORE_FILENAME: "kafka.keystore.p12"
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: "kafka_keystore_creds"
+      KAFKA_SSL_KEY_CREDENTIALS: "kafka_sslkey_creds"
+      KAFKA_SSL_TRUSTSTORE_FILENAME: "kafka.truststore.p12"
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: "kafka_truststore_creds"
+
+      KAFKA_SSL_KEYSTORE_LOCATION: "/etc/kafka/secrets/kafka.keystore.p12"
+      KAFKA_SSL_KEYSTORE_PASSWORD: "changeit"
+      KAFKA_SSL_KEY_PASSWORD: "changeit"
+      KAFKA_SSL_TRUSTSTORE_LOCATION: "/etc/kafka/secrets/kafka.truststore.p12"
+      KAFKA_SSL_TRUSTSTORE_PASSWORD: "changeit"
+
+      KAFKA_SSL_KEYSTORE_TYPE: "PKCS12"
+      KAFKA_SSL_TRUSTSTORE_TYPE: "PKCS12"
+      KAFKA_SSL_CLIENT_AUTH: "none"
+      KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ""
+      KAFKA_SSL_ENABLED_PROTOCOLS: "TLSv1.2,TLSv1.3"
+      KAFKA_SSL_PROTOCOL: "TLSv1.2"
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     volumes:
       - kafka-data:/var/lib/kafka/data
+      - ./scripts/certs/out:/etc/kafka/secrets:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
@@ -395,7 +428,7 @@ services:
         condition: service_healthy
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
     ports:
       - "127.0.0.1:8089:8080"
     networks:
@@ -410,6 +443,8 @@ services:
     container_name: kafka-init
     networks:
       - kafka_network
+    volumes:
+      - ./scripts/certs/out:/etc/kafka/secrets:ro
     depends_on:
       kafka:
         condition: service_healthy
@@ -418,13 +453,30 @@ services:
       - -lc
       - |
           set -eu
-          until kafka-topics --bootstrap-server kafka:29092 --list >/dev/null 2>&1; do
+
+          cat > /tmp/kafka-client-ssl.properties <<'EOF'
+          security.protocol=SSL
+          ssl.truststore.location=/etc/kafka/secrets/kafka.truststore.p12
+          ssl.truststore.password=changeit
+          ssl.truststore.type=PKCS12
+          ssl.endpoint.identification.algorithm=
+          EOF
+
+          echo "waiting for kafka topics api over TLS..."
+
+          until kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --list >/dev/null 2>&1; do
             echo "waiting for kafka topics api..."
             sleep 2
           done
-          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
-          kafka-topics --bootstrap-server kafka:29092 --list | sort
+
+          echo "creating kafka topics..."
+
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --create --if-not-exists --topic secure-voting.compute.tasks --partitions 1 --replication-factor 1
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
+
+          echo "created/listed kafka topics:"
+          kafka-topics --bootstrap-server kafka:29092 --command-config /tmp/kafka-client-ssl.properties --list | sort
+
           echo "kafka-init done"
     restart: "no"
     profiles:

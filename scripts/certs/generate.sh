@@ -72,6 +72,44 @@ gen_server_cert() {
     -out "$pem" -days 3650 -sha256 -extfile "$ext"
 }
 
+gen_kafka_truststore() {
+  rm -f "$OUT/kafka.truststore.p12"
+
+  if command -v keytool >/dev/null 2>&1; then
+    keytool -importcert \
+      -noprompt \
+      -alias secure-voting-dev-ca \
+      -file "$CA_PEM" \
+      -keystore "$OUT/kafka.truststore.p12" \
+      -storetype PKCS12 \
+      -storepass changeit
+
+    chmod 644 "$OUT/kafka.truststore.p12"
+    return
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    docker run --rm \
+      --user "$(id -u):$(id -g)" \
+      -v "$OUT:/work" \
+      eclipse-temurin:21-jre \
+      keytool -importcert \
+        -noprompt \
+        -alias secure-voting-dev-ca \
+        -file /work/ca.pem \
+        -keystore /work/kafka.truststore.p12 \
+        -storetype PKCS12 \
+        -storepass changeit
+
+    chmod 644 "$OUT/kafka.truststore.p12"
+    return
+  fi
+
+  echo "keytool is required to generate Kafka truststore" >&2
+  echo "Install OpenJDK or make Docker available for eclipse-temurin:21-jre" >&2
+  exit 1
+}
+
 FRONTEND_TLS_HOSTS="${FRONTEND_TLS_HOSTS:-localhost,127.0.0.1,ts-frontend}"
 
 gen_ca
@@ -131,15 +169,17 @@ openssl pkcs12 -export \
   -name kafka \
   -passout pass:changeit
 
-openssl pkcs12 -export \
-  -nokeys \
-  -in "$CA_PEM" \
-  -out "$OUT/kafka.truststore.p12" \
-  -passout pass:changeit
+gen_kafka_truststore
 
 echo "changeit" > "$OUT/kafka_keystore_creds"
 echo "changeit" > "$OUT/kafka_sslkey_creds"
 echo "changeit" > "$OUT/kafka_truststore_creds"
+
+chmod 644 "$OUT/kafka.keystore.p12"
+chmod 644 "$OUT/kafka.truststore.p12"
+chmod 644 "$OUT/kafka_keystore_creds"
+chmod 644 "$OUT/kafka_sslkey_creds"
+chmod 644 "$OUT/kafka_truststore_creds"
 
 cat "$OUT/mongo.pem" "$OUT/mongo.key" > "$OUT/mongo.server.pem"
 chmod 600 "$OUT/mongo.server.pem"
