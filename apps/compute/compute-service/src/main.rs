@@ -23,6 +23,7 @@ use crate::{
         compute_server::{Compute, ComputeServer},
         run_chunk::Part,
     },
+    system_metrics::SystemMetricsCollector,
 };
 
 #[allow(clippy::default_trait_access)]
@@ -44,7 +45,9 @@ pub mod securevoting {
 ///
 /// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
 pub mod registry;
+pub mod system_metrics;
 
+/// Helper function to create a response containing an error.
 fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
     RunResult {
         method: String::new(),
@@ -60,8 +63,15 @@ fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult
     }
 }
 
+/// Helper function to create a response containiner the winner,
+/// metrics, protocol steps and timings.
 #[allow(clippy::expect_used)]
-fn create_winner_response(winners: Vec<String>, metrics: Metrics, protocol: Protocol) -> RunResult {
+fn create_winner_response(
+    winners: Vec<String>,
+    metrics: &Metrics,
+    protocol: &Protocol,
+    timings_json: &[u8],
+) -> RunResult {
     let winner_json = format!(
         "[{}]",
         winners
@@ -78,15 +88,17 @@ fn create_winner_response(winners: Vec<String>, metrics: Metrics, protocol: Prot
         status: "done".to_owned(),
         error_text: String::new(),
         winners_json: winner_json.as_bytes().to_vec(),
-        metrics_json: serde_json::to_vec(&metrics).expect("Serialization failed"),
-        protocol_json: serde_json::to_vec(&protocol).expect("Serialization failed"),
-        timings_json: vec![],
+        metrics_json: serde_json::to_vec(metrics).expect("Serialization failed"),
+        protocol_json: serde_json::to_vec(protocol).expect("Serialization failed"),
+        timings_json: timings_json.to_vec(),
         artifacts_json: vec![],
     }
 }
 
+/// Compute service struct.
 #[derive(Debug, Default)]
 struct ComputeService {
+    /// Algorithmic registry.
     registry: Arc<RwLock<Registry>>,
 }
 
@@ -171,15 +183,24 @@ impl Compute for ComputeService {
             )));
         }
 
+        let mut system_metrics = SystemMetricsCollector::new(ballots.len());
+
         #[allow(clippy::expect_used)]
         match self.registry.read().expect("RwLock is poisoned").execute(
             ballots,
             header.tally_rule.as_str(),
             &header.ballot_format,
         ) {
-            Ok(result) => Ok(Response::new(create_winner_response(
-                result.0, result.1, result.2,
-            ))),
+            Ok(result) => {
+                let timings_json =
+                    serde_json::to_vec(&system_metrics.measure()).expect("Serialization failed");
+                Ok(Response::new(create_winner_response(
+                    result.0,
+                    &result.1,
+                    &result.2,
+                    &timings_json,
+                )))
+            }
             Err(AlgorithmError::NoSuchAlgorithm(a)) => Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 format!("No such algorithm: {a}"),
