@@ -13,6 +13,7 @@ pub mod condorcet;
 pub mod copeland;
 pub mod minmax;
 pub mod plurality;
+pub mod scoring;
 pub mod simpson;
 pub mod threshold;
 

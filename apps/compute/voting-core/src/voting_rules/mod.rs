@@ -27,6 +27,7 @@ pub mod nanson;
 pub mod plurality;
 pub mod practical_condorcet;
 pub mod q_paretian;
+pub mod scoring;
 pub mod simpson;
 pub mod threshold;
 

@@ -19,12 +19,10 @@
 // 12. Coombs
 // 13. Inverse Borda
 // 14. Strong q-Paretian Simple Majority
-//
-// TBD:
-//
-// 1. Strong q-Paretian plurality
-// 2. Strongest q-Paretian simple majority
-// 3. Threshold rule
+// 15. Strong q-Paretian plurality
+// 16. Strongest q-Paretian simple majority
+// 17. Threshold rule
+// 18. Score rule
 
 pub use crate::voting_rules::{
     anti_plurality::AntiPluralityRule,
@@ -43,6 +41,7 @@ pub use crate::voting_rules::{
         QParetianStrongPluralityRule, QParetianStrongSimpleMajorityRule,
         QParetianStrongestSimpleMajorityRule,
     },
+    scoring::ScoreRule,
     simpson::SimpsonRule,
 };
 
@@ -66,7 +65,10 @@ pub use crate::voting_rules::adaptors::*;
 pub use crate::{
     election::run_election,
     matrix::{CondorcetMatrix, PairwiseMatrix},
-    models::{candidate_id::CandidateId, profile::Profile},
+    models::{
+        approval::ApprovalBallot, candidate_id::CandidateId, profile::Profile,
+        ranking::RankingBallot, scoring::ScoreBallot,
+    },
     tie_breaker::RuleOutcome,
     voting_rules::{
         elimination::rule::{Elimination, EliminationRuleError},

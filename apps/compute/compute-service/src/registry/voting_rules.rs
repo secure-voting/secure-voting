@@ -223,6 +223,9 @@ impl_algorithm!(
     true,
     false
 );
+impl_algorithm!(
+    ScoreRule, "Score", true, true, true, false, false, true, false
+);
 
 /// Return a registry with all the voting-core
 /// algorithms included for appropriate ballot types.
@@ -256,6 +259,8 @@ pub fn get_core_registry() -> Registry {
         ApprovalRuleWith::<3, FallthroughTieBreaker, ApprovalBallot>::default(),
         BallotType::Approval,
     );
+
+    registry.add(ScoreRule::default(), BallotType::Scoring);
 
     registry
 }
