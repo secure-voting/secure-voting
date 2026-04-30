@@ -7,6 +7,7 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 use crate::models::{
+    BallotData,
     candidate_id::CandidateId,
     profile::{CandidateRemovalError, Profile},
 };
@@ -128,7 +129,7 @@ impl Profile<ApprovalBallot> {
     }
 }
 
-impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<ApprovalBallot> {
+impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ApprovalBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
@@ -139,13 +140,25 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<ApprovalBallot> {
     ///
     /// The order of candidates doesn't matter, all the candidates are 'approved'.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
-        let (value, names) = value;
-        if value.is_empty() {
+    fn try_from(value: (Vec<BallotData>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (ballots, names) = value;
+
+        if ballots.is_empty() {
             return Err(ProfileError::NoVoters);
         }
 
-        if value[0].is_empty() {
+        let mut value: Vec<Vec<usize>> = Vec::with_capacity(ballots.len());
+        for ballot in &ballots {
+            let BallotData::Simple(votes) = ballot else {
+                continue;
+            };
+            if votes.is_empty() {
+                return Err(ProfileError::NoCandidates);
+            }
+            value.push(votes.clone());
+        }
+
+        if value.is_empty() || value[0].is_empty() {
             return Err(ProfileError::NoCandidates);
         }
 

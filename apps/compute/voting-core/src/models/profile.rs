@@ -64,6 +64,7 @@ impl<T> Index<usize> for Profile<T> {
 #[cfg(test)]
 mod tests {
     use crate::models::ranking::{ProfileError, RankingBallot};
+    use crate::models::BallotData;
 
     use super::*;
 
@@ -79,7 +80,9 @@ mod tests {
 
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
 
-        Profile::try_from((votes, names))
+        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+
+        Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example.")
     }
 
@@ -88,7 +91,9 @@ mod tests {
 
         let names: Vec<String> = (0..ballot_len).map(|i| format!("C{i}")).collect();
 
-        Profile::try_from((votes, names))
+        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+
+        Profile::try_from((ballots, names))
     }
 
     #[test]

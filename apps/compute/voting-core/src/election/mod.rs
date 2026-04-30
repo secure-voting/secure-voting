@@ -6,6 +6,7 @@
 use std::error::Error;
 
 use crate::{
+    models::BallotData,
     prelude::{Profile, VotingRuleExec},
     voting_rules::{Metrics, Protocol},
 };
@@ -25,8 +26,8 @@ pub fn run_election<T, VRE: VotingRuleExec<T>>(
 ) -> anyhow::Result<(Vec<String>, Metrics, Protocol)>
 where
     VRE::Error: Error + Send + Sync + 'static,
-    Profile<T>: TryFrom<(Vec<Vec<usize>>, Vec<String>)>,
-    <Profile<T> as TryFrom<(Vec<Vec<usize>>, Vec<String>)>>::Error: Error + Send + Sync + 'static,
+    Profile<T>: TryFrom<(Vec<BallotData>, Vec<String>)>,
+    <Profile<T> as TryFrom<(Vec<BallotData>, Vec<String>)>>::Error: Error + Send + Sync + 'static,
 {
     let mut name_set: Vec<String> = Vec::new();
     for ballot in &ballots {
@@ -38,13 +39,15 @@ where
     }
 
     #[allow(clippy::unwrap_used)]
-    let vote_data: Vec<Vec<usize>> = ballots
+    let vote_data: Vec<BallotData> = ballots
         .iter()
         .map(|ballot| {
-            ballot
-                .iter()
-                .map(|vote| name_set.iter().position(|n| n == vote).unwrap())
-                .collect()
+            BallotData::Simple(
+                ballot
+                    .iter()
+                    .map(|vote| name_set.iter().position(|n| n == vote).unwrap())
+                    .collect(),
+            )
         })
         .collect();
 

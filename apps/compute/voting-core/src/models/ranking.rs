@@ -9,6 +9,7 @@ use thiserror::Error;
 use crate::models::{
     candidate_id::CandidateId,
     profile::{CandidateRemovalError, Profile},
+    BallotData,
 };
 
 /// Ranking ballot type.
@@ -137,12 +138,12 @@ impl Profile<RankingBallot> {
     }
 }
 
-impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
+impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<RankingBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
     ///
-/// - At least one voter
+    /// - At least one voter
     /// - At least one candidate
     /// - All ballots have the same length
     /// - All candidates' IDs are valid
@@ -150,11 +151,26 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
     ///
     /// The order of candidates in each ballot represents the preference of chosen voter.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
-        let (value, names) = value;
+    fn try_from(value: (Vec<BallotData>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (ballots, names) = value;
+
+        if ballots.is_empty() {
+            return Err(ProfileError::NoVoters);
+        }
+
+        let mut value: Vec<Vec<usize>> = Vec::with_capacity(ballots.len());
+        for ballot in &ballots {
+            let BallotData::Simple(votes) = ballot else {
+                continue;
+            };
+            if votes.is_empty() {
+                return Err(ProfileError::NoCandidates);
+            }
+            value.push(votes.clone());
+        }
 
         if value.is_empty() {
-            return Err(ProfileError::NoVoters);
+            return Err(ProfileError::NoCandidates);
         }
 
         if value[0].is_empty() {
