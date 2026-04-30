@@ -56,6 +56,7 @@ impl Scorer<RankingBallot> for PluralityScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::candidate_id::CandidateId;
     use crate::models::BallotData;
     use test_case::test_case;
 
@@ -67,8 +68,18 @@ mod tests {
     fn test_correct_simple_plurality(votes: Vec<Vec<usize>>, answer: &[usize]) {
         let scorer = PluralityScorer;
 
-        let names = vec!["A".into(), "B".into()];
-        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+        let names: Vec<String> = vec!["A".into(), "B".into()];
+        let ballots: Vec<BallotData> = votes
+            .into_iter()
+            .map(|v| {
+                let names_ref = names.clone();
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names_ref[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
 
         let profile = Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example.");
