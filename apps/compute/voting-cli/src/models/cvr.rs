@@ -2,6 +2,7 @@ use std::{collections::HashMap, io};
 
 use thiserror::Error;
 use voting_core::models::{
+    BallotData,
     candidate_id::CandidateId,
     profile::Profile,
     ranking::{ProfileError, RankingBallot},
@@ -107,7 +108,10 @@ impl ProfileParser<RankingBallot> for CVRParser {
             }
         }
 
-        let votes = vote_map.into_values().collect::<Vec<_>>();
+        let votes = vote_map
+            .into_values()
+            .map(BallotData::Simple)
+            .collect::<Vec<_>>();
 
         Ok((
             Profile::try_from((votes, candidate_mapping.keys().cloned().collect()))?,
