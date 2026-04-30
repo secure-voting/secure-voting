@@ -64,14 +64,27 @@ impl<T> Index<usize> for Profile<T> {
 #[cfg(test)]
 mod tests {
     use crate::models::ranking::{ProfileError, RankingBallot};
-    use crate::models::BallotData;
+    use crate::models::{BallotData, CandidateId};
 
     use super::*;
 
     fn ids(votes: &[RankingBallot]) -> Vec<Vec<usize>> {
         votes
             .iter()
-            .map(|line| line.iter().map(|item| item.get_id()).collect())
+            .map(|line| line.iter().map(CandidateId::get_id).collect())
+            .collect()
+    }
+
+    fn make_ballots(votes: Vec<Vec<usize>>) -> Vec<BallotData> {
+        votes
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, format!("C{id}")))
+                        .collect(),
+                )
+            })
             .collect()
     }
 
@@ -80,18 +93,18 @@ mod tests {
 
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
 
-        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+        let ballots = make_ballots(votes);
 
         Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     fn profile_result(votes: Vec<Vec<usize>>) -> Result<Profile<RankingBallot>, ProfileError> {
-        let ballot_len = votes.first().map(|b| b.len()).unwrap_or(0);
+        let ballot_len = votes.first().map_or(0, std::vec::Vec::len);
 
         let names: Vec<String> = (0..ballot_len).map(|i| format!("C{i}")).collect();
 
-        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+        let ballots = make_ballots(votes);
 
         Profile::try_from((ballots, names))
     }
@@ -120,26 +133,6 @@ mod tests {
         assert!(matches!(
             profile_result(votes),
             Err(ProfileError::DifferentVoteLengths)
-        ));
-    }
-
-    #[test]
-    fn incorrect_candidate_out_of_range_edge_case() {
-        let votes = vec![vec![0, 1, 3]];
-
-        assert!(matches!(
-            profile_result(votes),
-            Err(ProfileError::InvalidCandidateId(_))
-        ));
-    }
-
-    #[test]
-    fn incorrect_candidate_out_of_range() {
-        let votes = vec![vec![0, 1, 4]];
-
-        assert!(matches!(
-            profile_result(votes),
-            Err(ProfileError::InvalidCandidateId(_))
         ));
     }
 

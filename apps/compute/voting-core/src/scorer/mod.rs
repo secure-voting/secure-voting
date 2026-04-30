@@ -60,7 +60,7 @@ impl<T> Score<T> {
         let scores = self.score().as_ref();
         debug_assert_eq!(scores.len(), self.candidates.len());
 
-        scores.into_iter().zip(self.candidates.iter())
+        scores.iter().zip(self.candidates.iter())
     }
 }
 

@@ -23,6 +23,7 @@ pub struct ApprovalBallot {
 
 impl ApprovalBallot {
     /// Create a new `ApprovalBallot`.
+    #[must_use]
     pub fn new(votes: &[CandidateId]) -> Self {
         Self {
             votes: votes.to_vec(),
@@ -147,7 +148,7 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ApprovalBallot> {
             return Err(ProfileError::NoVoters);
         }
 
-        let mut value: Vec<Vec<usize>> = Vec::with_capacity(ballots.len());
+        let mut value: Vec<Vec<CandidateId>> = Vec::with_capacity(ballots.len());
         for ballot in &ballots {
             let BallotData::Simple(votes) = ballot else {
                 continue;
@@ -165,27 +166,19 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ApprovalBallot> {
         let mut active_candidates = HashSet::new();
 
         for vote in &value {
-            let mut candidates = vec![0; value[0].len()];
-            for &candidate in vote {
-                if candidates[candidate] != 0 {
-                    return Err(ProfileError::DoubleVote(candidate));
+            let mut seen = HashSet::new();
+            for candidate in vote {
+                if !seen.insert(candidate.clone()) {
+                    return Err(ProfileError::DoubleVote(candidate.get_id()));
                 }
-
-                candidates[candidate] = 1;
-                active_candidates.insert(candidate);
+                active_candidates.insert(candidate.clone());
             }
         }
+
         Ok(Profile {
             votes: value
                 .iter()
-                .map(|voter_info| {
-                    ApprovalBallot::new(
-                        &voter_info
-                            .iter()
-                            .map(|&elem| CandidateId::new(elem, names[elem].clone()))
-                            .collect::<Vec<_>>(),
-                    )
-                })
+                .map(|voter_info| ApprovalBallot::new(voter_info))
                 .collect(),
             active_candidates: (0..value[0].len())
                 .zip(names.iter())

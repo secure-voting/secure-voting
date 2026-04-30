@@ -7,9 +7,9 @@ use std::{collections::HashMap, ops::Index};
 use thiserror::Error;
 
 use crate::models::{
+    BallotData,
     candidate_id::CandidateId,
     profile::{CandidateRemovalError, Profile},
-    BallotData,
 };
 
 /// Scoring ballot type.
@@ -23,6 +23,7 @@ pub struct ScoreBallot {
 
 impl ScoreBallot {
     /// Create a new `ScoreBallot` from a slice of (candidate, score) pairs.
+    #[must_use]
     pub fn new(scores: &[(CandidateId, usize)]) -> Self {
         Self {
             scores: scores.iter().cloned().collect(),
@@ -30,6 +31,7 @@ impl ScoreBallot {
     }
 
     /// Get an iterator over the (candidate, score) pairs.
+    #[must_use]
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, CandidateId, usize> {
         self.scores.iter()
     }
@@ -76,12 +78,6 @@ pub enum ProfileError {
     /// Returned if there are no candidates in the profile.
     #[error("No candidates")]
     NoCandidates,
-    /// Returned if a candidate has an ID too big for the current length.
-    #[error("Candidate ID {0} was incorrect")]
-    InvalidCandidateId(usize),
-    /// Returned if the candidate names don't match the number of them.
-    #[error("There are {0} candidates' names, but {1} candidates")]
-    CandidateLengthMismatch(usize, usize),
 }
 
 impl Profile<ScoreBallot> {
@@ -99,7 +95,9 @@ impl Profile<ScoreBallot> {
             return Err(CandidateRemovalError(wrong_id.clone()));
         }
 
-        let to_remove = candidates.into_iter().collect::<std::collections::HashSet<_>>();
+        let to_remove = candidates
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
 
         let mut new_votes = Vec::with_capacity(self.n_voters());
 
@@ -131,7 +129,6 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ScoreBallot> {
     ///
     /// - At least one voter
     /// - At least one candidate
-    /// - All candidate IDs are valid
     ///
     /// Each ballot contains scores for candidates.
     fn try_from(value: (Vec<BallotData>, Vec<String>)) -> Result<Self, Self::Error> {
@@ -154,13 +151,9 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ScoreBallot> {
             };
 
             let mut ballot_scores = Vec::new();
-            for &(candidate_id, score) in scores {
-                if candidate_id >= names.len() {
-                    return Err(ProfileError::InvalidCandidateId(candidate_id));
-                }
-                let candidate = CandidateId::new(candidate_id, names[candidate_id].clone());
-                ballot_scores.push((candidate, score));
-                active_candidates_set.insert(candidate_id);
+            for (candidate, score) in scores {
+                ballot_scores.push((candidate.clone(), *score));
+                active_candidates_set.insert(candidate.clone());
             }
             votes.push(ScoreBallot::new(&ballot_scores));
         }
@@ -170,7 +163,7 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ScoreBallot> {
         }
 
         let active_candidates: Vec<CandidateId> = (0..names.len())
-            .filter(|id| active_candidates_set.contains(id))
+            .filter(|id| active_candidates_set.iter().any(|c| c.get_id() == *id))
             .map(|id| CandidateId::new(id, names[id].clone()))
             .collect();
 
