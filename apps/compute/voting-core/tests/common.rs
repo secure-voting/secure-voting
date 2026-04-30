@@ -2,7 +2,7 @@ use std::sync::Once;
 
 use ctor::ctor;
 use tracing_subscriber::{EnvFilter, fmt};
-use voting_core::models::{profile::Profile, ranking::RankingBallot};
+use voting_core::models::{profile::Profile, ranking::RankingBallot, BallotData};
 
 pub const MEMPHIS: usize = 0;
 pub const NASHVILLE: usize = 1;
@@ -20,12 +20,12 @@ pub const KNOXVILLE: usize = 3;
     reason = "This is a utility function solely used by tests. Expect here is justified."
 )]
 pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
-    let mut votes = Vec::with_capacity(100);
+    let mut votes = Vec::<BallotData>::with_capacity(100);
 
-    (0..42).for_each(|_| votes.push(vec![MEMPHIS, NASHVILLE, CHATTANOOGA, KNOXVILLE]));
-    (0..26).for_each(|_| votes.push(vec![NASHVILLE, CHATTANOOGA, KNOXVILLE, MEMPHIS]));
-    (0..15).for_each(|_| votes.push(vec![CHATTANOOGA, KNOXVILLE, NASHVILLE, MEMPHIS]));
-    (0..17).for_each(|_| votes.push(vec![KNOXVILLE, CHATTANOOGA, NASHVILLE, MEMPHIS]));
+    (0..42).for_each(|_| votes.push(BallotData::Simple(vec![MEMPHIS, NASHVILLE, CHATTANOOGA, KNOXVILLE])));
+    (0..26).for_each(|_| votes.push(BallotData::Simple(vec![NASHVILLE, CHATTANOOGA, KNOXVILLE, MEMPHIS])));
+    (0..15).for_each(|_| votes.push(BallotData::Simple(vec![CHATTANOOGA, KNOXVILLE, NASHVILLE, MEMPHIS])));
+    (0..17).for_each(|_| votes.push(BallotData::Simple(vec![KNOXVILLE, CHATTANOOGA, NASHVILLE, MEMPHIS])));
 
     Profile::try_from((
         votes,

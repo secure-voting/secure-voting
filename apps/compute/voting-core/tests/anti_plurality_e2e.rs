@@ -1,6 +1,7 @@
 mod common;
 
 use voting_core::{
+    models::BallotData,
     models::candidate_id::CandidateId,
     prelude::{AntiPluralityRule, RuleOutcome, VotingRuleExec},
 };
@@ -26,8 +27,13 @@ fn wiki_tennessee_example() {
 
 #[test]
 fn simple_antiplurality() {
+    let ballots: Vec<BallotData> = vec![
+        BallotData::Simple(vec![0, 2, 1]),
+        BallotData::Simple(vec![0, 1, 2]),
+        BallotData::Simple(vec![2, 0, 1]),
+    ];
     let profile = (
-        vec![vec![0, 2, 1], vec![0, 1, 2], vec![2, 0, 1]],
+        ballots,
         vec!["A".into(), "B".into(), "C".into()],
     )
         .try_into()
@@ -45,8 +51,13 @@ fn simple_antiplurality() {
 
 #[test]
 fn multiple_winners() {
+    let ballots: Vec<BallotData> = vec![
+        BallotData::Simple(vec![0, 2, 1]),
+        BallotData::Simple(vec![0, 1, 2]),
+        BallotData::Simple(vec![2, 1, 0]),
+    ];
     let profile = (
-        vec![vec![0, 2, 1], vec![0, 1, 2], vec![2, 1, 0]],
+        ballots,
         vec!["C0".into(), "C1".into(), "C2".into()],
     )
         .try_into()
