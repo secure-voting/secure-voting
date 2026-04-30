@@ -35,7 +35,7 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
             nashville.clone(),
             chattanooga.clone(),
             knoxville.clone(),
-        ]))
+        ]));
     });
     (0..26).for_each(|_| {
         votes.push(BallotData::Simple(vec![
@@ -43,7 +43,7 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
             chattanooga.clone(),
             knoxville.clone(),
             memphis.clone(),
-        ]))
+        ]));
     });
     (0..15).for_each(|_| {
         votes.push(BallotData::Simple(vec![
@@ -51,7 +51,7 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
             knoxville.clone(),
             nashville.clone(),
             memphis.clone(),
-        ]))
+        ]));
     });
     (0..17).for_each(|_| {
         votes.push(BallotData::Simple(vec![
@@ -59,7 +59,7 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
             chattanooga.clone(),
             nashville.clone(),
             memphis.clone(),
-        ]))
+        ]));
     });
 
     Profile::try_from((
