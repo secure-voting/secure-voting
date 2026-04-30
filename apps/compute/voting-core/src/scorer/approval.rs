@@ -109,12 +109,14 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::BallotData;
     use test_case::test_case;
 
     fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
 
-        Profile::try_from((votes, names))
+        Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test examples.")
     }
 

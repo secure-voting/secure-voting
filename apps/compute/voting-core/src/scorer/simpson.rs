@@ -54,11 +54,13 @@ impl Scorer<RankingBallot> for SimpsonScorer {
 mod tests {
     use super::*;
     use crate::models::profile::Profile;
+    use crate::models::BallotData;
 
     fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
 
-        Profile::try_from((votes, names))
+        Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example.")
     }
     #[test]

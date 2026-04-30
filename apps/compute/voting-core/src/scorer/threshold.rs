@@ -72,6 +72,7 @@ impl Scorer<RankingBallot> for ThresholdScorer<RankingBallot> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::BallotData;
     use test_case::test_case;
 
     #[test_case(
@@ -85,8 +86,9 @@ mod tests {
 )]
     fn correct_threshold_ranking(votes: Vec<Vec<usize>>, answer: &[Vec<usize>]) {
         let names = vec!["A".into(), "B".into(), "C".into(), "D".into()];
+        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
 
-        let profile = Profile::try_from((votes, names))
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test examples.");
 
         assert_eq!(
