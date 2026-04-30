@@ -98,6 +98,7 @@ impl<R: VotingRuleExec<Ballot>, Ballot> Default for RequireUnique<R, Ballot> {
 mod tests {
     use super::*;
     use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
+    use crate::models::BallotData;
     use mockall::mock;
 
     mock! {
@@ -114,8 +115,9 @@ mod tests {
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![0, 2, 1])];
         Profile::try_from((
-            vec![vec![0, 2, 1]],
+            ballots,
             vec!["A".into(), "B".into(), "C".into()],
         ))
         .expect("Profile is constructed incorrectly, revise test example.")

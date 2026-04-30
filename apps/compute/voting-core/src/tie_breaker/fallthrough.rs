@@ -38,11 +38,13 @@ impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
 #[cfg(test)]
 mod tests {
     use crate::models::ranking::RankingBallot;
+    use crate::models::BallotData;
 
     use super::*;
 
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from((vec![vec![0]], vec!["A".into()]))
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![0])];
+        Profile::try_from((ballots, vec!["A".into()]))
             .expect("Profile is constructed incorrectly, revise test example.")
     }
 

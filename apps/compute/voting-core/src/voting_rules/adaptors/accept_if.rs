@@ -91,6 +91,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
+    use crate::models::BallotData;
 
     use super::*;
     use mockall::mock;
@@ -109,8 +110,9 @@ mod tests {
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![0, 2, 1])];
         Profile::try_from((
-            vec![vec![0, 2, 1]],
+            ballots,
             vec!["A".into(), "B".into(), "C".into()],
         ))
         .expect("Profile is constructed incorrectly, revise test example.")

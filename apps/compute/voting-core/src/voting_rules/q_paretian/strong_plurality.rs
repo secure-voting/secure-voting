@@ -141,6 +141,7 @@ impl<const LIMIT: usize> Default for SimplePluralityRule<LIMIT> {
 #[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
+    use crate::models::BallotData;
     use crate::prelude::CandidateId;
 
     use super::*;
@@ -150,7 +151,8 @@ mod tests {
     #[test_case(vec![vec![1, 0, 2]], vec!["A".into(), "B".into(), "C".into()], (1, "B"); "degenerate majority")]
     #[test_case(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], vec!["A".into(), "B".into(), "C".into()], (0, "A"); "unanimous winner")]
     fn unique_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winner: (usize, &str)) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters.into_iter().map(BallotData::Simple).collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimplePluralityRule::<30>
@@ -183,7 +185,8 @@ mod tests {
         "early q=2 detection"
     )]
     fn multiple_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winners: Vec<(usize, &str)>) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters.into_iter().map(BallotData::Simple).collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimplePluralityRule::<30>
@@ -205,8 +208,9 @@ mod tests {
     fn combinatorial_explosion_filter() {
         let voters = vec![vec![0, 1, 2]; 40];
         let names = vec!["A".into(), "B".into(), "C".into()];
+        let ballots: Vec<BallotData> = voters.into_iter().map(BallotData::Simple).collect();
 
-        let profile = Profile::try_from((voters, names))
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise test example");
 
         let result = SimplePluralityRule::<30>.execute(&profile);
