@@ -2,6 +2,8 @@
 //!
 //! This module defines the trait [`VotingRuleExec`] and pre-defined voting rule implementations.
 
+#![allow(clippy::cast_precision_loss)]
+
 use std::fmt::Debug;
 
 use bon::Builder;
@@ -60,7 +62,7 @@ pub struct Numeric {
     pub runner_up_score: f64,
     /// Margin between winner and runner-up.
     pub margin: f64,
-    /// Normalized margin (margin / total_ballots).
+    /// Normalized margin (`margin` / `total_ballots`).
     pub normalized_margin: f64,
     /// Average score across candidates.
     pub average_score: f64,
@@ -158,6 +160,7 @@ pub struct Final {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, Builder)]
+#[allow(clippy::struct_field_names)]
 /// Individual step in the voting protocol.
 pub struct Step {
     /// Step number.
@@ -172,10 +175,13 @@ pub struct Step {
     /// Selected candidate IDs in this step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     selected_candidate_ids: Option<Vec<String>>,
+    /// Eliminated candidate IDs in this step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     eliminated_candidate_ids: Option<Vec<String>>,
+    /// Scores of the candidates after the current step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     scores: Option<Vec<Score>>,
+    /// Optional notes on the round.
     note: Option<String>,
 }
 
@@ -205,7 +211,7 @@ impl Step {
 
     /// Set the action description for this step.
     pub fn set_action(&mut self, action: &str) {
-        self.action = action.to_owned();
+        action.clone_into(&mut self.action);
     }
 }
 

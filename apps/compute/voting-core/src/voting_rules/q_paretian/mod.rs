@@ -101,7 +101,7 @@ pub fn build_pos(profile: &Profile<RankingBallot>) -> PositionMatrix {
     for i in 0..n {
         for (p, a) in profile[i].iter().enumerate() {
             pos[i][profile
-                .index_of(&a)
+                .index_of(a)
                 .expect("Ballot contains invalidated voter")] = p;
         }
     }

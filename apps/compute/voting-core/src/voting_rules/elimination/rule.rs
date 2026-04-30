@@ -16,8 +16,7 @@ use crate::{
     scorer::Scorer,
     tie_breaker::{RuleOutcome, TieBreaker},
     voting_rules::{
-        Final, Kind, Metrics, Protocol, RoundSize, Series, Step, Summary, ToScore,
-        VotingRuleExec,
+        Final, Kind, Metrics, Protocol, RoundSize, Series, Step, Summary, ToScore, VotingRuleExec,
         elimination::{criterion::EliminationCriterion, stop::EliminationStopCondition},
     },
 };
@@ -83,7 +82,7 @@ where
     TieBreakError(TE),
 }
 
-impl<'a, U, S, E, D, T, Stop> VotingRuleExec<RankingBallot>
+impl<U, S, E, D, T, Stop> VotingRuleExec<RankingBallot>
     for Elimination<S, E, D, T, RankingBallot, Stop, U>
 where
     S: Scorer<RankingBallot, Output = D::Input>,
@@ -92,7 +91,7 @@ where
     T: TieBreaker<RankingBallot>,
     Stop: EliminationStopCondition<S::Output, RankingBallot>,
     <D as Decider>::Input: AsRef<[U]>,
-    U: 'a + ToScore,
+    U: ToScore,
 {
     type Error = EliminationRuleError<S::Error, D::Error, T::Error, CandidateRemovalError>;
 
@@ -138,7 +137,9 @@ where
                 .scores(
                     scores
                         .iter()
-                        .map(|(score, cand)| score.to_score(cand.to_string(), cand.get_name().to_owned()))
+                        .map(|(score, cand)| {
+                            score.to_score(cand.to_string(), cand.get_name().to_owned())
+                        })
                         .collect(),
                 )
                 .build();
@@ -207,7 +208,11 @@ where
                     .steps(steps.clone())
                     .r#final(Final::builder().winner_ids(vec![]).build())
                     .build();
-                let summary = summary.winner_count(0).rounds_count(steps.len()).tie_detected(false).build();
+                let summary = summary
+                    .winner_count(0)
+                    .rounds_count(steps.len())
+                    .tie_detected(false)
+                    .build();
                 let metrics = Metrics::builder()
                     .summary(summary)
                     .series(
@@ -249,7 +254,11 @@ where
                             .build(),
                     )
                     .build();
-                let summary = summary.winner_count(1).rounds_count(steps.len()).tie_detected(false).build();
+                let summary = summary
+                    .winner_count(1)
+                    .rounds_count(steps.len())
+                    .tie_detected(false)
+                    .build();
                 let metrics = Metrics::builder()
                     .summary(summary)
                     .series(
@@ -282,7 +291,7 @@ where
     }
 }
 
-impl<'a, S, E, D, T, Ballot, Stop, U> Default for Elimination<S, E, D, T, Ballot, Stop, U>
+impl<S, E, D, T, Ballot, Stop, U> Default for Elimination<S, E, D, T, Ballot, Stop, U>
 where
     S: Scorer<Ballot, Output = D::Input>,
     E: EliminationCriterion<Score = S::Output>,
@@ -290,7 +299,7 @@ where
     T: TieBreaker<Ballot>,
     Stop: EliminationStopCondition<S::Output, Ballot>,
     <D as Decider>::Input: AsRef<[U]>,
-    U: 'a + ToScore,
+    U: ToScore,
 {
     fn default() -> Self {
         Self {
