@@ -76,10 +76,6 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
-        if n_candidates != Q {
-            return Err(ApprovalScorerError);
-        }
-
         // The unwrap is used on a get_candidate_id return value,
         // which is called with a profile-related value, so is safe.
         #[allow(clippy::unwrap_used)]
@@ -89,7 +85,9 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
                 .map(|i| {
                     let mut tmp = vec![0; n_candidates];
 
-                    (0..Q).for_each(|x| tmp[profile.index_of(&profile[i][x]).unwrap()] = 1);
+                    for candidate in profile[i].iter() {
+                        tmp[profile.index_of(candidate).unwrap()] = 1;
+                    }
 
                     tmp
                 })
@@ -109,8 +107,8 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::candidate_id::CandidateId;
     use crate::models::BallotData;
+    use crate::models::candidate_id::CandidateId;
     use test_case::test_case;
 
     fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {

@@ -180,9 +180,9 @@ impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ApprovalBallot> {
                 .iter()
                 .map(|voter_info| ApprovalBallot::new(voter_info))
                 .collect(),
-            active_candidates: (0..value[0].len())
+            active_candidates: (0..names.len())
                 .zip(names.iter())
-                .map(|(id, name)| CandidateId::new(id, name))
+                .map(|(id, name)| CandidateId::new(id, name.clone()))
                 .collect(),
         })
     }
