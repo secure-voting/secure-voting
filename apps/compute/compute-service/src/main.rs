@@ -7,12 +7,14 @@
 #![warn(clippy::missing_docs_in_private_items)]
 #![forbid(unsafe_code)]
 
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
 };
+use voting_core::models::{BallotData, candidate_id::CandidateId};
 use voting_core::voting_rules::{Metrics, Protocol};
 
 use crate::{
@@ -102,6 +104,7 @@ struct ComputeService {
     registry: Arc<RwLock<Registry>>,
 }
 
+#[allow(clippy::cast_sign_loss)]
 #[tonic::async_trait]
 impl Compute for ComputeService {
     async fn run(
@@ -148,6 +151,15 @@ impl Compute for ComputeService {
             )));
         };
 
+        let candidate_map: HashMap<&str, usize> = header
+            .candidates
+            .iter()
+            .enumerate()
+            .map(|(i, c)| (c.name.as_str(), i))
+            .collect();
+
+        let names: Vec<String> = header.candidates.iter().map(|c| c.name.clone()).collect();
+
         let mut ballots = vec![];
 
         for batch in ballot_batch {
@@ -161,22 +173,52 @@ impl Compute for ComputeService {
 
                 match ballot_payload {
                     Payload::Ranking(ranking_ballot) => {
-                        ballots.push(ranking_ballot.ranking);
+                        let ranked: Vec<CandidateId> = ranking_ballot
+                            .ranking
+                            .iter()
+                            .filter_map(|name| {
+                                candidate_map
+                                    .get(name.as_str())
+                                    .map(|&idx| CandidateId::new(idx, name.clone()))
+                            })
+                            .collect();
+                        ballots.push(BallotData::Simple(ranked));
                     }
                     Payload::Approval(approval_ballot) => {
-                        ballots.push(approval_ballot.approvals);
+                        let approved: Vec<CandidateId> = approval_ballot
+                            .approvals
+                            .iter()
+                            .filter_map(|name| {
+                                candidate_map
+                                    .get(name.as_str())
+                                    .map(|&idx| CandidateId::new(idx, name.clone()))
+                            })
+                            .collect();
+                        ballots.push(BallotData::Simple(approved));
                     }
-                    Payload::Score(_) => {
-                        return Ok(Response::new(create_error_type(
-                            tonic::Code::Unimplemented,
-                            "not yet supported",
-                        )));
+                    Payload::Score(score_ballot) => {
+                        let scores: Vec<(CandidateId, usize)> = score_ballot
+                            .scores
+                            .iter()
+                            .filter_map(|entry| {
+                                candidate_map.get(entry.candidate_id.as_str()).map(|&idx| {
+                                    (
+                                        CandidateId::new(idx, entry.candidate_id.clone()),
+                                        entry.value as usize,
+                                    )
+                                })
+                            })
+                            .collect();
+                        ballots.push(BallotData::Scoring(scores));
                     }
                 }
             }
         }
 
-        if header.ballot_format != "ranking" && header.ballot_format != "approval" {
+        if header.ballot_format != "ranking"
+            && header.ballot_format != "approval"
+            && header.ballot_format != "scoring"
+        {
             return Ok(Response::new(create_error_type(
                 tonic::Code::Unimplemented,
                 "not yet supported",
@@ -188,6 +230,7 @@ impl Compute for ComputeService {
         #[allow(clippy::expect_used)]
         match self.registry.read().expect("RwLock is poisoned").execute(
             ballots,
+            names,
             header.tally_rule.as_str(),
             &header.ballot_format,
         ) {
