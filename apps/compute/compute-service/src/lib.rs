@@ -97,6 +97,7 @@ pub fn create_winner_response(
 ///
 /// Returns an error if the payload of the ballot is empty.
 #[allow(clippy::cast_sign_loss)]
+#[allow(clippy::implicit_hasher)]
 pub fn parse_ballots(
     batches: &[BallotBatch],
     candidate_map: &HashMap<&str, usize>,
