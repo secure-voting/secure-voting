@@ -66,9 +66,9 @@ impl ProfileParser<RankingBallot> for CVRParser {
             .map(Option::unwrap)
             .collect::<Vec<_>>();
 
-        let mut candidate_mapping: HashMap<String, usize> = HashMap::new();
+        let mut candidate_mapping: HashMap<String, CandidateId> = HashMap::new();
         let mut reverse_map: HashMap<CandidateId, String> = HashMap::new();
-        let mut vote_map: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut vote_map: HashMap<String, Vec<CandidateId>> = HashMap::new();
         let mut new_cand_id = 0;
 
         for record in rdr.records() {
@@ -89,20 +89,18 @@ impl ProfileParser<RankingBallot> for CVRParser {
                     }
 
                     if !candidate_mapping.contains_key(&choice) {
-                        candidate_mapping.insert(choice.clone(), new_cand_id);
-                        reverse_map.insert(
-                            CandidateId::new(new_cand_id, choice.clone()),
-                            choice.clone(),
-                        );
+                        let cand_id = CandidateId::new(new_cand_id, choice.clone());
+                        reverse_map.insert(cand_id.clone(), choice.clone());
+                        candidate_mapping.insert(choice.clone(), cand_id);
                         new_cand_id += 1;
                     }
 
                     let vec = vote_map.entry(ballot_id.to_owned()).or_default();
                     while vec.len() <= rank {
-                        vec.push(0);
+                        vec.push(CandidateId::new(0, ""));
                     }
 
-                    vec[rank] = candidate_mapping[&choice];
+                    vec[rank] = candidate_mapping[&choice].clone();
                 }
                 Err(e) => return Err(e.into()),
             }
@@ -113,8 +111,10 @@ impl ProfileParser<RankingBallot> for CVRParser {
             .map(BallotData::Simple)
             .collect::<Vec<_>>();
 
+        let names: Vec<String> = reverse_map.values().cloned().collect();
+
         Ok((
-            Profile::try_from((votes, candidate_mapping.keys().cloned().collect()))?,
+            Profile::try_from((votes, names))?,
             reverse_map,
         ))
     }
