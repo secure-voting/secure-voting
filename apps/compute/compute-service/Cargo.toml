@@ -19,6 +19,10 @@ version = "0.1.0"
 
 build = "src/build.rs"
 
+[[bin]]
+name = "compute-service"
+path = "src/main.rs"
+
 [dependencies]
 prost = "0.14.3"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }

@@ -7,216 +7,27 @@
 #![warn(clippy::missing_docs_in_private_items)]
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
 };
-use voting_core::models::{BallotData, candidate_id::CandidateId};
-use voting_core::voting_rules::{Metrics, Protocol};
 
-use crate::securevoting::compute::v1::{BallotBatch, RunHeader};
-use crate::{
-    registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
-    securevoting::compute::v1::{
-        ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
-        ballot::Payload,
-        compute_server::{Compute, ComputeServer},
-        run_chunk::Part,
-    },
-    system_metrics::SystemMetricsCollector,
+use compute_service::registry::voting_rules::get_core_registry;
+use compute_service::registry::Registry;
+use compute_service::securevoting::compute::v1::{
+    ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
+    compute_server::{Compute, ComputeServer},
+    run_chunk::Part,
 };
-
-#[allow(clippy::default_trait_access)]
-#[allow(clippy::doc_markdown)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::struct_excessive_bools)]
-#[allow(clippy::too_many_lines)]
-/// Generated proto-structs.
-pub mod securevoting {
-    #[allow(missing_docs)]
-    pub mod compute {
-        pub mod v1 {
-            tonic::include_proto!("securevoting.compute.v1");
-        }
-    }
-}
-
-/// Registry module.
-///
-/// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
-pub mod registry;
-pub mod system_metrics;
-
-/// Helper function to create a response containing an error.
-fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
-    RunResult {
-        method: String::new(),
-        params_json: vec![],
-
-        status: "error".to_owned(),
-        error_text: format!("ErrorCode: {code}, details: {}", message.into()),
-        winners_json: vec![],
-        metrics_json: vec![],
-        protocol_json: vec![],
-        timings_json: vec![],
-        artifacts_json: vec![],
-    }
-}
-
-/// Helper function to create a response containiner the winner,
-/// metrics, protocol steps and timings.
-#[allow(clippy::expect_used)]
-fn create_winner_response(
-    winners: Vec<String>,
-    metrics: &Metrics,
-    protocol: &Protocol,
-    timings_json: &[u8],
-) -> RunResult {
-    let winner_json = format!(
-        "[{}]",
-        winners
-            .into_iter()
-            .map(|x| format!("\"{x}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-
-    RunResult {
-        method: String::new(),
-        params_json: vec![],
-
-        status: "done".to_owned(),
-        error_text: String::new(),
-        winners_json: winner_json.as_bytes().to_vec(),
-        metrics_json: serde_json::to_vec(metrics).expect("Serialization failed"),
-        protocol_json: serde_json::to_vec(protocol).expect("Serialization failed"),
-        timings_json: timings_json.to_vec(),
-        artifacts_json: vec![],
-    }
-}
+use compute_service::{create_error_type, process_request};
 
 /// Compute service struct.
 #[derive(Debug, Default)]
 struct ComputeService {
     /// Algorithmic registry.
     registry: Arc<RwLock<Registry>>,
-}
-
-#[allow(clippy::cast_sign_loss)]
-/// Parse the ballot stream into `BallotData`.
-fn parse_ballots(
-    batches: &[BallotBatch],
-    candidate_map: &HashMap<&str, usize>,
-) -> Result<Vec<BallotData>, String> {
-    let mut ballots = vec![];
-
-    for batch in batches {
-        for ballot in &batch.ballots {
-            let Some(ballot_payload) = ballot.payload.clone() else {
-                return Err("empty ballot paylod".into());
-            };
-
-            match ballot_payload {
-                Payload::Ranking(ranking_ballot) => {
-                    let ranked: Vec<CandidateId> = ranking_ballot
-                        .ranking
-                        .iter()
-                        .filter_map(|name| {
-                            candidate_map
-                                .get(name.as_str())
-                                .map(|&idx| CandidateId::new(idx, name.clone()))
-                        })
-                        .collect();
-                    ballots.push(BallotData::Simple(ranked));
-                }
-                Payload::Approval(approval_ballot) => {
-                    let approved: Vec<CandidateId> = approval_ballot
-                        .approvals
-                        .iter()
-                        .filter_map(|name| {
-                            candidate_map
-                                .get(name.as_str())
-                                .map(|&idx| CandidateId::new(idx, name.clone()))
-                        })
-                        .collect();
-                    ballots.push(BallotData::Simple(approved));
-                }
-                Payload::Score(score_ballot) => {
-                    let scores: Vec<(CandidateId, usize)> = score_ballot
-                        .scores
-                        .iter()
-                        .filter_map(|entry| {
-                            candidate_map.get(entry.candidate_id.as_str()).map(|&idx| {
-                                (
-                                    CandidateId::new(idx, entry.candidate_id.clone()),
-                                    entry.value as usize,
-                                )
-                            })
-                        })
-                        .collect();
-                    ballots.push(BallotData::Scoring(scores));
-                }
-            }
-        }
-    }
-
-    Ok(ballots)
-}
-
-/// Form a response based on the header, ballot batches and the registry state of the service.
-fn process_request(header: &RunHeader, batches: &[BallotBatch], registry: &Registry) -> RunResult {
-    let candidate_map: HashMap<&str, usize> = header
-        .candidates
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.name.as_str(), i))
-        .collect();
-
-    let names: Vec<String> = header.candidates.iter().map(|c| c.name.clone()).collect();
-
-    let ballots = match parse_ballots(batches, &candidate_map) {
-        Ok(ballots) => ballots,
-        Err(e) => return create_error_type(tonic::Code::InvalidArgument, e),
-    };
-
-    if header.ballot_format != "ranking"
-        && header.ballot_format != "approval"
-        && header.ballot_format != "scoring"
-    {
-        return create_error_type(tonic::Code::Unimplemented, "not yet supported");
-    }
-
-    let mut system_metrics = SystemMetricsCollector::new(ballots.len());
-
-    #[allow(clippy::expect_used)]
-    match registry.execute(
-        ballots,
-        names,
-        header.tally_rule.as_str(),
-        &header.ballot_format,
-    ) {
-        Ok(result) => {
-            let timings_json =
-                serde_json::to_vec(&system_metrics.measure()).expect("Serialization failed");
-            create_winner_response(result.0, &result.1, &result.2, &timings_json)
-        }
-        Err(AlgorithmError::NoSuchAlgorithm(a)) => create_error_type(
-            tonic::Code::Unimplemented,
-            format!("No such algorithm: {a}"),
-        ),
-        Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => {
-            create_error_type(tonic::Code::InvalidArgument, e)
-        }
-        Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
-            create_error_type(
-                tonic::Code::InvalidArgument,
-                format!("Algorithm {algorithm} does not support ballot type {ballot}"),
-            )
-        }
-    }
 }
 
 #[allow(clippy::cast_sign_loss)]
