@@ -28,9 +28,9 @@ fn wiki_tennessee_example() {
 #[test]
 fn simple_antiplurality() {
     let ballots: Vec<BallotData> = vec![
-        BallotData::Simple(vec![0, 2, 1]),
-        BallotData::Simple(vec![0, 1, 2]),
-        BallotData::Simple(vec![2, 0, 1]),
+        BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(2, "C"), CandidateId::new(1, "B")]),
+        BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B"), CandidateId::new(2, "C")]),
+        BallotData::Simple(vec![CandidateId::new(2, "C"), CandidateId::new(0, "A"), CandidateId::new(1, "B")]),
     ];
     let profile = (
         ballots,
@@ -52,9 +52,9 @@ fn simple_antiplurality() {
 #[test]
 fn multiple_winners() {
     let ballots: Vec<BallotData> = vec![
-        BallotData::Simple(vec![0, 2, 1]),
-        BallotData::Simple(vec![0, 1, 2]),
-        BallotData::Simple(vec![2, 1, 0]),
+        BallotData::Simple(vec![CandidateId::new(0, "C0"), CandidateId::new(2, "C2"), CandidateId::new(1, "C1")]),
+        BallotData::Simple(vec![CandidateId::new(0, "C0"), CandidateId::new(1, "C1"), CandidateId::new(2, "C2")]),
+        BallotData::Simple(vec![CandidateId::new(2, "C2"), CandidateId::new(1, "C1"), CandidateId::new(0, "C0")]),
     ];
     let profile = (
         ballots,

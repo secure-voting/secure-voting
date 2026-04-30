@@ -143,7 +143,10 @@ mod tests {
         }
     }
     fn fake_profile() -> Profile<RankingBallot> {
-        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![0, 1])];
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![
+            CandidateId::new(0, "A"),
+            CandidateId::new(1, "B"),
+        ])];
         Profile::try_from((ballots, vec!["A".into(), "B".into()]))
             .expect("Profile is constructed incorrectly, revise test example")
     }

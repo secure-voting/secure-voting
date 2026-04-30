@@ -22,8 +22,8 @@ fn wiki_tennessee_example() {
 fn simple_plurality() {
     let profile = (
         vec![
-            BallotData::Simple(vec![0, 1, 2]),
-            BallotData::Simple(vec![0, 2, 1]),
+            BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B"), CandidateId::new(2, "C")]),
+            BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(2, "C"), CandidateId::new(1, "B")]),
         ],
         vec!["A".into(), "B".into(), "C".into()],
     )
@@ -44,10 +44,10 @@ fn simple_plurality() {
 fn multiple_winners() {
     let profile = (
         vec![
-            BallotData::Simple(vec![0, 1, 2]),
-            BallotData::Simple(vec![0, 2, 1]),
-            BallotData::Simple(vec![1, 0, 2]),
-            BallotData::Simple(vec![1, 2, 0]),
+            BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(1, "B"), CandidateId::new(2, "C")]),
+            BallotData::Simple(vec![CandidateId::new(0, "A"), CandidateId::new(2, "C"), CandidateId::new(1, "B")]),
+            BallotData::Simple(vec![CandidateId::new(1, "B"), CandidateId::new(0, "A"), CandidateId::new(2, "C")]),
+            BallotData::Simple(vec![CandidateId::new(1, "B"), CandidateId::new(2, "C"), CandidateId::new(0, "A")]),
         ],
         vec!["A".into(), "B".into(), "C".into()],
     )

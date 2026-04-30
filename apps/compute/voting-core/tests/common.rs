@@ -2,7 +2,9 @@ use std::sync::Once;
 
 use ctor::ctor;
 use tracing_subscriber::{EnvFilter, fmt};
-use voting_core::models::{profile::Profile, ranking::RankingBallot, BallotData};
+use voting_core::models::{
+    BallotData, candidate_id::CandidateId, profile::Profile, ranking::RankingBallot,
+};
 
 pub const MEMPHIS: usize = 0;
 pub const NASHVILLE: usize = 1;
@@ -20,12 +22,45 @@ pub const KNOXVILLE: usize = 3;
     reason = "This is a utility function solely used by tests. Expect here is justified."
 )]
 pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
+    let memphis = CandidateId::new(MEMPHIS, "MEMPHIS");
+    let nashville = CandidateId::new(NASHVILLE, "NASHVILLE");
+    let chattanooga = CandidateId::new(CHATTANOOGA, "CHATTANOOGA");
+    let knoxville = CandidateId::new(KNOXVILLE, "KNOXVILLE");
+
     let mut votes = Vec::<BallotData>::with_capacity(100);
 
-    (0..42).for_each(|_| votes.push(BallotData::Simple(vec![MEMPHIS, NASHVILLE, CHATTANOOGA, KNOXVILLE])));
-    (0..26).for_each(|_| votes.push(BallotData::Simple(vec![NASHVILLE, CHATTANOOGA, KNOXVILLE, MEMPHIS])));
-    (0..15).for_each(|_| votes.push(BallotData::Simple(vec![CHATTANOOGA, KNOXVILLE, NASHVILLE, MEMPHIS])));
-    (0..17).for_each(|_| votes.push(BallotData::Simple(vec![KNOXVILLE, CHATTANOOGA, NASHVILLE, MEMPHIS])));
+    (0..42).for_each(|_| {
+        votes.push(BallotData::Simple(vec![
+            memphis.clone(),
+            nashville.clone(),
+            chattanooga.clone(),
+            knoxville.clone(),
+        ]))
+    });
+    (0..26).for_each(|_| {
+        votes.push(BallotData::Simple(vec![
+            nashville.clone(),
+            chattanooga.clone(),
+            knoxville.clone(),
+            memphis.clone(),
+        ]))
+    });
+    (0..15).for_each(|_| {
+        votes.push(BallotData::Simple(vec![
+            chattanooga.clone(),
+            knoxville.clone(),
+            nashville.clone(),
+            memphis.clone(),
+        ]))
+    });
+    (0..17).for_each(|_| {
+        votes.push(BallotData::Simple(vec![
+            knoxville.clone(),
+            chattanooga.clone(),
+            nashville.clone(),
+            memphis.clone(),
+        ]))
+    });
 
     Profile::try_from((
         votes,

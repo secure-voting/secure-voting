@@ -64,7 +64,16 @@ mod tests {
             .map(|(i, name)| CandidateId::new(i, name))
             .collect();
 
-        let ballots: Vec<BallotData> = votes.into_iter().map(BallotData::Simple).collect();
+        let ballots: Vec<BallotData> = votes
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, format!("C{id}")))
+                        .collect(),
+                )
+            })
+            .collect();
         let profile = Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example");
 

@@ -90,9 +90,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
-    use crate::models::BallotData;
-
+    use crate::models::{candidate_id::CandidateId, ranking::RankingBallot, BallotData};
+    use crate::tie_breaker::RuleOutcome;
+    use crate::voting_rules::{Metrics, Protocol, VotingRuleExec};
+    use crate::models::profile::Profile;
     use super::*;
     use mockall::mock;
 
@@ -110,7 +111,11 @@ mod tests {
     }
 
     fn fake_profile() -> Profile<RankingBallot> {
-        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![0, 2, 1])];
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![
+            CandidateId::new(0, "A"),
+            CandidateId::new(2, "C"),
+            CandidateId::new(1, "B"),
+        ])];
         Profile::try_from((
             ballots,
             vec!["A".into(), "B".into(), "C".into()],
