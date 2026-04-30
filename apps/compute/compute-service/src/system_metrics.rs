@@ -24,10 +24,15 @@ pub struct SystemMetrics {
 
 /// Collector for system metrics, to be created per request.
 pub struct SystemMetricsCollector {
+    /// sysinfo's System, responsible for taking measurements of various system metrics.
     system: System,
+    /// Initial memory usage before algorithm execution.
     memory_start: u64,
+    /// Initial cpu usage before algorithm execution.
     cpu_start: f32,
+    /// Starting time of the execution.
     start_time: Instant,
+    /// Ballot count of the profile.
     ballots_count: usize,
 }
 
@@ -75,6 +80,8 @@ impl SystemMetricsCollector {
     ///
     /// Panics if the process cannot be found.
     #[allow(clippy::expect_used)]
+    #[allow(clippy::cast_precision_loss)]
+    #[allow(clippy::cast_possible_truncation)]
     #[must_use]
     pub fn measure(&mut self) -> SystemMetrics {
         self.system.refresh_processes_specifics(
