@@ -47,11 +47,12 @@ type AuthResult struct {
 }
 
 type EmailVerificationRequestResult struct {
-	OK                bool   `json:"ok"`
-	AlreadyVerified   bool   `json:"already_verified"`
-	ExpiresAt         string `json:"expires_at,omitempty"`
-	VerificationToken string `json:"verification_token,omitempty"`
-	VerificationURL   string `json:"verification_url,omitempty"`
+	OK               bool   `json:"ok"`
+	AlreadyVerified  bool   `json:"already_verified"`
+	Delivery         string `json:"delivery,omitempty"`
+	ExpiresAt        string `json:"expires_at,omitempty"`
+	MaxAttempts      int    `json:"max_attempts,omitempty"`
+	VerificationCode string `json:"verification_code,omitempty"`
 }
 
 type RegisterInput struct {

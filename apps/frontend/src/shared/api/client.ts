@@ -30,6 +30,7 @@ import type {
   ScoreEntry,
   ProtocolStep,
   ExperimentRunResultResp,
+  EmailVerificationRequestResult,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -271,6 +272,30 @@ export const api = {
           }),
         },
         token
+      );
+    },
+
+    async requestEmailVerification(token: string) {
+      return await request<EmailVerificationRequestResult>(
+        "/api/v1/auth/email/verification/request",
+        {
+          method: "POST",
+          body: "{}",
+        },
+        token
+      );
+    },
+
+    async confirmEmailVerification(verificationToken: string) {
+      return await request<Me>(
+        "/api/v1/auth/email/verification/confirm",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            token: verificationToken,
+          }),
+        },
+        null
       );
     },
   },

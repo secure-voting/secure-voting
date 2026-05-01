@@ -169,6 +169,33 @@ components:
           type: string
           description: Opaque refresh token returned by register, login, or refresh.
 
+    EmailVerificationRequestResponse:
+      type: object
+      required: [ok, already_verified]
+      properties:
+        ok:
+          type: boolean
+        already_verified:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+          description: Verification token expiration timestamp.
+        verification_token:
+          type: string
+          description: Present in local self-hosted/dev mode when no mailer is configured.
+        verification_url:
+          type: string
+          description: Local verification URL for self-hosted/dev mode.
+
+    ConfirmEmailVerificationRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          description: Opaque email verification token from the verification link.
+
     ChangePasswordRequest:
       type: object
       required: [current_password, new_password]
@@ -1283,6 +1310,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/email/verification/confirm:
+    post:
+      tags: [Auth]
+      summary: Confirm email verification token
+      description: >
+        Confirms a one-time email verification token. The raw token is accepted only once;
+        the database stores only its hash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmEmailVerificationRequest'
+      responses:
+        '200':
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid, expired, or already used verification token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /api/v1/auth/me:
     get:
@@ -1377,6 +1431,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/email/verification/request:
+    post:
+      tags: [Auth]
+      summary: Request email verification token
+      description: >
+        Creates a new one-time email verification token for the current user.
+        In local self-hosted/dev mode the response may include verification_token and verification_url.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationRequestResponse'
         '401':
           description: Unauthorized
           content:

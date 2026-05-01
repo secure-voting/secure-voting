@@ -8,6 +8,7 @@ import { RequireAuth } from "./routing/RequireAuth";
 import { RequireRole } from "./routing/RequireRole";
 
 import { LoginPage } from "../pages/auth/LoginPage";
+import { VerifyEmailPage } from "../pages/auth/VerifyEmailPage";
 import { ElectionsPage } from "../pages/voter/ElectionsPage";
 import { ElectionPage } from "../pages/voter/ElectionPage";
 import { VotePage } from "../pages/voter/VotePage";
@@ -44,6 +45,7 @@ export default function App() {
             <Routes>
               <Route path="/" element={<HomeRedirect />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/verify-email" element={<VerifyEmailPage />} />
 
               <Route
                 path="/dashboard"

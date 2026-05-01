@@ -21,7 +21,7 @@ type AuthService interface {
 	GetProfile(ctx context.Context, userID string) (asvc.User, string, error)
 	UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error)
 	RequestEmailVerification(ctx context.Context, userID string) (asvc.EmailVerificationRequestResult, string, error)
-	ConfirmEmailVerification(ctx context.Context, token string) (asvc.User, string, error)
+	ConfirmEmailVerification(ctx context.Context, userID, code string) (asvc.User, string, error)
 }
 
 type Handlers struct {
@@ -314,19 +314,19 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) error {
 }
 
 type confirmEmailVerificationReq struct {
-	Token string `json:"token"`
+	Code string `json:"code"`
 }
 
 func mapEmailVerificationCode(code string) error {
 	switch code {
 	case "unauthorized":
 		return apperr.Unauthorized("invalid or expired token")
-	case "invalid_verification_token":
-		return apperr.Invalid(code, "invalid verification token")
-	case "verification_token_used":
-		return apperr.Invalid(code, "verification token has already been used")
-	case "verification_token_expired":
-		return apperr.Invalid(code, "verification token has expired")
+	case "invalid_verification_code":
+		return apperr.Invalid(code, "invalid verification code")
+	case "verification_code_expired":
+		return apperr.Invalid(code, "verification code has expired")
+	case "verification_attempts_exceeded":
+		return apperr.Invalid(code, "verification attempts exceeded")
 	default:
 		return apperr.Invalid(code, "invalid input")
 	}
@@ -351,12 +351,17 @@ func (h *Handlers) RequestEmailVerification(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handlers) ConfirmEmailVerification(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
 	var req confirmEmailVerificationReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
-	res, code, err := h.svc.ConfirmEmailVerification(r.Context(), req.Token)
+	res, code, err := h.svc.ConfirmEmailVerification(r.Context(), userID, req.Code)
 	if err != nil {
 		return apperr.Internal(err, "confirm email verification failed")
 	}

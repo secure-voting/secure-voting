@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { api, ApiError } from "../../shared/api/client";
@@ -32,6 +33,11 @@ export function ProfilePage() {
   const [profileSuccess, setProfileSuccess] = useState("");
   const [savedFullName, setSavedFullName] = useState("");
   const [savedPhone, setSavedPhone] = useState("");
+
+  const [emailVerificationSubmitting, setEmailVerificationSubmitting] = useState(false);
+  const [emailVerificationError, setEmailVerificationError] = useState("");
+  const [emailVerificationSuccess, setEmailVerificationSuccess] = useState("");
+  const [emailVerificationURL, setEmailVerificationURL] = useState("");
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -117,6 +123,44 @@ export function ProfilePage() {
     }
   }
 
+  async function onRequestEmailVerification() {
+    setEmailVerificationError("");
+    setEmailVerificationSuccess("");
+    setEmailVerificationURL("");
+
+    if (!token) {
+      setEmailVerificationError("Сессия недействительна. Выполните вход заново.");
+      return;
+    }
+
+    setEmailVerificationSubmitting(true);
+    try {
+      const result = await api.auth.requestEmailVerification(token);
+
+      if (result.already_verified) {
+        const updated = await api.auth.me(token);
+        updateMe(updated);
+        setEmailVerificationSuccess("Почта уже подтверждена.");
+        return;
+      }
+
+      if (result.verification_url) {
+        setEmailVerificationURL(result.verification_url);
+        setEmailVerificationSuccess("Ссылка подтверждения создана.");
+      } else {
+        setEmailVerificationSuccess("Запрос подтверждения принят.");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setEmailVerificationError(err.message || "Не удалось создать ссылку подтверждения.");
+      } else {
+        setEmailVerificationError("Не удалось создать ссылку подтверждения. Повторите попытку позже.");
+      }
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  }
+
   async function onChangePassword(e: React.FormEvent) {
     e.preventDefault();
     setFormError("");
@@ -192,6 +236,45 @@ export function ProfilePage() {
             { label: "Телефон", value: savedPhone || "—" },
           ]}
         />
+        {!me?.email_verified ? (
+          <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
+            <div style={styles.muted}>
+              Для локального развертывания ссылка подтверждения создается в интерфейсе. В production-режиме ее должен отправлять mailer-сервис.
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                style={styles.buttonPrimary}
+                onClick={onRequestEmailVerification}
+                disabled={emailVerificationSubmitting || !token}
+              >
+                {emailVerificationSubmitting ? "Создание ссылки..." : "Создать ссылку подтверждения"}
+              </button>
+
+              {emailVerificationURL ? (
+                <Link to={emailVerificationURL} style={styles.button}>
+                  Открыть подтверждение
+                </Link>
+              ) : null}
+            </div>
+
+            {emailVerificationError ? (
+              <div style={{ color: "#b91c1c", fontSize: 14 }}>{emailVerificationError}</div>
+            ) : null}
+
+            {emailVerificationSuccess ? (
+              <div style={{ color: "#15803d", fontSize: 14 }}>{emailVerificationSuccess}</div>
+            ) : null}
+
+            {emailVerificationURL ? (
+              <div style={{ ...styles.card, background: "#f9fafb", padding: 10 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Локальная ссылка подтверждения</div>
+                <code style={{ wordBreak: "break-all" }}>{emailVerificationURL}</code>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>

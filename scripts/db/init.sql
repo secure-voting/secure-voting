@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   token_hash text NOT NULL UNIQUE,
+  attempts_count integer NOT NULL DEFAULT 0 CHECK (attempts_count >= 0),
+  max_attempts integer NOT NULL DEFAULT 5 CHECK (max_attempts > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   expires_at timestamptz NOT NULL,
   used_at timestamptz NULL

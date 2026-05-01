@@ -108,8 +108,9 @@ func (f *fakeAuthService) RequestEmailVerification(ctx context.Context, userID s
 	return f.requestEmailVerificationRes, f.requestEmailVerificationCode, f.requestEmailVerificationErr
 }
 
-func (f *fakeAuthService) ConfirmEmailVerification(ctx context.Context, token string) (asvc.User, string, error) {
-	f.lastEmailVerificationToken = token
+func (f *fakeAuthService) ConfirmEmailVerification(ctx context.Context, userID, code string) (asvc.User, string, error) {
+	f.lastEmailVerificationUserID = userID
+	f.lastEmailVerificationToken = code
 	return f.confirmEmailVerificationRes, f.confirmEmailVerificationCode, f.confirmEmailVerificationErr
 }
 
@@ -837,11 +838,12 @@ func TestRequestEmailVerification_Unauthorized(t *testing.T) {
 func TestRequestEmailVerification_OK(t *testing.T) {
 	svc := &fakeAuthService{
 		requestEmailVerificationRes: asvc.EmailVerificationRequestResult{
-			OK:                true,
-			AlreadyVerified:   false,
-			ExpiresAt:         "2026-04-29T10:00:00Z",
-			VerificationToken: "token123",
-			VerificationURL:   "/verify-email?token=token123",
+			OK:               true,
+			AlreadyVerified:  false,
+			Delivery:         "dev",
+			ExpiresAt:        "2026-04-29T10:00:00Z",
+			MaxAttempts:      5,
+			VerificationCode: "ABCD-EFGH-JKLM-NPQR",
 		},
 	}
 	h := NewHandlers(svc)
@@ -873,7 +875,7 @@ func TestRequestEmailVerification_OK(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
 		t.Fatalf("bad json: %v body=%s", err, rr.Body.String())
 	}
-	if !got.OK || got.VerificationToken != "token123" {
+	if !got.OK || got.VerificationCode != "ABCD-EFGH-JKLM-NPQR" {
 		t.Fatalf("unexpected response: %+v", got)
 	}
 }
@@ -885,37 +887,81 @@ func TestConfirmEmailVerification_BadJSON(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/email/verification/confirm",
-		strings.NewReader(`{"token":`),
+		strings.NewReader(`{"code":`),
 	)
+	req.Header.Set("Authorization", "Bearer token123")
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	httputil.Wrap(h.ConfirmEmailVerification).ServeHTTP(rr, req)
+	handler := middleware.RequireAuth(
+		fakeTokenVerifier{
+			userID: "u1",
+			email:  "voter1@example.com",
+			role:   "voter",
+			ok:     true,
+		},
+		httputil.Wrap(h.ConfirmEmailVerification),
+	)
+
+	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d, body=%s", rr.Code, rr.Body.String())
 	}
 }
 
-func TestConfirmEmailVerification_InvalidToken(t *testing.T) {
-	svc := &fakeAuthService{confirmEmailVerificationCode: "invalid_verification_token"}
+func TestConfirmEmailVerification_Unauthorized(t *testing.T) {
+	svc := &fakeAuthService{}
 	h := NewHandlers(svc)
 
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/email/verification/confirm",
-		strings.NewReader(`{"token":"bad-token"}`),
+		strings.NewReader(`{"code":"ABCD-EFGH-JKLM-NPQR"}`),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
 	httputil.Wrap(h.ConfirmEmailVerification).ServeHTTP(rr, req)
 
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d, body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestConfirmEmailVerification_InvalidCode(t *testing.T) {
+	svc := &fakeAuthService{confirmEmailVerificationCode: "invalid_verification_code"}
+	h := NewHandlers(svc)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/email/verification/confirm",
+		strings.NewReader(`{"code":"BAD-CODE-0000-0000"}`),
+	)
+	req.Header.Set("Authorization", "Bearer token123")
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := middleware.RequireAuth(
+		fakeTokenVerifier{
+			userID: "u1",
+			email:  "voter1@example.com",
+			role:   "voter",
+			ok:     true,
+		},
+		httputil.Wrap(h.ConfirmEmailVerification),
+	)
+
+	handler.ServeHTTP(rr, req)
+
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d, body=%s", rr.Code, rr.Body.String())
 	}
-	if svc.lastEmailVerificationToken != "bad-token" {
-		t.Fatalf("expected token to be passed, got %q", svc.lastEmailVerificationToken)
+	if svc.lastEmailVerificationUserID != "u1" {
+		t.Fatalf("expected userID u1, got %q", svc.lastEmailVerificationUserID)
+	}
+	if svc.lastEmailVerificationToken != "BAD-CODE-0000-0000" {
+		t.Fatalf("expected code to be passed, got %q", svc.lastEmailVerificationToken)
 	}
 }
 
@@ -936,12 +982,23 @@ func TestConfirmEmailVerification_OK(t *testing.T) {
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/api/v1/auth/email/verification/confirm",
-		strings.NewReader(`{"token":"good-token"}`),
+		strings.NewReader(`{"code":"ABCD-EFGH-JKLM-NPQR"}`),
 	)
+	req.Header.Set("Authorization", "Bearer token123")
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
 
-	httputil.Wrap(h.ConfirmEmailVerification).ServeHTTP(rr, req)
+	handler := middleware.RequireAuth(
+		fakeTokenVerifier{
+			userID: "u1",
+			email:  "voter1@example.com",
+			role:   "voter",
+			ok:     true,
+		},
+		httputil.Wrap(h.ConfirmEmailVerification),
+	)
+
+	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d, body=%s", rr.Code, rr.Body.String())

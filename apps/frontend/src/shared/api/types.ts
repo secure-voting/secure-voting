@@ -35,6 +35,14 @@ export type AuthTokens = {
   refresh_expires_at: string;
 };
 
+export type EmailVerificationRequestResult = {
+  ok: boolean;
+  already_verified: boolean;
+  expires_at?: string;
+  verification_token?: string;
+  verification_url?: string;
+};
+
 export type NotificationKind = "info" | "success" | "warning" | "error";
 
 export type NotificationItem = {
