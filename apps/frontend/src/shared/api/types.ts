@@ -320,6 +320,12 @@ export type DatasetGenerateReq = {
   score_step?: number;
 };
 
+export type DatasetFromElectionReq = {
+  election_id: string;
+  name?: string;
+  description?: string;
+};
+
 export type Experiment = {
   id: string;
   type: string;

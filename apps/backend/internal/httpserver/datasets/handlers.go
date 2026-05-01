@@ -11,6 +11,7 @@ import (
 	"secure-voting/apps/backend/internal/config"
 	"secure-voting/apps/backend/internal/datasets"
 	"secure-voting/apps/backend/internal/httpserver/httputil"
+	"secure-voting/apps/backend/internal/httpserver/middleware"
 )
 
 var listDatasetsFn = func(svc *datasets.Service, ctx context.Context) ([]datasets.ListItem, error) {
@@ -31,6 +32,10 @@ var importDatasetFn = func(svc *datasets.Service, ctx context.Context, meta data
 
 var generateDatasetFn = func(svc *datasets.Service, ctx context.Context, req datasets.GenerateReq) (string, string, error) {
 	return svc.Generate(ctx, req)
+}
+
+var exportElectionDatasetFn = func(svc *datasets.Service, ctx context.Context, req datasets.ExportElectionReq) (string, string, error) {
+	return svc.ExportElection(ctx, req)
 }
 
 type Handlers struct {
@@ -171,4 +176,74 @@ func getFileHeader(r *http.Request, field string) (*multipart.FileHeader, error)
 		return nil, err
 	}
 	return fhs[0], nil
+}
+
+func (h *Handlers) FromElection(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+		return
+	}
+
+	role, ok := middleware.RoleFromContext(r.Context())
+	if !ok {
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+		return
+	}
+
+	var req datasets.ExportElectionReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "bad_request", "invalid json body")
+		return
+	}
+
+	req.ActorUserID = userID
+	req.ActorRole = role
+
+	id, code, err := exportElectionDatasetFn(h.svc, r.Context(), req)
+	if err != nil {
+		log.Printf("datasets.from-election error: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "export election dataset failed")
+		return
+	}
+
+	if code != "" {
+		writeExportElectionDatasetError(w, code)
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func writeExportElectionDatasetError(w http.ResponseWriter, code string) {
+	switch code {
+	case "unauthorized":
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+	case "invalid_election_id":
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_election_id", "invalid election_id")
+	case "invalid_name":
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_name", "invalid dataset name")
+	case "invalid_format":
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_format", "invalid dataset format")
+	case "invalid_candidates":
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_candidates", "invalid election candidates")
+	case "invalid_ballot_payload":
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_ballot_payload", "invalid election ballot payload")
+	case "not_found":
+		httputil.WriteError(w, http.StatusNotFound, "not_found", "election not found")
+	case "forbidden":
+		httputil.WriteError(w, http.StatusForbidden, "forbidden", "election dataset export is forbidden")
+	case "election_not_ready":
+		httputil.WriteError(w, http.StatusConflict, "election_not_ready", "election is not closed yet")
+	case "election_not_published":
+		httputil.WriteError(w, http.StatusConflict, "election_not_published", "election is not published yet")
+	case "aggregates_disabled":
+		httputil.WriteError(w, http.StatusForbidden, "aggregates_disabled", "election aggregates are disabled")
+	case "no_accepted_ballots":
+		httputil.WriteError(w, http.StatusConflict, "no_accepted_ballots", "election has no accepted ballots")
+	case "postgres_unavailable":
+		httputil.WriteError(w, http.StatusServiceUnavailable, "postgres_unavailable", "postgres connection is unavailable")
+	default:
+		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+	}
 }

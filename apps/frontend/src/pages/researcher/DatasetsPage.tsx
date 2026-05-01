@@ -5,6 +5,7 @@ import type {
   DatasetDetail,
   DatasetGenerateReq,
   DatasetListItem,
+  ElectionSummary,
   TallyRuleInfo,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
@@ -227,6 +228,15 @@ export function DatasetsPage() {
   const [availableRunRules, setAvailableRunRules] = useState<TallyRuleInfo[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
 
+  const [electionItems, setElectionItems] = useState<ElectionSummary[]>([]);
+  const [electionsLoading, setElectionsLoading] = useState(false);
+
+  const [electionDatasetElectionId, setElectionDatasetElectionId] = useState("");
+  const [electionDatasetName, setElectionDatasetName] = useState("");
+  const [electionDatasetDescription, setElectionDatasetDescription] = useState("");
+  const [electionDatasetLoading, setElectionDatasetLoading] = useState(false);
+  const [electionDatasetErr, setElectionDatasetErr] = useState<string | null>(null);
+
   const [importErr, setImportErr] = useState<string | null>(null);
   const [generateErr, setGenerateErr] = useState<string | null>(null);
   const [runErr, setRunErr] = useState<string | null>(null);
@@ -268,6 +278,36 @@ export function DatasetsPage() {
       detailAbortRef.current?.abort();
     };
   }, [loadList]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setElectionsLoading(true);
+
+    api.elections
+      .list(token, ac.signal)
+      .then((list) => {
+        setElectionItems(
+          list.filter((item) =>
+            ["closed", "results_ready", "published"].includes(String(item.status || ""))
+          )
+        );
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setElectionItems([]);
+      })
+      .finally(() => {
+        setElectionsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
 
   useEffect(() => {
     if (!token) return;
@@ -537,6 +577,64 @@ export function DatasetsPage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateDatasetFromElection = async () => {
+    if (!token) return;
+
+    setElectionDatasetErr(null);
+    setImportErr(null);
+    setGenerateErr(null);
+    setRunErr(null);
+    setErr(null);
+    setInfo(null);
+
+    const electionId = electionDatasetElectionId.trim();
+    if (!electionId) {
+      setElectionDatasetErr("Выберите голосование для создания датасета");
+      return;
+    }
+
+    setElectionDatasetLoading(true);
+
+    try {
+      const id = await api.datasets.fromElection(token, {
+        election_id: electionId,
+        name: electionDatasetName.trim() || undefined,
+        description: electionDatasetDescription.trim() || undefined,
+      });
+
+      setInfo(`Датасет из голосования создан. Технический ID: ${shortId(id)}`);
+      setElectionDatasetName("");
+      setElectionDatasetDescription("");
+
+      addNotification({
+        kind: "success",
+        title: "Датасет из голосования создан",
+        message: `Реальные бюллетени анонимизированы и перенесены в исследовательский датасет. Технический ID: ${shortId(id)}`,
+      });
+
+      await loadList();
+      await loadDetail(id);
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+      } else if (e?.code === "election_not_published") {
+        setElectionDatasetErr("Исследователь может использовать только опубликованные голосования.");
+      } else if (e?.code === "election_not_ready") {
+        setElectionDatasetErr("Голосование еще не завершено.");
+      } else if (e?.code === "aggregates_disabled") {
+        setElectionDatasetErr("Для этого голосования отключен доступ к агрегированным результатам.");
+      } else if (e?.code === "no_accepted_ballots") {
+        setElectionDatasetErr("В голосовании нет принятых бюллетеней.");
+      } else if (e?.code === "forbidden") {
+        setElectionDatasetErr("Недостаточно прав для создания датасета из этого голосования.");
+      } else {
+        setElectionDatasetErr(e?.message || "Не удалось создать датасет из голосования");
+      }
+    } finally {
+      setElectionDatasetLoading(false);
     }
   };
 
@@ -978,6 +1076,80 @@ export function DatasetsPage() {
             <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 13 }}>{generateErr}</div>
           ) : null}
         </div>
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>Датасет из реального голосования</h3>
+
+        <div style={{ ...styles.muted, marginBottom: 12 }}>
+          Завершенное или опубликованное голосование можно перенести в исследовательский датасет.
+          Бюллетени сохраняются без идентификаторов пользователей.
+        </div>
+
+        <label>Голосование</label>
+        <select
+          style={styles.input}
+          value={electionDatasetElectionId}
+          onChange={(e) => {
+            const value = e.target.value;
+            setElectionDatasetElectionId(value);
+
+            const selectedElection = electionItems.find((item) => item.id === value);
+            if (selectedElection && !electionDatasetName.trim()) {
+              setElectionDatasetName(`Dataset from election: ${selectedElection.title}`);
+            }
+          }}
+        >
+          <option value="">
+            {electionsLoading ? "Загрузка голосований..." : "Выберите голосование"}
+          </option>
+          {electionItems.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.title} · {formatLabel(String(item.ballot_format || ""))} · {item.status}
+            </option>
+          ))}
+        </select>
+
+        <div style={{ height: 10 }} />
+
+        <label>Название датасета</label>
+        <input
+          style={styles.input}
+          value={electionDatasetName}
+          onChange={(e) => setElectionDatasetName(e.target.value)}
+          placeholder="Например: Dataset from published election"
+        />
+
+        <div style={{ height: 10 }} />
+
+        <label>Описание</label>
+        <input
+          style={styles.input}
+          value={electionDatasetDescription}
+          onChange={(e) => setElectionDatasetDescription(e.target.value)}
+          placeholder="Краткое описание назначения датасета"
+        />
+
+        <div style={{ marginTop: 8, ...styles.muted }}>
+          Для исследователя доступны опубликованные голосования с разрешенными агрегатами.
+          Администратор может экспортировать свои завершенные голосования.
+        </div>
+
+        <div style={{ height: 12 }} />
+
+        <button
+          style={styles.btnPrimary}
+          onClick={handleCreateDatasetFromElection}
+          disabled={electionDatasetLoading || !electionDatasetElectionId.trim()}
+        >
+          {electionDatasetLoading ? "Создание датасета..." : "Создать датасет из голосования"}
+        </button>
+
+        {electionDatasetErr ? (
+          <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 13 }}>
+            {electionDatasetErr}
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>

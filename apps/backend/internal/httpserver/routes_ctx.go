@@ -96,7 +96,7 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 
 	jobsSvc := jobs.NewService(db)
 	auditSvc := audit.NewService(db)
-	datasetsSvc := datasets.NewService(mdb)
+	datasetsSvc := datasets.NewService(mdb, db)
 	experimentsSvc := experiments.NewService(db)
 	runsSvc := experimentruns.NewService(db, mdb)
 	capabilitiesSvc := capabilities.NewService(computeClient)

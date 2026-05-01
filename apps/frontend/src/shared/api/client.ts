@@ -31,6 +31,7 @@ import type {
   ProtocolStep,
   ExperimentRunResultResp,
   EmailVerificationRequestResult,
+  DatasetFromElectionReq,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -676,6 +677,16 @@ export const api = {
         token
       );
       if (!resp?.id) throw new Error("Набор данных создан, но id не найден в ответе");
+      return resp.id;
+    },
+
+    async fromElection(token: string, body: DatasetFromElectionReq) {
+      const resp = await request<{ id: string }>(
+        "/api/v1/datasets/from-election",
+        { method: "POST", body: JSON.stringify(body) },
+        token
+      );
+      if (!resp?.id) throw new Error("Набор данных создан из голосования, но id не найден в ответе");
       return resp.id;
     },
   },

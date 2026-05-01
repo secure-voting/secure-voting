@@ -48,6 +48,14 @@ type GenerateReq struct {
 	ScoreStep          *int `json:"score_step,omitempty"`
 }
 
+type ExportElectionReq struct {
+	ElectionID  string `json:"election_id"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	ActorUserID string `json:"-"`
+	ActorRole   string `json:"-"`
+}
+
 type ImportMeta struct {
 	Name        string
 	Description string
