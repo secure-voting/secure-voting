@@ -30,6 +30,8 @@ type CreatedSyntheticRun = {
   jobId: string;
 };
 
+type DatasetBallotFormat = "approval" | "ranking" | "score";
+
 function extractCreatedRun(value: unknown): { runId: string; jobId: string } {
   if (!value || typeof value !== "object") {
     return { runId: "", jobId: "" };
@@ -163,6 +165,32 @@ function getRankingTopKFromParameters(parameters?: Record<string, unknown>) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function isDatasetBallotFormat(value: unknown): value is DatasetBallotFormat {
+  return value === "approval" || value === "ranking" || value === "score";
+}
+
+function datasetBallotFormat(value?: DatasetDetail | null): DatasetBallotFormat | null {
+  return isDatasetBallotFormat(value?.format) ? value.format : null;
+}
+
+function numberParameter(parameters: Record<string, unknown> | undefined, key: string): number | null {
+  if (!parameters || typeof parameters !== "object") return null;
+
+  const value = parameters[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function ruleSupportsFormat(rule: TallyRuleInfo, format: DatasetBallotFormat) {
+  return rule.supports_experiment_runs && rule.ballot_formats.includes(format);
+}
+
 function renderParameters(value: Record<string, unknown> | undefined) {
   if (!value || Object.keys(value).length === 0) {
     return <span style={styles.muted}>Нет дополнительных параметров</span>;
@@ -222,9 +250,15 @@ export function DatasetsPage() {
   const [genScoreMin, setGenScoreMin] = useState(0);
   const [genScoreMax, setGenScoreMax] = useState(10);
   const [genScoreStep, setGenScoreStep] = useState(1);
+
   const [runRules, setRunRules] = useState<string[]>([]);
   const [runCommitteeSize, setRunCommitteeSize] = useState(1);
   const [runRankingTopK, setRunRankingTopK] = useState(3);
+  const [runApprovalMaxChoices, setRunApprovalMaxChoices] = useState(2);
+  const [runScoreMin, setRunScoreMin] = useState(0);
+  const [runScoreMax, setRunScoreMax] = useState(10);
+  const [runScoreStep, setRunScoreStep] = useState(1);
+
   const [runLoading, setRunLoading] = useState(false);
   const [createdRuns, setCreatedRuns] = useState<CreatedSyntheticRun[]>([]);
   const [availableRunRules, setAvailableRunRules] = useState<TallyRuleInfo[]>([]);
@@ -319,24 +353,9 @@ export function DatasetsPage() {
 
     api.capabilities
       .tallyRules(token, ac.signal)
-      .then((items) => {
-        const mergedItems = mergeRuleItems(items);
-        const rankingExperimentRules = mergedItems.filter(
-          (item) =>
-            item.supports_experiment_runs &&
-            item.ballot_formats.includes("ranking") &&
-            !item.requires_approval_max_choices &&
-            !item.requires_score_range
-        );
-
-        setAvailableRunRules(rankingExperimentRules);
-
-        setRunRules((prev) => {
-          const allowed = new Set(rankingExperimentRules.map((item) => item.id));
-          const next = prev.filter((item) => allowed.has(item));
-          if (next.length > 0) return next;
-          return rankingExperimentRules.slice(0, 3).map((item) => item.id);
-        });
+      .then((rules) => {
+        const mergedRules = mergeRuleItems(rules);
+        setAvailableRunRules(mergedRules.filter((rule) => rule.supports_experiment_runs));
       })
       .catch((e: any) => {
         if (e?.name === "AbortError") return;
@@ -353,6 +372,56 @@ export function DatasetsPage() {
 
     return () => ac.abort();
   }, [token, setToken]);
+
+  useEffect(() => {
+    if (!selected) {
+      setRunRules([]);
+      return;
+    }
+
+    const format = datasetBallotFormat(selected);
+    if (!format) {
+      setRunRules([]);
+      return;
+    }
+
+    const formatRules = availableRunRules.filter((rule) => ruleSupportsFormat(rule, format));
+    const allowed = new Set(formatRules.map((rule) => rule.id));
+
+    setRunRules((prev) => {
+      const next = prev.filter((rule) => allowed.has(rule));
+      if (next.length > 0) return next;
+      return formatRules.slice(0, 3).map((rule) => rule.id);
+    });
+
+    const candidateCount = Math.max(1, selected.candidates.length);
+
+    if (format === "approval") {
+      const fromDataset = numberParameter(selected.parameters, "approval_max_choices");
+      setRunApprovalMaxChoices(Math.max(1, Math.min(candidateCount, fromDataset ?? 2)));
+    }
+
+    if (format === "ranking") {
+      const fromDataset = numberParameter(selected.parameters, "ranking_top_k");
+      if (fromDataset != null) {
+        setRunRankingTopKEnabled(true);
+        setRunRankingTopK(Math.max(1, Math.min(candidateCount, fromDataset)));
+      } else {
+        setRunRankingTopKEnabled(false);
+        setRunRankingTopK(Math.max(1, Math.min(candidateCount, 3)));
+      }
+    }
+
+    if (format === "score") {
+      const min = numberParameter(selected.parameters, "score_min");
+      const max = numberParameter(selected.parameters, "score_max");
+      const step = numberParameter(selected.parameters, "score_step");
+
+      setRunScoreMin(min ?? 0);
+      setRunScoreMax(max ?? 10);
+      setRunScoreStep(step ?? 1);
+    }
+  }, [selected, availableRunRules]);
 
   const loadDetail = async (id: string) => {
     if (!token) return;
@@ -481,7 +550,7 @@ export function DatasetsPage() {
       }
     }
 
-    const ids = new Set(parsed.map((x) => x.id));
+    const ids = new Set(parsed.map((item) => item.id));
     if (ids.size !== parsed.length) {
       throw new Error("Идентификаторы кандидатов не должны повторяться");
     }
@@ -555,9 +624,19 @@ export function DatasetsPage() {
 
       const id = await api.datasets.generate(token, body);
 
+      if (genFormat === "approval") {
+        setRunApprovalMaxChoices(genApprovalMax);
+      }
+
       if (genFormat === "ranking") {
         setRunRankingTopKEnabled(genRankingTopKEnabled);
         setRunRankingTopK(genRankingTopK);
+      }
+
+      if (genFormat === "score") {
+        setRunScoreMin(genScoreMin);
+        setRunScoreMax(genScoreMax);
+        setRunScoreStep(genScoreStep);
       }
 
       setCreatedRuns([]);
@@ -654,8 +733,9 @@ export function DatasetsPage() {
       return;
     }
 
-    if (selected.format !== "ranking") {
-      setRunErr("Серия экспериментов из этой формы сейчас поддерживается только для ранжированных наборов");
+    const format = datasetBallotFormat(selected);
+    if (!format) {
+      setRunErr("Формат выбранного набора данных не поддерживается");
       return;
     }
 
@@ -664,14 +744,15 @@ export function DatasetsPage() {
       return;
     }
 
-    if (availableRunRules.length === 0) {
-      setRunErr("Нет доступных правил для ranking-экспериментов");
+    const formatRules = availableRunRules.filter((rule) => ruleSupportsFormat(rule, format));
+    if (formatRules.length === 0) {
+      setRunErr(`Нет доступных правил для формата "${formatLabel(format)}"`);
       return;
     }
 
-    const allowedRuleIds = new Set(availableRunRules.map((item) => item.id));
+    const allowedRuleIds = new Set(formatRules.map((rule) => rule.id));
     if (runRules.some((rule) => !allowedRuleIds.has(rule))) {
-      setRunErr("Выбрано недопустимое правило подсчета");
+      setRunErr("Выбрано недопустимое правило подсчета для текущего формата набора данных");
       return;
     }
 
@@ -685,7 +766,21 @@ export function DatasetsPage() {
       return;
     }
 
-    if (runRankingTopKEnabled) {
+    const selectedRuleInfos = formatRules.filter((rule) => runRules.includes(rule.id));
+
+    if (format === "approval") {
+      if (runApprovalMaxChoices < 1) {
+        setRunErr("Максимум одобрений должен быть не меньше 1");
+        return;
+      }
+
+      if (runApprovalMaxChoices > selected.candidates.length) {
+        setRunErr("Максимум одобрений не может превышать число кандидатов");
+        return;
+      }
+    }
+
+    if (format === "ranking" && runRankingTopKEnabled) {
       if (runRankingTopK < 1) {
         setRunErr("Ограничение top-k должно быть не меньше 1");
         return;
@@ -697,6 +792,25 @@ export function DatasetsPage() {
       }
     }
 
+    if (format === "score") {
+      if (runScoreMax <= runScoreMin) {
+        setRunErr("Максимальная оценка должна быть больше минимальной");
+        return;
+      }
+
+      if (runScoreStep <= 0) {
+        setRunErr("Шаг оценки должен быть больше 0");
+        return;
+      }
+
+      const range = runScoreMax - runScoreMin;
+      const steps = range / runScoreStep;
+      if (!Number.isInteger(steps)) {
+        setRunErr("Диапазон оценок должен делиться на шаг без остатка");
+        return;
+      }
+    }
+
     setRunLoading(true);
     setCreatedRuns([]);
 
@@ -704,14 +818,26 @@ export function DatasetsPage() {
       const created: CreatedSyntheticRun[] = [];
 
       for (const rule of runRules) {
+        const ruleInfo = selectedRuleInfos.find((item) => item.id === rule);
+
         const params: Record<string, unknown> = {
-          ballot_format: "ranking",
+          ballot_format: format,
           tally_rule: rule,
           committee_size: runCommitteeSize,
         };
 
-        if (runRankingTopKEnabled) {
+        if (format === "approval") {
+          params.approval_max_choices = runApprovalMaxChoices;
+        }
+
+        if (format === "ranking" && runRankingTopKEnabled) {
           params.ranking_top_k = runRankingTopK;
+        }
+
+        if (format === "score") {
+          params.score_min = runScoreMin;
+          params.score_max = runScoreMax;
+          params.score_step = runScoreStep;
         }
 
         const experimentId = await api.experiments.create(token, {
@@ -728,7 +854,7 @@ export function DatasetsPage() {
         const { runId, jobId } = extractCreatedRun(first);
 
         if (!runId) {
-          throw new Error(`Не удалось получить run_id для правила ${ruleLabelRu(rule)}`);
+          throw new Error(`Не удалось получить run_id для правила ${ruleLabelRu(rule, ruleInfo?.label)}`);
         }
 
         created.push({
@@ -768,6 +894,19 @@ export function DatasetsPage() {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean).length;
+
+  const selectedFormat = datasetBallotFormat(selected);
+  const formatRunRules = selectedFormat
+    ? availableRunRules.filter((rule) => ruleSupportsFormat(rule, selectedFormat))
+    : [];
+
+  const selectedRuleInfos = formatRunRules.filter((rule) => runRules.includes(rule.id));
+  const needsApprovalMaxChoices =
+    selectedFormat === "approval" &&
+    selectedRuleInfos.some((rule) => rule.requires_approval_max_choices);
+  const needsScoreRange =
+    selectedFormat === "score" &&
+    selectedRuleInfos.some((rule) => rule.requires_score_range);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -1231,27 +1370,30 @@ export function DatasetsPage() {
               {renderParameters(selected.parameters)}
             </div>
 
-            {selected.format === "ranking" ? (
+            {selectedFormat ? (
               <div style={{ ...styles.card, padding: 12 }}>
                 <h4 style={{ marginTop: 0, marginBottom: 8 }}>Создание и запуск экспериментов</h4>
 
                 <div style={{ ...styles.muted, marginBottom: 12 }}>
-                  Для ранжированного набора данных можно сразу создать и запустить серию экспериментов.
+                  Для выбранного набора данных можно сразу создать и запустить серию экспериментов
+                  по правилам, которые поддерживают формат "{formatLabel(selectedFormat)}".
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
                   <div>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
 
                     {rulesLoading ? (
                       <div style={styles.muted}>Загрузка списка правил…</div>
                     ) : null}
 
-                    {!rulesLoading && availableRunRules.length === 0 ? (
-                      <div style={styles.muted}>Нет доступных правил для ranking-экспериментов</div>
+                    {!rulesLoading && formatRunRules.length === 0 ? (
+                      <div style={styles.muted}>
+                        Нет доступных правил для формата "{formatLabel(selectedFormat)}"
+                      </div>
                     ) : null}
 
-                    {availableRunRules.length > 0 ? (
+                    {formatRunRules.length > 0 ? (
                       <div
                         style={{
                           display: "grid",
@@ -1259,7 +1401,7 @@ export function DatasetsPage() {
                           gap: 8,
                         }}
                       >
-                        {availableRunRules.map((rule) => {
+                        {formatRunRules.map((rule) => {
                           const checked = runRules.includes(rule.id);
 
                           return (
@@ -1303,35 +1445,91 @@ export function DatasetsPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {selectedFormat === "approval" ? (
+                      <div>
+                        <label>Максимум одобрений</label>
                         <input
-                          type="checkbox"
-                          checked={runRankingTopKEnabled}
-                          onChange={(e) => setRunRankingTopKEnabled(e.target.checked)}
+                          style={styles.input}
+                          type="number"
+                          min={1}
+                          max={selected.candidates.length}
+                          value={runApprovalMaxChoices}
+                          onChange={(e) => setRunApprovalMaxChoices(Number(e.target.value))}
                         />
-                        Ограничивать число учитываемых первых k позиций
-                      </label>
-
-                      <div style={{ marginTop: 8, ...styles.muted }}>
-                        Поле необязательно. Если ограничение выключено, в эксперимент будет передано полное ранжирование.
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          {needsApprovalMaxChoices
+                            ? "Выбранные правила требуют параметр максимального числа одобрений."
+                            : "Параметр будет передан в эксперимент для approval-набора."}
+                        </div>
                       </div>
+                    ) : null}
 
-                      {runRankingTopKEnabled ? (
-                        <>
-                          <div style={{ height: 10 }} />
-                          <label>Ограничение на количество k позиций</label>
+                    {selectedFormat === "ranking" ? (
+                      <div>
+                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={runRankingTopKEnabled}
+                            onChange={(e) => setRunRankingTopKEnabled(e.target.checked)}
+                          />
+                          Ограничивать число учитываемых первых k позиций
+                        </label>
+
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          Поле необязательно. Если ограничение выключено, в эксперимент будет передано полное ранжирование.
+                        </div>
+
+                        {runRankingTopKEnabled ? (
+                          <>
+                            <div style={{ height: 10 }} />
+                            <label>Ограничение на количество k позиций</label>
+                            <input
+                              style={styles.input}
+                              type="number"
+                              min={1}
+                              max={selected.candidates.length}
+                              value={runRankingTopK}
+                              onChange={(e) => setRunRankingTopK(Number(e.target.value))}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {selectedFormat === "score" ? (
+                      <div>
+                        <label>Диапазон оценок</label>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                          <input
+                            style={styles.input}
+                            type="number"
+                            value={runScoreMin}
+                            onChange={(e) => setRunScoreMin(Number(e.target.value))}
+                            aria-label="Минимальная оценка"
+                          />
+                          <input
+                            style={styles.input}
+                            type="number"
+                            value={runScoreMax}
+                            onChange={(e) => setRunScoreMax(Number(e.target.value))}
+                            aria-label="Максимальная оценка"
+                          />
                           <input
                             style={styles.input}
                             type="number"
                             min={1}
-                            max={selected.candidates.length}
-                            value={runRankingTopK}
-                            onChange={(e) => setRunRankingTopK(Number(e.target.value))}
+                            value={runScoreStep}
+                            onChange={(e) => setRunScoreStep(Number(e.target.value))}
+                            aria-label="Шаг оценки"
                           />
-                        </>
-                      ) : null}
-                    </div>
+                        </div>
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          {needsScoreRange
+                            ? "Выбранные правила требуют диапазон оценок."
+                            : "Диапазон будет передан в эксперимент для score-набора."}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
