@@ -29,9 +29,29 @@ func TestValidateParams_InvalidBallotFormat(t *testing.T) {
 	}
 }
 
+func TestValidateParams_AllowsDynamicTallyRule(t *testing.T) {
+	params := map[string]any{
+		"tally_rule": "new-rule-from-compute",
+	}
+
+	if code := validateParams(params); code != "" {
+		t.Fatalf("expected dynamic tally rule to be accepted, got %q", code)
+	}
+}
+
 func TestValidateParams_InvalidTallyRule(t *testing.T) {
 	params := map[string]any{
-		"tally_rule": "totally-unknown-rule",
+		"tally_rule": "",
+	}
+
+	if code := validateParams(params); code != "invalid_tally_rule" {
+		t.Fatalf("expected invalid_tally_rule, got %q", code)
+	}
+}
+
+func TestValidateParams_InvalidTallyRuleType(t *testing.T) {
+	params := map[string]any{
+		"tally_rule": 123,
 	}
 
 	if code := validateParams(params); code != "invalid_tally_rule" {
