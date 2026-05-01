@@ -23,6 +23,16 @@ import {
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
+type RunsLocationState = {
+  createdRuns?: Array<{
+    rule: string;
+    experimentId: string;
+    runId: string;
+    jobId: string;
+  }>;
+  autoOpenRunId?: string;
+};
+
 function prettyValue(value: unknown) {
   if (value == null) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -37,6 +47,39 @@ function prettyValue(value: unknown) {
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatBallotFormat(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    approval: "Одобрение",
+    ranking: "Ранжирование",
+    score: "Оценивание",
+  };
+
+  return labels[raw] || raw || "—";
 }
 
 function runId(item: ExperimentRunItem, index: number) {
@@ -63,35 +106,65 @@ function runStatusLabel(value: unknown) {
   return labels[raw] || raw || "Статус неизвестен";
 }
 
-function shortId(value: unknown) {
-  const raw = typeof value === "string" ? value.trim() : "";
-  if (!raw) return "—";
-  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function datasetLabel(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : "";
   return raw ? `Набор данных ${shortId(raw)}` : "Набор данных не указан";
 }
 
+function experimentParamsObject(value: unknown): Record<string, unknown> {
+  if (!value) return {};
+
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return isObject(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  if (isObject(value)) {
+    return value;
+  }
+
+  return {};
+}
+
+function experimentRuleId(exp?: Experiment | null) {
+  const params = experimentParamsObject(exp?.params);
+  const rule = params.tally_rule;
+  return typeof rule === "string" ? rule : "";
+}
+
+function experimentRuleLabel(exp?: Experiment | null) {
+  const id = experimentRuleId(exp);
+  return id ? tallyRuleLabel(id) : "—";
+}
+
+function experimentBallotFormat(exp?: Experiment | null) {
+  const params = experimentParamsObject(exp?.params);
+  const value = params.ballot_format;
+  return typeof value === "string" ? value : "";
+}
+
 function experimentRunExperiment(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
   const experimentID = typeof item.experiment_id === "string" ? item.experiment_id : "";
   return experimentID ? experimentMap[experimentID] ?? null : null;
+}
+
+function runDurationSeconds(item: ExperimentRunItem): number | null {
+  const startedAt = (item as any)?.started_at;
+  const finishedAt = (item as any)?.finished_at;
+
+  if (typeof startedAt !== "string" || typeof finishedAt !== "string") return null;
+
+  const startMs = Date.parse(startedAt);
+  const finishMs = Date.parse(finishedAt);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(finishMs)) return null;
+  if (finishMs < startMs) return null;
+
+  return (finishMs - startMs) / 1000;
 }
 
 function experimentRunTitle(
@@ -114,8 +187,14 @@ function experimentRunSubtitle(item: ExperimentRunItem, experimentMap: Record<st
 
   const exp = experimentRunExperiment(item, experimentMap);
   const ruleID = experimentRuleId(exp);
+  const ballotFormat = experimentBallotFormat(exp);
+
   if (ruleID) {
     parts.push(`правило ${tallyRuleLabel(ruleID)}`);
+  }
+
+  if (ballotFormat) {
+    parts.push(formatBallotFormat(ballotFormat));
   }
 
   parts.push(datasetLabel(item.dataset_id));
@@ -129,37 +208,70 @@ function experimentRunSubtitle(item: ExperimentRunItem, experimentMap: Record<st
 }
 
 function nowTimeLabel() {
-  const d = new Date();
-  return d.toLocaleTimeString();
+  return new Date().toLocaleTimeString();
+}
+
+function humanizeMetricKey(key: string) {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function metricLabel(key: string): string {
-  switch (key) {
-    case "total_ballots":
-      return "Всего бюллетеней";
-    case "valid_ballots":
-      return "Корректных бюллетеней";
-    case "invalid_ballots":
-      return "Некорректных бюллетеней";
-    case "candidates_count":
-      return "Число кандидатов";
-    case "winner_count":
-      return "Число победителей";
-    case "committee_size":
-      return "Размер комитета";
-    case "rounds_count":
-      return "Число раундов";
-    case "winner_score":
-      return "Баллы победителя";
-    case "runner_up_score":
-      return "Баллы второго места";
-    case "margin":
-      return "Отрыв";
-    case "average_score":
-      return "Средний балл";
-    default:
-      return key;
-  }
+  const labels: Record<string, string> = {
+    total_ballots: "Всего бюллетеней",
+    valid_ballots: "Корректных бюллетеней",
+    invalid_ballots: "Некорректных бюллетеней",
+    candidates_count: "Число кандидатов",
+    voter_count: "Число избирателей",
+    voters_count: "Число избирателей",
+    ballots_count: "Число бюллетеней",
+    winner_count: "Число победителей",
+    winners_count: "Число победителей",
+    committee_size: "Размер комитета",
+    rounds_count: "Число раундов",
+    iterations_count: "Число итераций",
+    winner_score: "Баллы победителя",
+    runner_up_score: "Баллы второго места",
+    margin: "Отрыв",
+    average_score: "Средний балл",
+    median_score: "Медианный балл",
+    min_score: "Минимальный балл",
+    max_score: "Максимальный балл",
+    score_sum: "Сумма баллов",
+    score_mean: "Среднее значение баллов",
+    score_variance: "Дисперсия баллов",
+    score_stddev: "Стандартное отклонение баллов",
+    total_seconds: "Общее время, с",
+    duration_seconds: "Длительность, с",
+    elapsed_seconds: "Прошло времени, с",
+    time_seconds: "Время, с",
+    total_ms: "Общее время, мс",
+    duration_ms: "Длительность, мс",
+    elapsed_ms: "Прошло времени, мс",
+    time_ms: "Время, мс",
+    peak_memory_bytes: "Пиковая память, байт",
+    max_memory_bytes: "Максимальная память, байт",
+    memory_bytes: "Память, байт",
+    ram_bytes: "ОЗУ, байт",
+    peak_memory_mb: "Пиковая память, МиБ",
+    max_memory_mb: "Максимальная память, МиБ",
+    memory_mb: "Память, МиБ",
+    ram_mb: "ОЗУ, МиБ",
+    throughput_ops_per_sec: "Пропускная способность, операций/с",
+    ops_per_sec: "Операций/с",
+    ballots_per_sec: "Бюллетеней/с",
+    speed_per_sec: "Скорость, 1/с",
+    throughput: "Пропускная способность",
+    comparisons_count: "Число сравнений",
+    pairwise_comparisons_count: "Число попарных сравнений",
+    ties_count: "Число ничьих",
+    eliminated_count: "Исключено кандидатов",
+    selected_count: "Выбрано кандидатов",
+  };
+
+  return labels[key] || humanizeMetricKey(key) || key;
 }
 
 function summaryItems(value: unknown): Array<{ label: string; value: React.ReactNode }> {
@@ -282,7 +394,13 @@ function canonicalIndicators(result: unknown) {
     numberFromRecordByKeys(metrics, ["peak_memory_mb", "max_memory_mb", "memory_mb", "ram_mb"]);
 
   const speedPerSecond =
-    numberFromRecordByKeys(metrics, ["throughput_ops_per_sec", "ops_per_sec", "ballots_per_sec", "speed_per_sec", "throughput"]);
+    numberFromRecordByKeys(metrics, [
+      "throughput_ops_per_sec",
+      "ops_per_sec",
+      "ballots_per_sec",
+      "speed_per_sec",
+      "throughput",
+    ]);
 
   return {
     timeSeconds: timeSecondsDirect ?? (timeMilliseconds != null ? timeMilliseconds / 1000 : null),
@@ -309,6 +427,7 @@ function formatSpeed(value: number | null) {
 
 function winnerList(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => prettyValue(item));
+
   if (isObject(value)) {
     if (Array.isArray(value.winners)) {
       return value.winners.map((item) => prettyValue(item));
@@ -317,6 +436,7 @@ function winnerList(value: unknown): string[] {
       return value.items.map((item) => prettyValue(item));
     }
   }
+
   if (value != null) return [prettyValue(value)];
   return [];
 }
@@ -327,63 +447,21 @@ function resultErrorText(value: unknown): string | null {
   return typeof text === "string" && text.trim() ? text.trim() : null;
 }
 
-
-type RunsLocationState = {
-  createdRuns?: Array<{
-    rule: string;
-    experimentId: string;
-    runId: string;
-    jobId: string;
-  }>;
-  autoOpenRunId?: string;
-};
-
-function ruleLabelRu(id: string) {
-  return tallyRuleLabel(id);
+function resultMethod(value: unknown) {
+  if (!isObject(value)) return "";
+  const method = value.method;
+  return typeof method === "string" && method.trim() ? method.trim() : "";
 }
 
-function experimentParamsObject(value: unknown): Record<string, unknown> {
-  if (!value) return {};
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : {};
-    } catch {
-      return {};
-    }
-  }
-  if (typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
+function resultParams(value: unknown) {
+  if (!isObject(value)) return null;
+  return value.params ?? null;
 }
 
-function experimentRuleId(exp?: Experiment | null) {
-  const params = experimentParamsObject(exp?.params);
-  const rule = params.tally_rule;
-  return typeof rule === "string" ? rule : "";
-}
-
-function experimentRuleLabel(exp?: Experiment | null) {
-  const id = experimentRuleId(exp);
-  return id ? ruleLabelRu(id) : "—";
-}
-
-function runDurationSeconds(item: ExperimentRunItem): number | null {
-  const startedAt = (item as any)?.started_at;
-  const finishedAt = (item as any)?.finished_at;
-
-  if (typeof startedAt !== "string" || typeof finishedAt !== "string") return null;
-
-  const startMs = Date.parse(startedAt);
-  const finishMs = Date.parse(finishedAt);
-
-  if (!Number.isFinite(startMs) || !Number.isFinite(finishMs)) return null;
-  if (finishMs < startMs) return null;
-
-  return (finishMs - startMs) / 1000;
+function resultStatus(value: unknown) {
+  if (!isObject(value)) return "";
+  const status = value.status;
+  return typeof status === "string" ? status : "";
 }
 
 function resultSummaryCsvRows(result: unknown) {
@@ -392,6 +470,16 @@ function resultSummaryCsvRows(result: unknown) {
 
   const canonical = canonicalIndicators(result);
 
+  rows.push({
+    section: "summary",
+    key: "status",
+    value: resultStatus(result),
+  });
+  rows.push({
+    section: "summary",
+    key: "method",
+    value: resultMethod(result),
+  });
   rows.push({
     section: "summary",
     key: "time_seconds",
@@ -450,9 +538,14 @@ function resultSummaryCsvRows(result: unknown) {
   return rows;
 }
 
-function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
+function buildRunReportText(
+  run: ExperimentRunItem | null,
+  result: unknown,
+  experiment: Experiment | null
+) {
   const runRec = run && typeof run === "object" ? (run as Record<string, unknown>) : null;
-  const resultRec = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
+  const resultRec = isObject(result) ? result : null;
+  const experimentParams = experimentParamsObject(experiment?.params);
 
   const winners = winnerList(resultRec?.winners);
   const metrics = isObject(resultRec?.metrics) ? Object.entries(resultRec.metrics) : [];
@@ -466,7 +559,9 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   lines.push("");
 
   lines.push("Запуск:");
-  lines.push(`- status: ${prettyValue(runRec?.status)}`);
+  lines.push(`- status: ${runStatusLabel(runRec?.status)}`);
+  lines.push(`- rule: ${experimentRuleLabel(experiment)}`);
+  lines.push(`- ballot_format: ${formatBallotFormat(experimentBallotFormat(experiment))}`);
   lines.push(`- dataset: ${datasetLabel(runRec?.dataset_id)}`);
   lines.push(`- started_at: ${prettyValue(runRec?.started_at)}`);
   lines.push(`- finished_at: ${prettyValue(runRec?.finished_at)}`);
@@ -475,11 +570,24 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
   lines.push(`- dataset_id: ${prettyValue(runRec?.dataset_id)}`);
   lines.push("");
 
+  lines.push("Параметры эксперимента:");
+  if (Object.keys(experimentParams).length > 0) {
+    Object.entries(experimentParams).forEach(([key, value]) => {
+      lines.push(`- ${key}: ${prettyValue(value)}`);
+    });
+  } else {
+    lines.push("—");
+  }
+  lines.push("");
+
   lines.push("Ключевые показатели:");
+  lines.push(`- method: ${resultMethod(result) || "—"}`);
+  lines.push(`- result_status: ${runStatusLabel(resultStatus(result))}`);
   lines.push(`- time_seconds: ${canonical.timeSeconds != null ? canonical.timeSeconds.toFixed(3) : "—"}`);
   lines.push(`- memory_bytes: ${canonical.memoryBytes != null ? canonical.memoryBytes.toFixed(0) : "—"}`);
   lines.push(`- speed_per_second: ${canonical.speedPerSecond != null ? canonical.speedPerSecond.toFixed(3) : "—"}`);
   lines.push("");
+
   lines.push("Победители:");
   if (winners.length > 0) {
     winners.forEach((winner, index) => lines.push(`${index + 1}. ${winner}`));
@@ -490,7 +598,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
 
   lines.push("Метрики:");
   if (metrics.length > 0) {
-    metrics.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
+    metrics.forEach(([key, value]) => lines.push(`- ${metricLabel(key)}: ${prettyValue(value)}`));
   } else {
     lines.push("—");
   }
@@ -498,7 +606,7 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
 
   lines.push("Временные показатели:");
   if (timings.length > 0) {
-    timings.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
+    timings.forEach(([key, value]) => lines.push(`- ${metricLabel(key)}: ${prettyValue(value)}`));
   } else {
     lines.push("—");
   }
@@ -506,15 +614,15 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
 
   lines.push("Артефакты:");
   if (artifacts.length > 0) {
-    artifacts.forEach(([key, value]) => lines.push(`- ${key}: ${prettyValue(value)}`));
+    artifacts.forEach(([key, value]) => lines.push(`- ${metricLabel(key)}: ${prettyValue(value)}`));
   } else {
     lines.push("—");
   }
   lines.push("");
 
-  const protocol = isObject(resultRec) ? resultRec.protocol : null;
+  const protocol = resultRec?.protocol ?? null;
   const errorText =
-    isObject(resultRec) && typeof resultRec.error_text === "string" && resultRec.error_text.trim()
+    resultRec && typeof resultRec.error_text === "string" && resultRec.error_text.trim()
       ? resultRec.error_text.trim()
       : "";
 
@@ -531,7 +639,8 @@ function buildRunReportText(run: ExperimentRunItem | null, result: unknown) {
     lines.push("—");
   }
   lines.push("");
-  return `${lines.join("\n")}`;
+
+  return lines.join("\n");
 }
 
 export function ExperimentRunsPage() {
@@ -643,6 +752,58 @@ export function ExperimentRunsPage() {
     [token, experimentIdFilter, setToken, addNotification]
   );
 
+  const loadDetail = useCallback(
+    async (id: string) => {
+      if (!token) return;
+
+      detailAbortRef.current?.abort();
+      const ac = new AbortController();
+      detailAbortRef.current = ac;
+
+      setDetailLoading(true);
+      setErr(null);
+
+      try {
+        const item = await api.experimentRuns.get(token, id, ac.signal);
+        setSelected(item);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) setToken(null);
+        setErr(e?.message || "Не удалось загрузить запуск");
+        setSelected(null);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [token, setToken]
+  );
+
+  const loadResult = useCallback(
+    async (id: string) => {
+      if (!token) return;
+
+      resultAbortRef.current?.abort();
+      const ac = new AbortController();
+      resultAbortRef.current = ac;
+
+      setResultLoading(true);
+      setErr(null);
+
+      try {
+        const result = await api.experimentRuns.result(token, id, ac.signal);
+        setSelectedResult(result);
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) setToken(null);
+        setErr(e?.message || "Не удалось загрузить результат запуска");
+        setSelectedResult(null);
+      } finally {
+        setResultLoading(false);
+      }
+    },
+    [token, setToken]
+  );
+
   useEffect(() => {
     loadList(false);
     return () => {
@@ -673,52 +834,6 @@ export function ExperimentRunsPage() {
       timerRef.current = null;
     };
   }, [pollingOn, pollEverySec, loadList]);
-
-  const loadDetail = async (id: string) => {
-    if (!token) return;
-
-    detailAbortRef.current?.abort();
-    const ac = new AbortController();
-    detailAbortRef.current = ac;
-
-    setDetailLoading(true);
-    setErr(null);
-
-    try {
-      const item = await api.experimentRuns.get(token, id, ac.signal);
-      setSelected(item);
-    } catch (e: any) {
-      if (e?.name === "AbortError") return;
-      if (e?.status === 401) setToken(null);
-      setErr(e?.message || "Не удалось загрузить запуск");
-      setSelected(null);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const loadResult = async (id: string) => {
-    if (!token) return;
-
-    resultAbortRef.current?.abort();
-    const ac = new AbortController();
-    resultAbortRef.current = ac;
-
-    setResultLoading(true);
-    setErr(null);
-
-    try {
-      const result = await api.experimentRuns.result(token, id, ac.signal);
-      setSelectedResult(result);
-    } catch (e: any) {
-      if (e?.name === "AbortError") return;
-      if (e?.status === 401) setToken(null);
-      setErr(e?.message || "Не удалось загрузить результат запуска");
-      setSelectedResult(null);
-    } finally {
-      setResultLoading(false);
-    }
-  };
 
   useEffect(() => {
     const targetRunId = autoOpenRunRef.current;
@@ -806,6 +921,7 @@ export function ExperimentRunsPage() {
   const selectedExperimentID =
     selected && typeof selected.experiment_id === "string" ? selected.experiment_id : "";
   const selectedExperiment = selectedExperimentID ? experimentMap[selectedExperimentID] ?? null : null;
+  const selectedExperimentParams = experimentParamsObject(selectedExperiment?.params);
 
   const metricsSummary = useMemo(() => summaryItems(resultRecord?.metrics), [resultRecord]);
   const timingsSummary = useMemo(() => summaryItems(resultRecord?.timings), [resultRecord]);
@@ -813,6 +929,10 @@ export function ExperimentRunsPage() {
   const winners = useMemo(() => winnerList(resultRecord?.winners), [resultRecord]);
   const canonical = useMemo(() => canonicalIndicators(selectedResult), [selectedResult]);
   const errorText = useMemo(() => resultErrorText(selectedResult), [selectedResult]);
+
+  const methodText = useMemo(() => resultMethod(selectedResult), [selectedResult]);
+  const paramsValue = useMemo(() => resultParams(selectedResult), [selectedResult]);
+  const resultStatusText = useMemo(() => resultStatus(selectedResult), [selectedResult]);
 
   const metricChartItems = useMemo(() => numericItems(resultRecord?.metrics), [resultRecord]);
   const vectorMetricChartItems = useMemo(() => vectorChartItems(resultRecord?.metrics), [resultRecord]);
@@ -830,7 +950,7 @@ export function ExperimentRunsPage() {
   const statusChartItems = useMemo(
     () =>
       Object.entries(counters).map(([label, value]) => ({
-        label,
+        label: runStatusLabel(label),
         value,
       })),
     [counters]
@@ -854,36 +974,46 @@ export function ExperimentRunsPage() {
   const exportRunsCsv = () => {
     downloadCsvFile(
       "experiment-runs.csv",
-      items.map((item, index) => ({
-        title: experimentRunTitle(item, index, experimentMap),
-        status: runStatusLabel(runStatus(item)),
-        rule: experimentRuleLabel(experimentRunExperiment(item, experimentMap)),
-        dataset: datasetLabel(item.dataset_id),
-        duration_seconds: runDurationSeconds(item) ?? "",
-        started_at: prettyValue((item as any)?.started_at),
-        finished_at: prettyValue((item as any)?.finished_at),
-        id: runId(item, index),
-        experiment_id: prettyValue((item as any)?.experiment_id),
-        dataset_id: prettyValue((item as any)?.dataset_id),
-      }))
+      items.map((item, index) => {
+        const experiment = experimentRunExperiment(item, experimentMap);
+
+        return {
+          title: experimentRunTitle(item, index, experimentMap),
+          status: runStatusLabel(runStatus(item)),
+          rule: experimentRuleLabel(experiment),
+          ballot_format: formatBallotFormat(experimentBallotFormat(experiment)),
+          dataset: datasetLabel(item.dataset_id),
+          duration_seconds: runDurationSeconds(item) ?? "",
+          started_at: prettyValue((item as any)?.started_at),
+          finished_at: prettyValue((item as any)?.finished_at),
+          id: runId(item, index),
+          experiment_id: prettyValue((item as any)?.experiment_id),
+          dataset_id: prettyValue((item as any)?.dataset_id),
+        };
+      })
     );
   };
 
   const exportRunsXlsx = () => {
     downloadXlsxFile(
       "experiment-runs.xlsx",
-      items.map((item, index) => ({
-        title: experimentRunTitle(item, index, experimentMap),
-        status: runStatusLabel(runStatus(item)),
-        rule: experimentRuleLabel(experimentRunExperiment(item, experimentMap)),
-        dataset: datasetLabel(item.dataset_id),
-        duration_seconds: runDurationSeconds(item) ?? "",
-        started_at: prettyValue((item as any)?.started_at),
-        finished_at: prettyValue((item as any)?.finished_at),
-        id: runId(item, index),
-        experiment_id: prettyValue((item as any)?.experiment_id),
-        dataset_id: prettyValue((item as any)?.dataset_id),
-      })),
+      items.map((item, index) => {
+        const experiment = experimentRunExperiment(item, experimentMap);
+
+        return {
+          title: experimentRunTitle(item, index, experimentMap),
+          status: runStatusLabel(runStatus(item)),
+          rule: experimentRuleLabel(experiment),
+          ballot_format: formatBallotFormat(experimentBallotFormat(experiment)),
+          dataset: datasetLabel(item.dataset_id),
+          duration_seconds: runDurationSeconds(item) ?? "",
+          started_at: prettyValue((item as any)?.started_at),
+          finished_at: prettyValue((item as any)?.finished_at),
+          id: runId(item, index),
+          experiment_id: prettyValue((item as any)?.experiment_id),
+          dataset_id: prettyValue((item as any)?.dataset_id),
+        };
+      }),
       "Runs"
     );
   };
@@ -911,13 +1041,16 @@ export function ExperimentRunsPage() {
     downloadPdfTextFile(
       "experiment-run-report.pdf",
       "Отчет по запуску эксперимента",
-      buildRunReportText(selected, selectedResult)
+      buildRunReportText(selected, selectedResult, selectedExperiment)
     );
   };
 
   const exportResultReportTxt = () => {
     if (!selectedResult) return;
-    downloadTextFile("experiment-run-report.txt", buildRunReportText(selected, selectedResult));
+    downloadTextFile(
+      "experiment-run-report.txt",
+      buildRunReportText(selected, selectedResult, selectedExperiment)
+    );
   };
 
   return (
@@ -1044,12 +1177,9 @@ export function ExperimentRunsPage() {
           {items.map((item, index) => {
             const id = runId(item, index);
             const status = runStatus(item);
-            const rawExperimentId =
-              typeof (item as any)?.experiment_id === "string"
-                ? String((item as any)?.experiment_id)
-                : "";
-            const experiment = rawExperimentId ? experimentMap[rawExperimentId] : null;
+            const experiment = experimentRunExperiment(item, experimentMap);
             const ruleText = experimentRuleLabel(experiment);
+            const ballotFormat = experimentBallotFormat(experiment);
 
             return (
               <div key={id} style={{ ...styles.card, padding: 12 }}>
@@ -1072,6 +1202,7 @@ export function ExperimentRunsPage() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Badge text={runStatusLabel(status)} />
                     {ruleText !== "—" ? <Badge text={ruleText} /> : null}
+                    {ballotFormat ? <Badge text={formatBallotFormat(ballotFormat)} /> : null}
                   </div>
                 </div>
 
@@ -1080,6 +1211,7 @@ export function ExperimentRunsPage() {
                     items={[
                       { label: "Статус", value: runStatusLabel(status) },
                       { label: "Набор данных", value: datasetLabel((item as any)?.dataset_id) },
+                      { label: "Формат", value: formatBallotFormat(ballotFormat) },
                       { label: "Начало", value: formatDateTime((item as any)?.started_at) },
                       { label: "Завершение", value: formatDateTime((item as any)?.finished_at) },
                       {
@@ -1103,6 +1235,8 @@ export function ExperimentRunsPage() {
                         { label: "ID запуска", value: id },
                         { label: "ID эксперимента", value: prettyValue((item as any)?.experiment_id) },
                         { label: "ID набора данных", value: prettyValue((item as any)?.dataset_id) },
+                        { label: "Правило", value: experimentRuleId(experiment) || "—" },
+                        { label: "Формат бюллетеня", value: ballotFormat || "—" },
                       ]}
                     />
                   </div>
@@ -1170,6 +1304,9 @@ export function ExperimentRunsPage() {
                   <Badge text={runStatusLabel(selectedRecord.status)} />
                 ) : null}
                 {selectedExperiment ? <Badge text={experimentRuleLabel(selectedExperiment)} /> : null}
+                {experimentBallotFormat(selectedExperiment) ? (
+                  <Badge text={formatBallotFormat(experimentBallotFormat(selectedExperiment))} />
+                ) : null}
               </div>
 
               <SummaryGrid
@@ -1178,6 +1315,10 @@ export function ExperimentRunsPage() {
                   {
                     label: "Эксперимент",
                     value: selectedExperiment ? experimentRuleLabel(selectedExperiment) : "—",
+                  },
+                  {
+                    label: "Формат бюллетеня",
+                    value: formatBallotFormat(experimentBallotFormat(selectedExperiment)),
                   },
                   { label: "Набор данных", value: datasetLabel(selectedRecord.dataset_id) },
                   { label: "Начало", value: formatDateTime(selectedRecord.started_at) },
@@ -1192,6 +1333,21 @@ export function ExperimentRunsPage() {
                 ]}
               />
 
+              {Object.keys(selectedExperimentParams).length > 0 ? (
+                <div>
+                  <h4 style={{ marginBottom: 8 }}>Параметры эксперимента</h4>
+                  <SummaryGrid
+                    items={Object.entries(selectedExperimentParams)
+                      .filter(([, value]) => value == null || !isObject(value))
+                      .slice(0, 12)
+                      .map(([key, value]) => ({
+                        label: metricLabel(key),
+                        value: prettyValue(value),
+                      }))}
+                  />
+                </div>
+              ) : null}
+
               <details>
                 <summary style={{ cursor: "pointer", ...styles.muted }}>
                   Технические сведения
@@ -1202,6 +1358,11 @@ export function ExperimentRunsPage() {
                       { label: "ID запуска", value: prettyValue(selectedRecord.id) },
                       { label: "ID эксперимента", value: prettyValue(selectedRecord.experiment_id) },
                       { label: "ID набора данных", value: prettyValue(selectedRecord.dataset_id) },
+                      { label: "Правило", value: experimentRuleId(selectedExperiment) || "—" },
+                      {
+                        label: "Формат бюллетеня",
+                        value: experimentBallotFormat(selectedExperiment) || "—",
+                      },
                     ]}
                   />
 
@@ -1221,7 +1382,6 @@ export function ExperimentRunsPage() {
       <div style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Результат запуска</h3>
         {resultLoading ? <div style={styles.muted}>Загрузка…</div> : null}
-        
 
         {errorText ? (
           <div
@@ -1242,16 +1402,16 @@ export function ExperimentRunsPage() {
           <div style={{ display: "grid", gap: 12 }}>
             <div>
               <div style={{ fontWeight: 700 }}>Результат вычисления</div>
-              <div style={styles.muted}>Данные, возвращённые сервисом результата запуска</div>
+              <div style={styles.muted}>Данные, возвращенные сервисом результата запуска</div>
             </div>
-            <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <b>Правило подсчета:</b>{" "}
-              {experimentRuleLabel(
-                typeof selectedRecord?.experiment_id === "string"
-                  ? experimentMap[String(selectedRecord.experiment_id)]
-                  : null
-              )}
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Badge text={`Правило: ${experimentRuleLabel(selectedExperiment)}`} />
+              <Badge text={`Формат: ${formatBallotFormat(experimentBallotFormat(selectedExperiment))}`} />
+              {methodText ? <Badge text={`Метод: ${methodText}`} /> : null}
+              {resultStatusText ? <Badge text={`Результат: ${runStatusLabel(resultStatusText)}`} /> : null}
             </div>
+
             <div>
               <h4 style={{ marginBottom: 8 }}>Ключевые показатели</h4>
               <SummaryGrid
@@ -1262,6 +1422,17 @@ export function ExperimentRunsPage() {
                 ]}
               />
             </div>
+
+            {paramsValue != null ? (
+              <details>
+                <summary style={{ cursor: "pointer", ...styles.muted }}>
+                  Параметры результата
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  <JsonBlock value={paramsValue} />
+                </div>
+              </details>
+            ) : null}
 
             <div>
               <h4 style={{ marginBottom: 8 }}>Победители</h4>
