@@ -286,16 +286,16 @@ export const api = {
       );
     },
 
-    async confirmEmailVerification(verificationToken: string) {
+    async confirmEmailVerification(token: string, code: string) {
       return await request<Me>(
         "/api/v1/auth/email/verification/confirm",
         {
           method: "POST",
           body: JSON.stringify({
-            token: verificationToken,
+            code,
           }),
         },
-        null
+        token
       );
     },
   },

@@ -43,6 +43,37 @@ components:
               type: string
             message:
               type: string
+    
+    EmailVerificationRequestResponse:
+      type: object
+      required: [ok, already_verified]
+      properties:
+        ok:
+          type: boolean
+        already_verified:
+          type: boolean
+        delivery:
+          type: string
+          enum: [dev, smtp]
+          description: dev returns the code in response; smtp sends the code by email.
+        expires_at:
+          type: string
+          format: date-time
+        max_attempts:
+          type: integer
+          example: 5
+        verification_code:
+          type: string
+          description: Present only in dev mode.
+
+    ConfirmEmailVerificationRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          example: ABCD-EFGH-JKLM-NPQR
+          description: One-time email verification code sent by email or returned in dev mode.
 
     OkResponse:
       type: object
@@ -168,33 +199,6 @@ components:
         refresh_token:
           type: string
           description: Opaque refresh token returned by register, login, or refresh.
-
-    EmailVerificationRequestResponse:
-      type: object
-      required: [ok, already_verified]
-      properties:
-        ok:
-          type: boolean
-        already_verified:
-          type: boolean
-        expires_at:
-          type: string
-          format: date-time
-          description: Verification token expiration timestamp.
-        verification_token:
-          type: string
-          description: Present in local self-hosted/dev mode when no mailer is configured.
-        verification_url:
-          type: string
-          description: Local verification URL for self-hosted/dev mode.
-
-    ConfirmEmailVerificationRequest:
-      type: object
-      required: [token]
-      properties:
-        token:
-          type: string
-          description: Opaque email verification token from the verification link.
 
     ChangePasswordRequest:
       type: object
@@ -1311,13 +1315,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
   
+  /api/v1/auth/email/verification/request:
+    post:
+      tags: [Auth]
+      summary: Request email verification code
+      description: >
+        Creates a short-lived one-time email verification code for the current user.
+        In dev mode the code is returned in the response. In smtp mode the code is sent by email.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification code created or sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationRequestResponse'
+        '400':
+          description: Email delivery is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /api/v1/auth/email/verification/confirm:
     post:
       tags: [Auth]
-      summary: Confirm email verification token
+      summary: Confirm email verification code
       description: >
-        Confirms a one-time email verification token. The raw token is accepted only once;
-        the database stores only its hash.
+        Confirms the current user's email using a one-time code. The code is short-lived
+        and becomes invalid after the configured number of failed attempts.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -1332,12 +1367,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
         '400':
-          description: Invalid, expired, or already used verification token
+          description: Invalid, expired, or blocked verification code
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
   /api/v1/auth/me:
     get:
       tags: [Auth]
@@ -1444,7 +1485,7 @@ paths:
       summary: Request email verification token
       description: >
         Creates a new one-time email verification token for the current user.
-        In local self-hosted/dev mode the response may include verification_token and verification_url.
+        In dev mode the response may include verification_code. In smtp mode the code is sent by email and is not returned by the API.
       security:
         - bearerAuth: []
       responses:

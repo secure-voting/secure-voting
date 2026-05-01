@@ -38,9 +38,10 @@ export type AuthTokens = {
 export type EmailVerificationRequestResult = {
   ok: boolean;
   already_verified: boolean;
+  delivery?: "dev" | "smtp" | string;
   expires_at?: string;
-  verification_token?: string;
-  verification_url?: string;
+  max_attempts?: number;
+  verification_code?: string;
 };
 
 export type NotificationKind = "info" | "success" | "warning" | "error";
