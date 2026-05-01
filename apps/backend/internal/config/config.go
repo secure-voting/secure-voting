@@ -20,8 +20,8 @@ type Config struct {
 	IdempotencyTTL time.Duration
 
 	AdminTrustedCIDRs []string
-	RedisTLS   bool
-	RedisTLSCA string
+	RedisTLS          bool
+	RedisTLSCA        string
 
 	MongoURI    string
 	MongoDBName string
@@ -34,9 +34,9 @@ type Config struct {
 	KafkaGroupID           string
 	WorkerPollInterval     time.Duration
 	WorkerScheduleInterval time.Duration
-	KafkaTLS           bool
-	KafkaTLSCA         string
-	KafkaTLSServerName string
+	KafkaTLS               bool
+	KafkaTLSCA             string
+	KafkaTLSServerName     string
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
@@ -53,6 +53,15 @@ type Config struct {
 
 	WriteRateLimit    int
 	WriteRateLimitTTL time.Duration
+
+	EmailVerificationMode string
+	SMTPHost              string
+	SMTPPort              int
+	SMTPUsername          string
+	SMTPPassword          string
+	SMTPFromEmail         string
+	SMTPFromName          string
+	SMTPTLSMode           string
 }
 
 func FromEnv() Config {
@@ -263,13 +272,30 @@ func FromEnv() Config {
 		}
 	}
 
+	emailVerificationMode := strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_VERIFICATION_MODE")))
+	if emailVerificationMode == "" {
+		emailVerificationMode = "dev"
+	}
+
+	smtpPort := 587
+	if s := strings.TrimSpace(os.Getenv("SMTP_PORT")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			smtpPort = v
+		}
+	}
+
+	smtpTLSMode := strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_TLS_MODE")))
+	if smtpTLSMode == "" {
+		smtpTLSMode = "starttls"
+	}
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
 
-		PostgresDSN:      dsn,
-		TokenTTL:         tokenTTL,
-		RefreshTokenTTL:  refreshTokenTTL,
+		PostgresDSN:     dsn,
+		TokenTTL:        tokenTTL,
+		RefreshTokenTTL: refreshTokenTTL,
 
 		RedisAddr:      redisAddr,
 		RedisPassword:  redisPass,
@@ -288,9 +314,9 @@ func FromEnv() Config {
 		KafkaGroupID:           groupID,
 		WorkerPollInterval:     poll,
 		WorkerScheduleInterval: schedulePoll,
-		KafkaTLS:           kafkaTLS,
-		KafkaTLSCA:         kafkaTLSCA,
-		KafkaTLSServerName: kafkaTLSServerName,
+		KafkaTLS:               kafkaTLS,
+		KafkaTLSCA:             kafkaTLSCA,
+		KafkaTLSServerName:     kafkaTLSServerName,
 
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,
@@ -307,6 +333,15 @@ func FromEnv() Config {
 
 		WriteRateLimit:    writeRateLimit,
 		WriteRateLimitTTL: writeRateLimitTTL,
+
+		EmailVerificationMode: emailVerificationMode,
+		SMTPHost:              strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:              smtpPort,
+		SMTPUsername:          strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:          strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPFromEmail:         strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
+		SMTPFromName:          strings.TrimSpace(os.Getenv("SMTP_FROM_NAME")),
+		SMTPTLSMode:           smtpTLSMode,
 
 		AdminTrustedCIDRs: splitCSV(os.Getenv("ADMIN_TRUSTED_CIDRS")),
 	}

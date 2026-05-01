@@ -68,6 +68,15 @@ services:
       - COMPUTE_TLS_CA=/certs/ca.pem
       - COMPUTE_TLS_SERVER_NAME=rust-compute
 
+      - EMAIL_VERIFICATION_MODE=${EMAIL_VERIFICATION_MODE:-dev}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-Secure Voting}
+      - SMTP_TLS_MODE=${SMTP_TLS_MODE:-starttls}
+
     restart: unless-stopped
     depends_on:
       db:

@@ -321,6 +321,8 @@ func mapEmailVerificationCode(code string) error {
 	switch code {
 	case "unauthorized":
 		return apperr.Unauthorized("invalid or expired token")
+	case "email_delivery_not_configured":
+		return apperr.Invalid(code, "email delivery is not configured")
 	case "invalid_verification_code":
 		return apperr.Invalid(code, "invalid verification code")
 	case "verification_code_expired":

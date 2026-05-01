@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var errEmailDeliveryNotConfigured = errors.New("email delivery is not configured")
+
 const (
 	emailVerificationTTL         = 15 * time.Minute
 	emailVerificationMaxAttempts = 5
@@ -92,13 +94,14 @@ func (s *Service) RequestEmailVerification(ctx context.Context, userID string) (
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	var email string
 	var emailVerifiedAt sql.NullTime
 	err = tx.QueryRow(ctx, `
-		SELECT email_verified_at
+		SELECT email, email_verified_at
 		FROM users
 		WHERE id = $1::uuid
 		FOR UPDATE
-	`, userID).Scan(&emailVerifiedAt)
+	`, userID).Scan(&email, &emailVerifiedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return EmailVerificationRequestResult{}, "unauthorized", nil
@@ -124,6 +127,10 @@ func (s *Service) RequestEmailVerification(ctx context.Context, userID string) (
 
 	codeHash := verificationCodeHash(code)
 	expiresAt := nowFn().UTC().Add(emailVerificationTTL)
+	sender := s.emailVerifier
+	if sender == nil {
+		sender = NewDevEmailVerificationSender()
+	}
 
 	_, err = tx.Exec(ctx, `
 		UPDATE email_verification_tokens
@@ -149,6 +156,15 @@ func (s *Service) RequestEmailVerification(ctx context.Context, userID string) (
 		return EmailVerificationRequestResult{}, "", err
 	}
 
+	expiresAtText := expiresAt.Format(time.RFC3339)
+	delivery, err := sender.SendEmailVerificationCode(email, code, expiresAtText)
+	if err != nil {
+		if errors.Is(err, errEmailDeliveryNotConfigured) {
+			return EmailVerificationRequestResult{}, "email_delivery_not_configured", nil
+		}
+		return EmailVerificationRequestResult{}, "", err
+	}
+
 	if err := s.insertAudit(ctx, tx, &userID, "email_verification_requested", map[string]any{
 		"target_type": "user",
 		"target_id":   userID,
@@ -160,14 +176,19 @@ func (s *Service) RequestEmailVerification(ctx context.Context, userID string) (
 		return EmailVerificationRequestResult{}, "", err
 	}
 
-	return EmailVerificationRequestResult{
-		OK:               true,
-		AlreadyVerified:  false,
-		Delivery:         "dev",
-		ExpiresAt:        expiresAt.Format(time.RFC3339),
-		MaxAttempts:      emailVerificationMaxAttempts,
-		VerificationCode: code,
-	}, "", nil
+	res := EmailVerificationRequestResult{
+		OK:              true,
+		AlreadyVerified: false,
+		Delivery:        delivery,
+		ExpiresAt:       expiresAtText,
+		MaxAttempts:     emailVerificationMaxAttempts,
+	}
+
+	if delivery == "dev" {
+		res.VerificationCode = code
+	}
+
+	return res, "", nil
 }
 
 func (s *Service) ConfirmEmailVerification(ctx context.Context, userID, rawCode string) (User, string, error) {

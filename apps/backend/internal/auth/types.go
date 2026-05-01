@@ -14,10 +14,20 @@ type Service struct {
 	db              *pgxpool.Pool
 	tokenTTL        time.Duration
 	refreshTokenTTL time.Duration
+	emailVerifier   EmailVerificationSender
+}
+
+type EmailVerificationSender interface {
+	SendEmailVerificationCode(email, code, expiresAt string) (string, error)
 }
 
 func NewService(db *pgxpool.Pool, tokenTTL time.Duration) *Service {
 	return NewServiceWithRefreshTTL(db, tokenTTL, 30*24*time.Hour)
+}
+
+func (s *Service) WithEmailVerificationSender(sender EmailVerificationSender) *Service {
+	s.emailVerifier = sender
+	return s
 }
 
 func NewServiceWithRefreshTTL(db *pgxpool.Pool, tokenTTL, refreshTokenTTL time.Duration) *Service {
