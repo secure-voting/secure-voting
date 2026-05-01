@@ -70,6 +70,8 @@ function sourceLabel(value: string) {
       return "Импортирован";
     case "external":
       return "Внешний";
+    case "election":
+      return "Из голосования";
     default:
       return value;
   }

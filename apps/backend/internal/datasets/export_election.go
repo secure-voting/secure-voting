@@ -125,17 +125,16 @@ func (s *Service) ExportElection(ctx context.Context, req ExportElectionReq) (st
 	}
 
 	parameters := map[string]any{
-		"source_election_id":  src.ID,
-		"source_election":     src.Title,
-		"source_status":       src.Status,
-		"tally_rule":          src.TallyRule,
-		"ballot_format":       src.BallotFormat,
-		"exported_at":         time.Now().UTC().Format(time.RFC3339),
-		"anonymized":          true,
-		"accepted_ballots":    len(ballots),
-		"score_allow_skip":    src.ScoreAllowSkip,
-		"show_aggregates":     src.ShowAggregates,
-		"exported_by_user_id": actorUserID,
+		"source_election_id": src.ID,
+		"source_election":    src.Title,
+		"source_status":      src.Status,
+		"tally_rule":         src.TallyRule,
+		"ballot_format":      src.BallotFormat,
+		"exported_at":        time.Now().UTC().Format(time.RFC3339),
+		"anonymized":         true,
+		"accepted_ballots":   len(ballots),
+		"score_allow_skip":   src.ScoreAllowSkip,
+		"show_aggregates":    src.ShowAggregates,
 	}
 
 	if src.ApprovalMaxChoices != nil {

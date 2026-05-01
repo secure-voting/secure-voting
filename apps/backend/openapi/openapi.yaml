@@ -83,6 +83,18 @@ components:
           type: boolean
           const: true
 
+    DatasetFromElectionRequest:
+      type: object
+      required: [election_id]
+      properties:
+        election_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+
     User:
       type: object
       required: [id, email, role, email_verified]
@@ -819,7 +831,7 @@ components:
           type: string
         source:
           type: string
-          enum: [import, generate, external]
+          enum: [import, generate, external, election]
         format:
           type: string
           enum: [approval, ranking, score]
@@ -2582,6 +2594,59 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '403':
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/datasets/from-election:
+    post:
+      tags: [Experiments]
+      summary: Create research dataset from a real election
+      description: >
+        Creates an anonymized research dataset from accepted ballots of a closed or published election.
+        Admin can export owned closed/results_ready/published elections. Researcher can export published elections with aggregates enabled.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetFromElectionRequest'
+      responses:
+        '200':
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetCreateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden or aggregates disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Election is not ready, not published, or has no accepted ballots
           content:
             application/json:
               schema:
