@@ -7,6 +7,7 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 use crate::models::{
+    BallotData,
     candidate_id::CandidateId,
     profile::{CandidateRemovalError, Profile},
 };
@@ -22,6 +23,7 @@ pub struct ApprovalBallot {
 
 impl ApprovalBallot {
     /// Create a new `ApprovalBallot`.
+    #[must_use]
     pub fn new(votes: &[CandidateId]) -> Self {
         Self {
             votes: votes.to_vec(),
@@ -128,7 +130,7 @@ impl Profile<ApprovalBallot> {
     }
 }
 
-impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<ApprovalBallot> {
+impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<ApprovalBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
@@ -139,44 +141,48 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<ApprovalBallot> {
     ///
     /// The order of candidates doesn't matter, all the candidates are 'approved'.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
-        let (value, names) = value;
-        if value.is_empty() {
+    fn try_from(value: (Vec<BallotData>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (ballots, names) = value;
+
+        if ballots.is_empty() {
             return Err(ProfileError::NoVoters);
         }
 
-        if value[0].is_empty() {
+        let mut value: Vec<Vec<CandidateId>> = Vec::with_capacity(ballots.len());
+        for ballot in &ballots {
+            let BallotData::Simple(votes) = ballot else {
+                continue;
+            };
+            if votes.is_empty() {
+                return Err(ProfileError::NoCandidates);
+            }
+            value.push(votes.clone());
+        }
+
+        if value.is_empty() || value[0].is_empty() {
             return Err(ProfileError::NoCandidates);
         }
 
         let mut active_candidates = HashSet::new();
 
         for vote in &value {
-            let mut candidates = vec![0; value[0].len()];
-            for &candidate in vote {
-                if candidates[candidate] != 0 {
-                    return Err(ProfileError::DoubleVote(candidate));
+            let mut seen = HashSet::new();
+            for candidate in vote {
+                if !seen.insert(candidate.clone()) {
+                    return Err(ProfileError::DoubleVote(candidate.get_id()));
                 }
-
-                candidates[candidate] = 1;
-                active_candidates.insert(candidate);
+                active_candidates.insert(candidate.clone());
             }
         }
+
         Ok(Profile {
             votes: value
                 .iter()
-                .map(|voter_info| {
-                    ApprovalBallot::new(
-                        &voter_info
-                            .iter()
-                            .map(|&elem| CandidateId::new(elem, names[elem].clone()))
-                            .collect::<Vec<_>>(),
-                    )
-                })
+                .map(|voter_info| ApprovalBallot::new(voter_info))
                 .collect(),
-            active_candidates: (0..value[0].len())
+            active_candidates: (0..names.len())
                 .zip(names.iter())
-                .map(|(id, name)| CandidateId::new(id, name))
+                .map(|(id, name)| CandidateId::new(id, name.clone()))
                 .collect(),
         })
     }

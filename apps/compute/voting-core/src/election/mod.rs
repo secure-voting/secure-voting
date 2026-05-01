@@ -6,6 +6,7 @@
 use std::error::Error;
 
 use crate::{
+    models::BallotData,
     prelude::{Profile, VotingRuleExec},
     voting_rules::{Metrics, Protocol},
 };
@@ -15,40 +16,17 @@ use crate::{
 /// # Errors
 ///
 /// An error can occur if the supplied input data doesn't represent a correct voting profile.
-#[allow(
-    clippy::missing_panics_doc,
-    reason = "The panic cannot occur, the element that was in the array, could be found by position()"
-)]
 pub fn run_election<T, VRE: VotingRuleExec<T>>(
-    ballots: Vec<Vec<String>>,
+    ballots: Vec<BallotData>,
+    names: Vec<String>,
     rule: &VRE,
 ) -> anyhow::Result<(Vec<String>, Metrics, Protocol)>
 where
     VRE::Error: Error + Send + Sync + 'static,
-    Profile<T>: TryFrom<(Vec<Vec<usize>>, Vec<String>)>,
-    <Profile<T> as TryFrom<(Vec<Vec<usize>>, Vec<String>)>>::Error: Error + Send + Sync + 'static,
+    Profile<T>: TryFrom<(Vec<BallotData>, Vec<String>)>,
+    <Profile<T> as TryFrom<(Vec<BallotData>, Vec<String>)>>::Error: Error + Send + Sync + 'static,
 {
-    let mut name_set: Vec<String> = Vec::new();
-    for ballot in &ballots {
-        for vote in ballot {
-            if !name_set.contains(vote) {
-                name_set.push(vote.clone());
-            }
-        }
-    }
-
-    #[allow(clippy::unwrap_used)]
-    let vote_data: Vec<Vec<usize>> = ballots
-        .iter()
-        .map(|ballot| {
-            ballot
-                .iter()
-                .map(|vote| name_set.iter().position(|n| n == vote).unwrap())
-                .collect()
-        })
-        .collect();
-
-    let profile = Profile::try_from((vote_data, name_set))?;
+    let profile = Profile::try_from((ballots, names))?;
 
     let result = rule.execute(&profile)?;
 

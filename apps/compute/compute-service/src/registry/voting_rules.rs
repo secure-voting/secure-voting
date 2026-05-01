@@ -1,5 +1,5 @@
 use voting_core::{
-    models::approval::ApprovalBallot,
+    models::{BallotData, approval::ApprovalBallot},
     prelude::*,
     tie_breaker::fallthrough::FallthroughTieBreaker,
     voting_rules::{Metrics, Protocol, approval::ApprovalRuleWith},
@@ -7,14 +7,17 @@ use voting_core::{
 
 use crate::registry::{Algorithm, AlgorithmError, BallotType, Registry};
 
+/// Helper macro to implement the `Algorithm` trait
+/// for all the algorithms from the voting-core library.
 macro_rules! impl_algorithm {
     ($ty:path, $alias:expr, $tally:literal, $runs:literal, $size:literal, $type:literal, $choices:literal, $top_k:literal, $range: literal) => {
         impl Algorithm for $ty {
             fn run_election(
                 &self,
-                input: Vec<Vec<String>>,
+                input: Vec<BallotData>,
+                names: Vec<String>,
             ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError> {
-                run_election(input, &Self::default())
+                run_election(input, names, &Self::default())
                     .map_err(|e| AlgorithmError::InvalidArgument(e.to_string()))
             }
 
@@ -184,6 +187,7 @@ impl_algorithm!(
     false
 );
 
+/// The limit of the combinatorial explosion filter in the q-Paretian family of algorithms.
 const LIMIT: usize = 50;
 
 impl_algorithm!(
@@ -219,6 +223,9 @@ impl_algorithm!(
     true,
     false
 );
+impl_algorithm!(
+    ScoreRule, "Score", true, true, true, false, false, true, false
+);
 
 /// Return a registry with all the voting-core
 /// algorithms included for appropriate ballot types.
@@ -252,6 +259,8 @@ pub fn get_core_registry() -> Registry {
         ApprovalRuleWith::<3, FallthroughTieBreaker, ApprovalBallot>::default(),
         BallotType::Approval,
     );
+
+    registry.add(ScoreRule::default(), BallotType::Scoring);
 
     registry
 }

@@ -75,6 +75,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimpleMajorityRule<LI
                                 .winner_count(winner_count)
                                 .committee_size(0)
                                 .rounds_count(1)
+                                .tie_detected(winner_count > 1)
                                 .build(),
                         )
                         .build(),
@@ -115,8 +116,10 @@ impl<const LIMIT: usize> Default for SimpleMajorityRule<LIMIT> {
 
 #[allow(clippy::unwrap_used)]
 #[allow(clippy::expect_used)]
+#[allow(clippy::needless_pass_by_value)]
 #[cfg(test)]
 mod tests {
+    use crate::models::BallotData;
     use crate::prelude::CandidateId;
 
     use super::*;
@@ -141,7 +144,17 @@ mod tests {
     "unanimous winner"
 )]
     fn unique_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winner: (usize, &str)) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names.clone()))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimpleMajorityRule::<30>
@@ -176,7 +189,17 @@ mod tests {
         "early q=2 detection"
     )]
     fn multiple_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winners: Vec<(usize, &str)>) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names.clone()))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimpleMajorityRule::<30>
@@ -197,9 +220,19 @@ mod tests {
     #[test]
     fn combinatorial_explosion_filter() {
         let voters = vec![vec![0, 1, 2]; 40];
-        let names = vec!["A".into(), "B".into(), "C".into()];
+        let names: Vec<String> = vec!["A".into(), "B".into(), "C".into()];
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
 
-        let profile = Profile::try_from((voters, names))
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise test example");
 
         let result = SimpleMajorityRule::<30>.execute(&profile);

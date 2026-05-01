@@ -53,7 +53,7 @@ where
 mod tests {
     use super::*;
 
-    fn ids(v: Vec<CandidateId>) -> Vec<usize> {
+    fn ids(v: &[CandidateId]) -> Vec<usize> {
         v.iter().map(CandidateId::get_id).collect()
     }
 
@@ -71,7 +71,7 @@ mod tests {
 
         assert_eq!(
             vec![0],
-            ids(MaxScoreDecider::new().decide(&scores).unwrap())
+            ids(&MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -89,7 +89,7 @@ mod tests {
 
         assert_eq!(
             vec![2, 0],
-            ids(MaxScoreDecider::new().decide(&scores).unwrap())
+            ids(&MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -108,7 +108,7 @@ mod tests {
 
         assert_eq!(
             vec![42, 1, 2, 9, 0],
-            ids(MaxScoreDecider::new().decide(&scores).unwrap())
+            ids(&MaxScoreDecider::new().decide(&scores).unwrap())
         );
     }
 }

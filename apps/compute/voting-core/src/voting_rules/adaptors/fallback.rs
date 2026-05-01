@@ -126,6 +126,7 @@ mod tests {
     use super::*;
     use crate::{
         models::{candidate_id::CandidateId, profile::Profile, ranking::RankingBallot},
+        models::BallotData,
         tie_breaker::RuleOutcome,
         voting_rules::VotingRuleExec,
     };
@@ -142,7 +143,11 @@ mod tests {
         }
     }
     fn fake_profile() -> Profile<RankingBallot> {
-        Profile::try_from((vec![vec![0, 1]], vec!["A".into(), "B".into()]))
+        let ballots: Vec<BallotData> = vec![BallotData::Simple(vec![
+            CandidateId::new(0, "A"),
+            CandidateId::new(1, "B"),
+        ])];
+        Profile::try_from((ballots, vec!["A".into(), "B".into()]))
             .expect("Profile is constructed incorrectly, revise test example")
     }
     #[test]

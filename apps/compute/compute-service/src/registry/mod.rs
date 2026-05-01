@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use voting_core::models::BallotData;
 use voting_core::voting_rules::{Metrics, Protocol};
 
-/// Implementations of the `Algrotihm` trait for the algorithms
+/// Implementations of the `Algrotithm` trait for the algorithms
 /// provided by the voting-core library.
 pub mod voting_rules;
 
@@ -77,7 +78,8 @@ pub trait Algorithm: std::fmt::Debug + Send + Sync {
     /// The implementation of the algorithm is free to wrap its error type in the `AlgorithmError::InvalidArgument`.
     fn run_election(
         &self,
-        input: Vec<Vec<String>>,
+        input: Vec<BallotData>,
+        names: Vec<String>,
     ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError>;
 
     /// Alias of the algorithm. A short name for the system storage.
@@ -110,6 +112,7 @@ pub trait Algorithm: std::fmt::Debug + Send + Sync {
 /// Registers algorithms, allows quering them, and executes them.
 #[derive(Debug, Default)]
 pub struct Registry {
+    /// A 2-level map from a pair (algo name, ballot type) to the algorithm itself.
     alias_map: HashMap<String, HashMap<BallotType, Box<dyn Algorithm>>>,
 }
 
@@ -148,7 +151,8 @@ impl Registry {
     /// 4. If the algorithm itself returns the error while executing
     pub fn execute(
         &self,
-        input: Vec<Vec<String>>,
+        input: Vec<BallotData>,
+        names: Vec<String>,
         alias: &str,
         ballot_type: &str,
     ) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError> {
@@ -168,7 +172,7 @@ impl Registry {
                     ballot: ballot_type,
                 })?;
 
-        algorithm.run_election(input)
+        algorithm.run_election(input, names)
     }
 
     /// Get an iterator over the supported algorithms.
@@ -196,6 +200,7 @@ impl Registry {
 mod tests {
     use super::*;
     use mockall::mock;
+    use voting_core::models::candidate_id::CandidateId;
 
     mock! {
       #[derive(Debug)]
@@ -204,7 +209,7 @@ mod tests {
       }
 
       impl Algorithm for Algorithm {
-        fn run_election(&self, input: Vec<Vec<String>>) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError>;
+        fn run_election(&self, input: Vec<BallotData>, names: Vec<String>) -> Result<(Vec<String>, Metrics, Protocol), AlgorithmError>;
         fn alias(&self) -> &'static str;
         fn supports_election_tally(&self) -> bool;
         fn supports_experiment_runs(&self) -> bool;
@@ -230,7 +235,12 @@ mod tests {
 
         registry.add(algo, BallotType::Ranking);
 
-        let result = registry.execute(vec![vec!["A".into()]], "test", "ranking");
+        let result = registry.execute(
+            vec![BallotData::Simple(vec![CandidateId::new(0, "A")])],
+            vec!["A".into()],
+            "test",
+            "ranking",
+        );
 
         assert!(result.is_ok());
     }
@@ -240,7 +250,7 @@ mod tests {
         let registry = Registry::new();
 
         let err = registry
-            .execute(vec![], "does_not_exist", "ranking")
+            .execute(vec![], vec![], "does_not_exist", "ranking")
             .unwrap_err();
 
         assert!(matches!(err, AlgorithmError::NoSuchAlgorithm(_)));
@@ -255,7 +265,9 @@ mod tests {
 
         registry.add(algo, BallotType::Ranking);
 
-        let err = registry.execute(vec![], "test", "approval").unwrap_err();
+        let err = registry
+            .execute(vec![], vec![], "test", "approval")
+            .unwrap_err();
 
         assert!(matches!(
             err,
@@ -268,7 +280,7 @@ mod tests {
         let registry = Registry::new();
 
         let err = registry
-            .execute(vec![], "test", "not_a_ballot")
+            .execute(vec![], vec![], "test", "not_a_ballot")
             .unwrap_err();
 
         assert!(matches!(err, AlgorithmError::InvalidBallotType(_)));

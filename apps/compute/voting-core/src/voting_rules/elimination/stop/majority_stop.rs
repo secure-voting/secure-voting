@@ -33,6 +33,7 @@ impl EliminationStopCondition<Vec<usize>, RankingBallot> for MajorityStop {
 #[cfg(test)]
 mod tests {
     use crate::prelude::CandidateId;
+    use crate::models::BallotData;
 
     use super::*;
     use test_case::test_case;
@@ -63,7 +64,17 @@ mod tests {
             .map(|(i, name)| CandidateId::new(i, name))
             .collect();
 
-        let profile = Profile::try_from((votes, names))
+        let ballots: Vec<BallotData> = votes
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, format!("C{id}")))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test example");
 
         let score = Score::new(scores, &candidates);

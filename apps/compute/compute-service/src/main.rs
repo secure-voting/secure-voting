@@ -13,83 +13,24 @@ use tonic::{
     Response,
     transport::{Identity, server::ServerTlsConfig},
 };
-use voting_core::voting_rules::{Metrics, Protocol};
 
-use crate::{
-    registry::{AlgorithmError, Registry, voting_rules::get_core_registry},
-    securevoting::compute::v1::{
-        ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
-        ballot::Payload,
-        compute_server::{Compute, ComputeServer},
-        run_chunk::Part,
-    },
+use compute_service::registry::voting_rules::get_core_registry;
+use compute_service::registry::Registry;
+use compute_service::securevoting::compute::v1::{
+    ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
+    compute_server::{Compute, ComputeServer},
+    run_chunk::Part,
 };
+use compute_service::{create_error_type, process_request};
 
-#[allow(clippy::default_trait_access)]
-#[allow(clippy::doc_markdown)]
-#[allow(clippy::large_enum_variant)]
-#[allow(clippy::struct_excessive_bools)]
-#[allow(clippy::too_many_lines)]
-/// Generated proto-structs.
-pub mod securevoting {
-    #[allow(missing_docs)]
-    pub mod compute {
-        pub mod v1 {
-            tonic::include_proto!("securevoting.compute.v1");
-        }
-    }
-}
-
-/// Registry module.
-///
-/// Contains the implementaions of the `Algorithm` trait and the `Registry` structure.
-pub mod registry;
-
-fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
-    RunResult {
-        method: String::new(),
-        params_json: vec![],
-
-        status: "error".to_owned(),
-        error_text: format!("ErrorCode: {code}, details: {}", message.into()),
-        winners_json: vec![],
-        metrics_json: vec![],
-        protocol_json: vec![],
-        timings_json: vec![],
-        artifacts_json: vec![],
-    }
-}
-
-#[allow(clippy::expect_used)]
-fn create_winner_response(winners: Vec<String>, metrics: Metrics, protocol: Protocol) -> RunResult {
-    let winner_json = format!(
-        "[{}]",
-        winners
-            .into_iter()
-            .map(|x| format!("\"{x}\""))
-            .collect::<Vec<_>>()
-            .join(", ")
-    );
-
-    RunResult {
-        method: String::new(),
-        params_json: vec![],
-
-        status: "done".to_owned(),
-        error_text: String::new(),
-        winners_json: winner_json.as_bytes().to_vec(),
-        metrics_json: serde_json::to_vec(&metrics).expect("Serialization failed"),
-        protocol_json: serde_json::to_vec(&protocol).expect("Serialization failed"),
-        timings_json: vec![],
-        artifacts_json: vec![],
-    }
-}
-
+/// Compute service struct.
 #[derive(Debug, Default)]
 struct ComputeService {
+    /// Algorithmic registry.
     registry: Arc<RwLock<Registry>>,
 }
 
+#[allow(clippy::cast_sign_loss)]
 #[tonic::async_trait]
 impl Compute for ComputeService {
     async fn run(
@@ -136,64 +77,13 @@ impl Compute for ComputeService {
             )));
         };
 
-        let mut ballots = vec![];
-
-        for batch in ballot_batch {
-            for ballot in batch.ballots {
-                let Some(ballot_payload) = ballot.payload else {
-                    return Ok(Response::new(create_error_type(
-                        tonic::Code::InvalidArgument,
-                        "empty ballot paylod",
-                    )));
-                };
-
-                match ballot_payload {
-                    Payload::Ranking(ranking_ballot) => {
-                        ballots.push(ranking_ballot.ranking);
-                    }
-                    Payload::Approval(approval_ballot) => {
-                        ballots.push(approval_ballot.approvals);
-                    }
-                    Payload::Score(_) => {
-                        return Ok(Response::new(create_error_type(
-                            tonic::Code::Unimplemented,
-                            "not yet supported",
-                        )));
-                    }
-                }
-            }
-        }
-
-        if header.ballot_format != "ranking" && header.ballot_format != "approval" {
-            return Ok(Response::new(create_error_type(
-                tonic::Code::Unimplemented,
-                "not yet supported",
-            )));
-        }
-
         #[allow(clippy::expect_used)]
-        match self.registry.read().expect("RwLock is poisoned").execute(
-            ballots,
-            header.tally_rule.as_str(),
-            &header.ballot_format,
-        ) {
-            Ok(result) => Ok(Response::new(create_winner_response(
-                result.0, result.1, result.2,
-            ))),
-            Err(AlgorithmError::NoSuchAlgorithm(a)) => Ok(Response::new(create_error_type(
-                tonic::Code::Unimplemented,
-                format!("No such algorithm: {a}"),
-            ))),
-            Err(AlgorithmError::InvalidArgument(e) | AlgorithmError::InvalidBallotType(e)) => Ok(
-                Response::new(create_error_type(tonic::Code::InvalidArgument, e)),
-            ),
-            Err(AlgorithmError::UnsupportedBallotForAlgorithm { algorithm, ballot }) => {
-                Ok(Response::new(create_error_type(
-                    tonic::Code::InvalidArgument,
-                    format!("Algorithm {algorithm} does not support ballot type {ballot}"),
-                )))
-            }
-        }
+        let registry = self.registry.read().expect("RwLock is poisoned");
+        Ok(Response::new(process_request(
+            &header,
+            &ballot_batch,
+            &registry,
+        )))
     }
 
     #[allow(clippy::expect_used)]
