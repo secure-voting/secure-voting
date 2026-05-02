@@ -190,8 +190,16 @@ function runDurationSeconds(item: ExperimentRunItem): number | null {
   return (finishMs - startMs) / 1000;
 }
 
-function datasetLabel(value: unknown) {
-  return value ? `Набор данных ${shortId(value)}` : "Набор данных не указан";
+function datasetLabel(value: unknown, datasetMap?: Record<string, DatasetListItem>) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "Набор данных не указан";
+
+  const dataset = datasetMap?.[raw];
+  if (dataset?.name && dataset.name.trim()) {
+    return dataset.name.trim();
+  }
+
+  return `Набор данных ${shortId(raw)}`;
 }
 
 function runExperiment(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
@@ -205,7 +213,11 @@ function runTitle(item: ExperimentRunItem, index: number, experimentMap: Record<
   return `Запуск эксперимента ${index + 1}`;
 }
 
-function runSubtitle(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
+function runSubtitle(
+  item: ExperimentRunItem,
+  experimentMap: Record<string, Experiment>,
+  datasetMap: Record<string, DatasetListItem>
+) {
   const parts: string[] = [];
 
   const exp = runExperiment(item, experimentMap);
@@ -214,7 +226,7 @@ function runSubtitle(item: ExperimentRunItem, experimentMap: Record<string, Expe
     if (rule !== "—") parts.push(`правило ${rule}`);
   }
 
-  parts.push(datasetLabel(item.dataset_id));
+  parts.push(datasetLabel(item.dataset_id, datasetMap));
 
   const duration = runDurationSeconds(item);
   if (duration != null) {
@@ -283,6 +295,14 @@ export function ResearcherDashboardPage() {
     }
     return map;
   }, [experiments]);
+
+  const datasetMap = useMemo(() => {
+    const map: Record<string, DatasetListItem> = {};
+    for (const dataset of datasets) {
+      if (dataset.id) map[dataset.id] = dataset;
+    }
+    return map;
+  }, [datasets]);
 
   const activeRuns = useMemo(
     () =>
@@ -488,7 +508,7 @@ export function ResearcherDashboardPage() {
                     <div>
                       <div style={{ fontWeight: 800 }}>{runTitle(item, index, experimentMap)}</div>
                       <div style={{ ...styles.muted, marginTop: 4 }}>
-                        {runSubtitle(item, experimentMap)}
+                        {runSubtitle(item, experimentMap, datasetMap)}
                       </div>
                     </div>
 

@@ -156,12 +156,6 @@ function formatDateTime(value: unknown) {
   });
 }
 
-function shortId(value: unknown) {
-  const raw = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
-  if (!raw) return "—";
-  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
 function jobStatusValue(item: JobItem) {
   return typeof item.status === "string" ? item.status : "unknown";
 }
@@ -486,7 +480,6 @@ export function AdminDashboardPage() {
                         Время: {formatDateTime(item.occurred_at)}
                       </div>
                     </div>
-                    <Badge text={shortId(item.id)} />
                   </div>
 
                   <details style={{ marginTop: 8 }}>

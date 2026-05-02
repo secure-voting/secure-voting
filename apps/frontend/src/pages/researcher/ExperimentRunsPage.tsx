@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { api } from "../../shared/api/client";
-import type { Experiment, ExperimentRunItem, ExperimentRunResultResp } from "../../shared/api/types";
+import type { DatasetListItem, Experiment, ExperimentRunItem, ExperimentRunResultResp } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -106,9 +106,16 @@ function runStatusLabel(value: unknown) {
   return labels[raw] || raw || "Статус неизвестен";
 }
 
-function datasetLabel(value: unknown) {
+function datasetLabel(value: unknown, datasetMap?: Record<string, DatasetListItem>) {
   const raw = typeof value === "string" ? value.trim() : "";
-  return raw ? `Набор данных ${shortId(raw)}` : "Набор данных не указан";
+  if (!raw) return "Набор данных не указан";
+
+  const dataset = datasetMap?.[raw];
+  if (dataset?.name && dataset.name.trim()) {
+    return dataset.name.trim();
+  }
+
+  return `Набор данных ${shortId(raw)}`;
 }
 
 function experimentParamsObject(value: unknown): Record<string, unknown> {
@@ -182,7 +189,11 @@ function experimentRunTitle(
   return `Запуск эксперимента ${index + 1}`;
 }
 
-function experimentRunSubtitle(item: ExperimentRunItem, experimentMap: Record<string, Experiment>) {
+function experimentRunSubtitle(
+  item: ExperimentRunItem,
+  experimentMap: Record<string, Experiment>,
+  datasetMap: Record<string, DatasetListItem>
+) {
   const parts: string[] = [];
 
   const exp = experimentRunExperiment(item, experimentMap);
@@ -197,7 +208,7 @@ function experimentRunSubtitle(item: ExperimentRunItem, experimentMap: Record<st
     parts.push(formatBallotFormat(ballotFormat));
   }
 
-  parts.push(datasetLabel(item.dataset_id));
+  parts.push(datasetLabel(item.dataset_id, datasetMap));
 
   const duration = runDurationSeconds(item);
   if (duration != null) {
@@ -541,7 +552,8 @@ function resultSummaryCsvRows(result: unknown) {
 function buildRunReportText(
   run: ExperimentRunItem | null,
   result: unknown,
-  experiment: Experiment | null
+  experiment: Experiment | null,
+  datasetMap: Record<string, DatasetListItem>
 ) {
   const runRec = run && typeof run === "object" ? (run as Record<string, unknown>) : null;
   const resultRec = isObject(result) ? result : null;
@@ -562,7 +574,7 @@ function buildRunReportText(
   lines.push(`- status: ${runStatusLabel(runRec?.status)}`);
   lines.push(`- rule: ${experimentRuleLabel(experiment)}`);
   lines.push(`- ballot_format: ${formatBallotFormat(experimentBallotFormat(experiment))}`);
-  lines.push(`- dataset: ${datasetLabel(runRec?.dataset_id)}`);
+  lines.push(`- dataset: ${datasetLabel(runRec?.dataset_id, datasetMap)}`);
   lines.push(`- started_at: ${prettyValue(runRec?.started_at)}`);
   lines.push(`- finished_at: ${prettyValue(runRec?.finished_at)}`);
   lines.push(`- technical_id: ${prettyValue(runRec?.id)}`);
@@ -668,6 +680,7 @@ export function ExperimentRunsPage() {
   const locationState = (location.state ?? null) as RunsLocationState | null;
 
   const [experimentMap, setExperimentMap] = useState<Record<string, Experiment>>({});
+  const [datasetMap, setDatasetMap] = useState<Record<string, DatasetListItem>>({});
   const autoOpenRunRef = useRef<string>(locationState?.autoOpenRunId || "");
 
   const listAbortRef = useRef<AbortController | null>(null);
@@ -689,7 +702,7 @@ export function ExperimentRunsPage() {
       setErr(null);
 
       try {
-        const [list, experiments] = await Promise.all([
+        const [list, experiments, datasets] = await Promise.all([
           api.experimentRuns.list(
             token,
             {
@@ -698,6 +711,7 @@ export function ExperimentRunsPage() {
             ac.signal
           ),
           api.experiments.list(token, ac.signal),
+          api.datasets.list(token, ac.signal).catch(() => []),
         ]);
 
         const nextExperimentMap: Record<string, Experiment> = {};
@@ -705,6 +719,11 @@ export function ExperimentRunsPage() {
           if (exp?.id) nextExperimentMap[exp.id] = exp;
         }
         setExperimentMap(nextExperimentMap);
+        const nextDatasetMap: Record<string, DatasetListItem> = {};
+        for (const dataset of datasets) {
+          if (dataset?.id) nextDatasetMap[dataset.id] = dataset;
+        }
+        setDatasetMap(nextDatasetMap);
 
         const prev = prevStatusRef.current;
         const next = new Map<string, string>();
@@ -717,7 +736,8 @@ export function ExperimentRunsPage() {
           const prevS = prev.get(id);
           if (prevS && prevS !== s) {
             const message = `${experimentRunTitle(run, index, nextExperimentMap)} · ${datasetLabel(
-              run.dataset_id
+              run.dataset_id,
+              nextDatasetMap
             )}`;
 
             if (s === "done") {
@@ -1041,7 +1061,7 @@ export function ExperimentRunsPage() {
     downloadPdfTextFile(
       "experiment-run-report.pdf",
       "Отчет по запуску эксперимента",
-      buildRunReportText(selected, selectedResult, selectedExperiment)
+      buildRunReportText(selected, selectedResult, selectedExperiment, datasetMap)
     );
   };
 
@@ -1049,7 +1069,7 @@ export function ExperimentRunsPage() {
     if (!selectedResult) return;
     downloadTextFile(
       "experiment-run-report.txt",
-      buildRunReportText(selected, selectedResult, selectedExperiment)
+      buildRunReportText(selected, selectedResult, selectedExperiment, datasetMap)
     );
   };
 
@@ -1195,7 +1215,7 @@ export function ExperimentRunsPage() {
                   <div>
                     <div style={{ fontWeight: 800 }}>{experimentRunTitle(item, index, experimentMap)}</div>
                     <div style={{ ...styles.muted, marginTop: 4 }}>
-                      {experimentRunSubtitle(item, experimentMap)}
+                      {experimentRunSubtitle(item, experimentMap, datasetMap)}
                     </div>
                   </div>
 
@@ -1292,7 +1312,7 @@ export function ExperimentRunsPage() {
                 </div>
                 {selected ? (
                   <div style={{ ...styles.muted, marginTop: 4 }}>
-                    {experimentRunSubtitle(selected, experimentMap)}
+                    {experimentRunSubtitle(selected, experimentMap, datasetMap)}
                   </div>
                 ) : (
                   <div style={styles.muted}>Информация о выполнении запуска</div>

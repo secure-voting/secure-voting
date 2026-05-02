@@ -412,7 +412,6 @@ export function AuditLogPage() {
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Badge text={formatDateTime(occurredAt)} />
-                    {actorUserID ? <Badge text={`пользователь ${shortId(actorUserID)}`} /> : null}
                   </div>
                 </div>
 
