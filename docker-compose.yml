@@ -47,6 +47,11 @@ services:
       - REDIS_TLS_SERVER_NAME=cache
       - IDEMPOTENCY_TTL=24h
 
+      - AUTH_RATE_LIMIT=${AUTH_RATE_LIMIT:-10}
+      - AUTH_RATE_LIMIT_TTL=${AUTH_RATE_LIMIT_TTL:-1m}
+      - WRITE_RATE_LIMIT=${WRITE_RATE_LIMIT:-30}
+      - WRITE_RATE_LIMIT_TTL=${WRITE_RATE_LIMIT_TTL:-1m}
+
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
 

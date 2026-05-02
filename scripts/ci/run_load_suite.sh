@@ -10,25 +10,21 @@ unset COMPOSE_PROFILES
 
 source scripts/ci/common.sh
 
-ARTIFACTS_DIR="$(ci_artifact_dir playwright-e2e)"
+ARTIFACTS_DIR="$(ci_artifact_dir load)"
 
-collect_playwright_artifacts() {
+collect_load_artifacts() {
   mkdir -p "$ARTIFACTS_DIR"
 
-  if [[ -d tests/e2e/test-results ]]; then
-    cp -R tests/e2e/test-results "$ARTIFACTS_DIR/test-results" || true
-  fi
-
-  if [[ -d tests/e2e/playwright-report ]]; then
-    cp -R tests/e2e/playwright-report "$ARTIFACTS_DIR/playwright-report" || true
+  if [[ -d tests/load/load-results ]]; then
+    cp -R tests/load/load-results "$ARTIFACTS_DIR/load-results" || true
   fi
 }
 
 cleanup() {
   cd "$ROOT_DIR"
 
-  collect_playwright_artifacts
-  collect_compose_artifacts playwright-e2e
+  collect_load_artifacts
+  collect_compose_artifacts load
   docker compose down -v --remove-orphans || true
 }
 
@@ -177,14 +173,25 @@ wait_running compute 60 3
 wait_running worker 60 3
 wait_running compute-runner 60 3
 
-echo "== install Playwright E2E dependencies =="
-cd "$ROOT_DIR/tests/e2e"
+echo "== install load test dependencies =="
+cd "$ROOT_DIR/tests/load"
 npm ci
 
-echo "== typecheck Playwright E2E tests =="
+echo "== typecheck load tests =="
 npm run typecheck
 
-echo "== run Playwright E2E tests =="
-npm test
+echo "== run ballot load smoke tests =="
+BALLOT_FORMAT=ranking VOTERS="${LOAD_BALLOT_VOTERS:-10}" CONCURRENCY="${LOAD_BALLOT_CONCURRENCY:-5}" npm run ballot
+BALLOT_FORMAT=approval VOTERS="${LOAD_BALLOT_VOTERS:-10}" CONCURRENCY="${LOAD_BALLOT_CONCURRENCY:-5}" npm run ballot
+BALLOT_FORMAT=score VOTERS="${LOAD_BALLOT_VOTERS:-10}" CONCURRENCY="${LOAD_BALLOT_CONCURRENCY:-5}" npm run ballot
+
+echo "== run dataset generate load smoke test =="
+DATASET_FORMAT=all DATASETS="${LOAD_DATASETS:-6}" DATASET_VOTERS="${LOAD_DATASET_VOTERS:-20}" CONCURRENCY="${LOAD_DATASET_CONCURRENCY:-3}" npm run datasets
+
+echo "== run jobs polling load smoke test =="
+REQUESTS="${LOAD_JOB_REQUESTS:-30}" CONCURRENCY="${LOAD_JOB_CONCURRENCY:-10}" npm run jobs
+
+echo "== run experiment-run load smoke test =="
+EXPERIMENT_FORMATS=ranking,approval,score RUNS_PER_FORMAT="${LOAD_RUNS_PER_FORMAT:-1}" DATASET_VOTERS="${LOAD_EXPERIMENT_DATASET_VOTERS:-20}" CONCURRENCY="${LOAD_EXPERIMENT_CONCURRENCY:-1}" npm run experiments
 
 cd "$ROOT_DIR"
