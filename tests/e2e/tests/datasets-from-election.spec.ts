@@ -8,23 +8,32 @@ import { waitSystemReady } from "../src/system.js";
 
 test.setTimeout(240_000);
 
-test.describe("election lifecycle", () => {
-  test("admin creates, opens, closes and publishes ranking election", async () => {
+function responseId(value: unknown): string {
+  if (!value || typeof value !== "object") return "";
+
+  const rec = value as Record<string, unknown>;
+
+  if (typeof rec.id === "string") return rec.id;
+  if (typeof rec.dataset_id === "string") return rec.dataset_id;
+
+  return "";
+}
+
+test.describe("datasets from real elections", () => {
+  test("published election ballots can be converted to research dataset", async () => {
     const api = await createApiClient();
     const sfx = suffix();
 
     try {
       const admin = await api.login(env.adminEmail, env.adminPassword);
-
       await waitSystemReady(api, admin.accessToken);
-      
-      const voter = await api.register(`voter_${sfx}@local.dev`, "voterpass1");
+      const voter = await api.register(`dataset_voter_${sfx}@local.dev`, "voterpass1");
 
       const election = await api.post<any>(
         "/elections",
         {
-          title: `E2E lifecycle ${sfx}`,
-          description: "structured playwright e2e",
+          title: `E2E dataset from election ${sfx}`,
+          description: "dataset from real election playwright flow",
           start_at: futureIso(10),
           end_at: daysFromNowIso(2),
           tally_rule: "plurality",
@@ -40,12 +49,9 @@ test.describe("election lifecycle", () => {
 
       expect(election.id).toBeTruthy();
 
-      await api.post(`/elections/${election.id}/actions/schedule`, undefined, admin.accessToken);
       await api.post(`/elections/${election.id}/actions/open`, undefined, admin.accessToken);
 
       const ballot = await api.get<any>(`/elections/${election.id}/ballot`, voter.accessToken);
-      expect(ballot.candidates).toHaveLength(3);
-
       const ranking = ballot.candidates.map((candidate: any) => candidate.id);
 
       await api.post(
@@ -56,21 +62,28 @@ test.describe("election lifecycle", () => {
       );
 
       await api.post(`/elections/${election.id}/actions/close`, undefined, admin.accessToken);
-
-      const hidden = await api.get<any>(
-        `/elections/${election.id}/results`,
-        voter.accessToken,
-        403
-      );
-
-      expect(hidden.error.code).toBe("not_published");
-
       await waitUntilPublishSucceeds(api, admin.accessToken, election.id);
 
-      const results = await api.get<any>(`/elections/${election.id}/results`, voter.accessToken);
+      const createdDataset = await api.post<any>(
+        "/datasets/from-election",
+        {
+          election_id: election.id,
+          name: `Dataset from election ${sfx}`,
+          description: "created by Playwright E2E",
+        },
+        admin.accessToken
+      );
 
-      expect(results.published_at).toBeTruthy();
-      expect(Array.isArray(results.winners)).toBe(true);
+      const datasetId = responseId(createdDataset);
+      expect(datasetId).toBeTruthy();
+
+      const dataset = await api.get<any>(`/datasets/${datasetId}`, admin.accessToken);
+
+      expect(dataset.id).toBe(datasetId);
+      expect(dataset.source).toBe("election");
+      expect(dataset.format).toBe("ranking");
+      expect(Array.isArray(dataset.candidates)).toBe(true);
+      expect(dataset.candidates.length).toBeGreaterThanOrEqual(3);
     } finally {
       await api.dispose();
     }

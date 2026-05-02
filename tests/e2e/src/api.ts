@@ -167,6 +167,25 @@ export async function createApiClient() {
     };
   }
 
+  async function loginWithInvite(email: string, password: string, inviteCode: string): Promise<AuthSession> {
+    const result = await rawPostWithRateLimitRetry("/auth/login", {
+      email,
+      password,
+      invite_code: inviteCode,
+      replace_existing_session: true,
+    });
+
+    expect(result.status, `/auth/login: ${result.text}`).toBe(200);
+
+    const body = result.body as any;
+
+    return {
+      accessToken: body.access_token,
+      refreshToken: body.refresh_token,
+      user: body.user,
+    };
+  }
+
   async function register(email: string, password: string): Promise<AuthSession> {
     const result = await rawPostWithRateLimitRetry("/auth/register", {
       email,
@@ -195,6 +214,7 @@ export async function createApiClient() {
     get,
     post,
     login,
+    loginWithInvite,
     register,
     dispose,
   };

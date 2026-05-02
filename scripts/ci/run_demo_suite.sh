@@ -13,4 +13,4 @@ bash scripts/ci/run_restore_check.sh
 bash scripts/ci/run_backup_rotation_check.sh
 bash scripts/ci/run_prod_replication_smoke.sh
 bash scripts/ci/run_replication_suite.sh
-bash scripts/ci/run_e2e_suite.sh
+bash scripts/ci/run_playwright_e2e_suite.sh

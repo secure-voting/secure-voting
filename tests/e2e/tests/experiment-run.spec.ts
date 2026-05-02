@@ -4,6 +4,9 @@ import type { ApiClient } from "../src/api.js";
 import { env } from "../src/env.js";
 import { suffix } from "../src/ids.js";
 import { selectExperimentRule } from "../src/rules.js";
+import { waitSystemReady } from "../src/system.js";
+
+test.setTimeout(240_000);
 
 const rankingCandidates3 = [
   { id: "c1", name: "Alice" },
@@ -29,7 +32,7 @@ async function waitRunDone(
   runId: string,
   jobId?: string
 ) {
-  const deadline = Date.now() + 180_000;
+  const deadline = Date.now() + 90_000;
   let last: any = null;
 
   while (Date.now() < deadline) {
@@ -57,6 +60,9 @@ test.describe("experiment run through async compute pipeline", () => {
     const sfx = suffix();
 
     try {
+      const admin = await api.login(env.adminEmail, env.adminPassword);
+      await waitSystemReady(api, admin.accessToken);
+
       const researcher = await api.login(env.researcherEmail, env.researcherPassword);
       const rule = await selectExperimentRule(api, researcher.accessToken, "ranking");
 
