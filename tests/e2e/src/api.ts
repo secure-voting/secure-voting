@@ -63,7 +63,12 @@ function shouldRetryRateLimit(path: string): boolean {
     normalized === "/auth/login" ||
     normalized === "/auth/refresh" ||
     normalized === "/auth/email/verification/request" ||
-    normalized === "/auth/email/verification/confirm"
+    normalized === "/auth/email/verification/confirm" ||
+    normalized === "/datasets/generate" ||
+    normalized === "/datasets/import" ||
+    normalized === "/experiments" ||
+    normalized === "/experiment-runs/batch" ||
+    normalized === "/elections"
   );
 }
 
@@ -162,6 +167,32 @@ export async function createApiClient() {
     return last as RawResponse;
   }
 
+  async function rawPostWithWriteRetry(
+    path: string,
+    body?: unknown,
+    token?: string,
+    extraHeaders?: Record<string, string>
+  ): Promise<RawResponse> {
+    const delaysMs = [0, 5_000, 10_000, 20_000, 40_000, 60_000, 90_000, 120_000];
+
+    let last: RawResponse | null = null;
+
+    for (const delay of delaysMs) {
+      if (delay > 0) {
+        await sleep(delay);
+      }
+
+      const result = await rawPost(path, body, token, extraHeaders);
+      last = result;
+
+      if (result.status !== 429 || errorCode(result.body) !== "rate_limited") {
+        return result;
+      }
+    }
+
+    return last as RawResponse;
+  }
+
   async function post<T>(
     path: string,
     body?: unknown,
@@ -170,9 +201,21 @@ export async function createApiClient() {
     expectedStatus = 200
   ): Promise<T> {
     const result = shouldRetryRateLimit(path)
-      ? await rawPostWithRateLimitRetry(path, body, token, extraHeaders)
+      ? await rawPostWithWriteRetry(path, body, token, extraHeaders)
       : await rawPost(path, body, token, extraHeaders);
 
+    expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
+    return result.body as T;
+  }
+
+  async function postWithWriteRetry<T>(
+    path: string,
+    body?: unknown,
+    token?: string,
+    extraHeaders?: Record<string, string>,
+    expectedStatus = 200
+  ): Promise<T> {
+    const result = await rawPostWithWriteRetry(path, body, token, extraHeaders);
     expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
     return result.body as T;
   }
@@ -262,8 +305,11 @@ export async function createApiClient() {
     rawGet,
     rawPost,
     rawPatch,
+    rawPostWithRateLimitRetry,
+    rawPostWithWriteRetry,
     get,
     post,
+    postWithWriteRetry,
     patch,
     login,
     loginWithInvite,

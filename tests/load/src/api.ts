@@ -13,6 +13,20 @@ export type ApiResponse<T> = {
   text: string;
 };
 
+type RequestOptions = {
+  token?: string;
+  body?: unknown;
+  headers?: Record<string, string>;
+  expectedStatus?: number;
+};
+
+type RetryPostOptions = {
+  token?: string;
+  headers?: Record<string, string>;
+  expectedStatus?: number;
+  delaysMs?: number[];
+};
+
 const API_BASE = process.env.API_BASE || "https://127.0.0.1:8080/api/v1";
 
 function normalizePath(path: string): string {
@@ -45,15 +59,56 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function makeRequestOptions(
+  body: unknown,
+  options: {
+    token?: string;
+    headers?: Record<string, string>;
+  }
+): RequestOptions {
+  const requestOptions: RequestOptions = {
+    body,
+  };
+
+  if (options.token !== undefined) {
+    requestOptions.token = options.token;
+  }
+
+  if (options.headers !== undefined) {
+    requestOptions.headers = options.headers;
+  }
+
+  return requestOptions;
+}
+
+function makeRetryOptions(
+  options: {
+    token?: string;
+    headers?: Record<string, string>;
+    expectedStatus?: number;
+  },
+  delaysMs: number[]
+): RetryPostOptions {
+  const retryOptions: RetryPostOptions = {
+    expectedStatus: options.expectedStatus ?? 200,
+    delaysMs,
+  };
+
+  if (options.token !== undefined) {
+    retryOptions.token = options.token;
+  }
+
+  if (options.headers !== undefined) {
+    retryOptions.headers = options.headers;
+  }
+
+  return retryOptions;
+}
+
 export async function request<T>(
   method: "GET" | "POST",
   path: string,
-  options: {
-    token?: string;
-    body?: unknown;
-    headers?: Record<string, string>;
-    expectedStatus?: number;
-  } = {}
+  options: RequestOptions = {}
 ): Promise<ApiResponse<T>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -92,9 +147,11 @@ export async function request<T>(
 async function postWithRateLimitRetry<T>(
   path: string,
   body: unknown,
-  expectedStatus = 200
+  options: RetryPostOptions = {}
 ): Promise<ApiResponse<T>> {
-  const delays = [0, 5_000, 10_000, 20_000, 40_000, 60_000, 90_000, 120_000];
+  const expectedStatus = options.expectedStatus ?? 200;
+  const delays = options.delaysMs ?? [0, 5_000, 10_000, 20_000, 40_000, 60_000, 90_000, 120_000];
+
   let last: ApiResponse<T> | null = null;
 
   for (const delay of delays) {
@@ -102,9 +159,7 @@ async function postWithRateLimitRetry<T>(
       await sleep(delay);
     }
 
-    const result = await request<T>("POST", path, {
-      body,
-    });
+    const result = await request<T>("POST", path, makeRequestOptions(body, options));
 
     last = result;
 
@@ -118,6 +173,22 @@ async function postWithRateLimitRetry<T>(
   }
 
   throw new Error(`POST ${path}: rate limit retry exhausted: ${last?.text || "no response"}`);
+}
+
+export async function postWithWriteRetry<T>(
+  path: string,
+  body: unknown,
+  options: {
+    token?: string;
+    headers?: Record<string, string>;
+    expectedStatus?: number;
+  } = {}
+): Promise<ApiResponse<T>> {
+  return postWithRateLimitRetry<T>(
+    path,
+    body,
+    makeRetryOptions(options, [0, 5_000, 10_000, 20_000, 40_000, 60_000, 90_000, 120_000])
+  );
 }
 
 export async function login(email: string, password: string): Promise<AuthSession> {

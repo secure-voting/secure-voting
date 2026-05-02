@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "tsx src/ballot-load.ts"
+    "test": "tsx src/ballot-load.ts",
+    "ballot": "tsx src/ballot-load.ts",
+    "datasets": "tsx src/dataset-load.ts",
+    "jobs": "tsx src/jobs-polling-load.ts",
+    "experiments": "tsx src/experiment-run-load.ts"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
