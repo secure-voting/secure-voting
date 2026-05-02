@@ -3,8 +3,8 @@ package elections
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"regexp"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"secure-voting/apps/backend/internal/computeclient"
@@ -289,12 +289,6 @@ var allowedQuotaTypes = map[string]bool{
 	"hare":  true,
 	"droop": true,
 }
-
-var tallyRuleAliases = map[string]string{
-	"minimax":             "minmax",
-	"condorcet_practical": "practical_condorcet",
-}
-
 var tallyRuleIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
 func validateTallyRule(v string) (string, bool) {
@@ -510,18 +504,18 @@ type CreateElectionInput struct {
 }
 
 type ElectionSummary struct {
-	ID            string  `json:"id"`
-	Title         string  `json:"title"`
-	Description   *string `json:"description,omitempty"`
-	Status        string  `json:"status"`
-	AccessMode    string  `json:"access_mode"`
-	StartAt       string  `json:"start_at"`
-	EndAt         string  `json:"end_at"`
-	PublishedAt   *string `json:"published_at,omitempty"`
-	OrganizerEmail string `json:"organizer_email"`
-	BallotFormat  string  `json:"ballot_format"`
-	TallyRule     string  `json:"tally_rule"`
-	CandidateCount int    `json:"candidate_count"`
+	ID             string  `json:"id"`
+	Title          string  `json:"title"`
+	Description    *string `json:"description,omitempty"`
+	Status         string  `json:"status"`
+	AccessMode     string  `json:"access_mode"`
+	StartAt        string  `json:"start_at"`
+	EndAt          string  `json:"end_at"`
+	PublishedAt    *string `json:"published_at,omitempty"`
+	OrganizerEmail string  `json:"organizer_email"`
+	BallotFormat   string  `json:"ballot_format"`
+	TallyRule      string  `json:"tally_rule"`
+	CandidateCount int     `json:"candidate_count"`
 }
 
 type Candidate struct {

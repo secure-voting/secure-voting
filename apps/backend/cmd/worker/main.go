@@ -65,7 +65,7 @@ func run() error {
 		cancel()
 		return err
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	mc, err := db.NewMongoClient(bootCtx, cfg.MongoURI)
 	if err != nil {

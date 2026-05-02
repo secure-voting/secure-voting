@@ -19,15 +19,6 @@ type datasetMetaDoc struct {
 	} `bson:"candidates"`
 }
 
-func hasUsableDatasetCandidates(candidates []worker.DatasetCandidate) bool {
-	for _, candidate := range candidates {
-		if strings.TrimSpace(candidate.ID) != "" || strings.TrimSpace(candidate.Name) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func loadDatasetCandidates(ctx context.Context, mdb *mongo.Database, datasetHex string) ([]worker.DatasetCandidate, string, error) {
 	oid, err := primitive.ObjectIDFromHex(strings.TrimSpace(datasetHex))
 	if err != nil {

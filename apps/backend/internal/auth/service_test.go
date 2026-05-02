@@ -123,7 +123,7 @@ func TestIssueToken_Success(t *testing.T) {
 	}
 
 	svc := NewService(nil, 2*time.Hour)
-	token, tokenHash, expiresAt, err := svc.issueToken(context.Background(), tx, "11111111-1111-1111-1111-111111111111")
+	token, tokenHash, expiresAt, err := svc.issueAccessToken(context.Background(), tx, "11111111-1111-1111-1111-111111111111", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestIssueToken_RandError(t *testing.T) {
 	}
 
 	svc := NewService(nil, time.Hour)
-	_, _, _, err := svc.issueToken(context.Background(), &fakeTx{}, "u")
+	_, _, _, err := svc.issueAccessToken(context.Background(), &fakeTx{}, "u", nil)
 	if err == nil || !strings.Contains(err.Error(), "rand boom") {
 		t.Fatalf("expected rand boom, got %v", err)
 	}
@@ -176,7 +176,7 @@ func TestIssueToken_ExecError(t *testing.T) {
 	}
 
 	svc := NewService(nil, time.Hour)
-	_, _, _, err := svc.issueToken(context.Background(), tx, "u")
+	_, _, _, err := svc.issueAccessToken(context.Background(), tx, "u", nil)
 	if err == nil || !strings.Contains(err.Error(), "exec boom") {
 		t.Fatalf("expected exec boom, got %v", err)
 	}

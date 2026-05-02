@@ -13,9 +13,9 @@ import (
 
 type issuedTokenPair struct {
 	SessionID        string
-	AccessToken     string
-	AccessExpiresAt time.Time
-	RefreshToken    string
+	AccessToken      string
+	AccessExpiresAt  time.Time
+	RefreshToken     string
 	RefreshExpiresAt time.Time
 }
 
@@ -34,11 +34,6 @@ func nullStringValue(v string) any {
 	}
 	return v
 }
-
-func (s *Service) issueToken(ctx context.Context, tx txLike, userID string) (token string, tokenHashHex string, expiresAt time.Time, err error) {
-	return s.issueAccessToken(ctx, tx, userID, nil)
-}
-
 func (s *Service) issueAccessToken(ctx context.Context, tx txLike, userID string, sessionID *string) (token string, tokenHashHex string, expiresAt time.Time, err error) {
 	token, err = randomOpaqueToken()
 	if err != nil {
@@ -97,11 +92,11 @@ func (s *Service) issueTokenPair(ctx context.Context, tx txLike, userID, userAge
 	}
 
 	return issuedTokenPair{
-		SessionID:         sessionID,
-		AccessToken:       accessToken,
-		AccessExpiresAt:   accessExpiresAt,
-		RefreshToken:      refreshToken,
-		RefreshExpiresAt:  refreshExpiresAt,
+		SessionID:        sessionID,
+		AccessToken:      accessToken,
+		AccessExpiresAt:  accessExpiresAt,
+		RefreshToken:     refreshToken,
+		RefreshExpiresAt: refreshExpiresAt,
 	}, nil
 }
 

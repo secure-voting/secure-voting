@@ -242,7 +242,7 @@ func (h *Handlers) ImportCandidates(w http.ResponseWriter, r *http.Request) erro
 	if err != nil {
 		return apperr.Invalid("invalid_file", "file is required")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	content, err := io.ReadAll(file)
 	if err != nil {
@@ -297,7 +297,7 @@ func (h *Handlers) ImportInvites(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apperr.Invalid("invalid_file", "file is required")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	content, err := io.ReadAll(file)
 	if err != nil {

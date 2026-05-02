@@ -13,14 +13,12 @@ func TestTick_Tally_Delegates(t *testing.T) {
 	oldHandleTallyJobFn := handleTallyJobFn
 	oldHandleExperimentRunFn := handleExperimentRunFn
 	oldRunSchedulersFn := runSchedulersFn
-	oldHandleTallyLocalFn := handleTallyLocalFn
 
 	defer func() {
 		claimNextJobFn = oldClaimNextJobFn
 		handleTallyJobFn = oldHandleTallyJobFn
 		handleExperimentRunFn = oldHandleExperimentRunFn
 		runSchedulersFn = oldRunSchedulersFn
-		handleTallyLocalFn = oldHandleTallyLocalFn
 	}()
 
 	electionID := "44444444-4444-4444-4444-444444444444"
@@ -39,7 +37,6 @@ func TestTick_Tally_Delegates(t *testing.T) {
 
 	tallyJobCalled := 0
 	experimentCalled := 0
-	localCalled := 0
 
 	handleTallyJobFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		tallyJobCalled++
@@ -50,12 +47,6 @@ func TestTick_Tally_Delegates(t *testing.T) {
 		experimentCalled++
 		return nil
 	}
-
-	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
-		localCalled++
-		return nil
-	}
-
 	w := &Worker{
 		pollInterval:     time.Second,
 		scheduleInterval: time.Hour,
@@ -71,8 +62,5 @@ func TestTick_Tally_Delegates(t *testing.T) {
 	}
 	if experimentCalled != 0 {
 		t.Fatalf("expected handleExperimentRun not to be called, got %d", experimentCalled)
-	}
-	if localCalled != 0 {
-		t.Fatalf("expected handleTallyLocal not to be called, got %d", localCalled)
 	}
 }
