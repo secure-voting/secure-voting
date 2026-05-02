@@ -17,6 +17,7 @@ import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
 import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
 import { isValidEmail, parseEmailsFromText, uniqueEmails } from "../../shared/utils/email";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
@@ -547,12 +548,15 @@ export function AdminElectionPage() {
               Обновить
             </button>
             {item ? (
-              <button
-                style={styles.btn}
-                onClick={() => downloadJsonFile(`election-${electionId}.json`, item)}
-              >
-                Экспорт JSON
-              </button>
+              <ActionMenu
+                label="Дополнительно"
+                items={[
+                  {
+                    label: "Экспорт JSON",
+                    onClick: () => downloadJsonFile(`election-${electionId}.json`, item),
+                  },
+                ]}
+              />
             ) : null}
           </div>
         </div>

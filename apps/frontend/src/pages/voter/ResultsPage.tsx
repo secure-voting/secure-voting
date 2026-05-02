@@ -9,6 +9,7 @@ import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
 import { styles } from "../../shared/ui/styles";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
 import {
   downloadJsonFile,
   downloadPdfTextFile,
@@ -370,38 +371,33 @@ export function ResultsPage() {
               Обновить
             </button>
             {res ? (
-              <>
-                <button
-                  style={styles.btn}
-                  onClick={() => downloadJsonFile(`election-result-${electionId}.json`, res)}
-                >
-                  Экспорт JSON
-                </button>
-                <button
-                  style={styles.btn}
-                  onClick={() =>
-                    downloadXlsxFile(
-                      `election-result-${electionId}.xlsx`,
-                      resultRows(res, winnerLabels),
-                      "Результаты"
-                    )
-                  }
-                >
-                  Экспорт XLSX
-                </button>
-                <button
-                  style={styles.btn}
-                  onClick={() =>
-                    downloadPdfTextFile(
-                      `election-result-${electionId}.pdf`,
-                      "Отчет по результатам голосования",
-                      buildResultReportText(res, winnerLabels)
-                    )
-                  }
-                >
-                  Экспорт PDF
-                </button>
-              </>
+              <ActionMenu
+                label="Экспорт"
+                items={[
+                  {
+                    label: "JSON",
+                    onClick: () => downloadJsonFile(`election-result-${electionId}.json`, res),
+                  },
+                  {
+                    label: "XLSX",
+                    onClick: () =>
+                      downloadXlsxFile(
+                        `election-result-${electionId}.xlsx`,
+                        resultRows(res, winnerLabels),
+                        "Результаты"
+                      ),
+                  },
+                  {
+                    label: "PDF",
+                    onClick: () =>
+                      downloadPdfTextFile(
+                        `election-result-${electionId}.pdf`,
+                        "Отчет по результатам голосования",
+                        buildResultReportText(res, winnerLabels)
+                      ),
+                  },
+                ]}
+              />
             ) : null}
           </div>
         </div>

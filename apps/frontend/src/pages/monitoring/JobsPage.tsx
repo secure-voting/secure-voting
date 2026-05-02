@@ -7,6 +7,7 @@ import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
+import { ActionMenu } from "../../shared/ui/ActionMenu";
 import {
   downloadCsvFile,
   downloadJsonFile,
@@ -293,18 +294,16 @@ export function JobsPage() {
             <button style={styles.btn} onClick={() => load(false)} disabled={loading}>
               Обновить
             </button>
-            <button style={styles.btn} onClick={exportCsv} disabled={items.length === 0}>
-              Экспорт CSV
-            </button>
-            <button style={styles.btn} onClick={exportXlsx} disabled={items.length === 0}>
-              Экспорт XLSX
-            </button>
-            <button style={styles.btn} onClick={exportJson} disabled={items.length === 0}>
-              Экспорт JSON
-            </button>
-            <button style={styles.btn} onClick={exportPdf} disabled={items.length === 0}>
-              Экспорт PDF
-            </button>
+
+            <ActionMenu
+              label="Экспорт"
+              items={[
+                { label: "CSV", onClick: exportCsv, disabled: items.length === 0 },
+                { label: "XLSX", onClick: exportXlsx, disabled: items.length === 0 },
+                { label: "JSON", onClick: exportJson, disabled: items.length === 0 },
+                { label: "PDF", onClick: exportPdf, disabled: items.length === 0 },
+              ]}
+            />
           </div>
         </div>
 
