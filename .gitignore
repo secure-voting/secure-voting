@@ -32,3 +32,8 @@ coverage/
 
 # cert artifacts
 scripts/certs/out/
+
+# Playwright E2E
+tests/e2e/node_modules/
+tests/e2e/playwright-report/
+tests/e2e/test-results/

@@ -381,10 +381,11 @@ services:
     networks:
       - kafka_network
     environment:
-      KAFKA_LISTENERS: "SSL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092"
-      KAFKA_ADVERTISED_LISTENERS: "SSL://kafka:29092,PLAINTEXT_HOST://kafka:9092"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "SSL:SSL,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_LISTENERS: "SSL://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093"
+      KAFKA_ADVERTISED_LISTENERS: "SSL://kafka:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "SSL:SSL,CONTROLLER:PLAINTEXT"
       KAFKA_INTER_BROKER_LISTENER_NAME: "SSL"
+
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:29093"
       KAFKA_PROCESS_ROLES: "broker,controller"
@@ -413,15 +414,17 @@ services:
       KAFKA_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: ""
       KAFKA_SSL_ENABLED_PROTOCOLS: "TLSv1.2,TLSv1.3"
       KAFKA_SSL_PROTOCOL: "TLSv1.2"
-    ports:
-      - "127.0.0.1:9092:9092"
     volumes:
       - kafka-data:/var/lib/kafka/data
       - ./scripts/certs/out:/etc/kafka/secrets:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
-      interval: 10s
+      test:
+        [
+          "CMD-SHELL",
+          "cat > /tmp/kafka-health-ssl.properties <<'EOF'\nsecurity.protocol=SSL\nssl.truststore.location=/etc/kafka/secrets/kafka.truststore.p12\nssl.truststore.password=changeit\nssl.truststore.type=PKCS12\nssl.endpoint.identification.algorithm=\nEOF\nkafka-broker-api-versions --bootstrap-server localhost:29092 --command-config /tmp/kafka-health-ssl.properties > /dev/null 2>&1 || exit 1"
+        ]
+      interval: 10s    
       timeout: 10s
       retries: 15
     profiles:
@@ -436,7 +439,14 @@ services:
         condition: service_healthy
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SSL
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION=/etc/kafka/secrets/kafka.truststore.p12
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_PASSWORD=changeit
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_TYPE=PKCS12
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM=
+    volumes:
+      - ./scripts/certs/out:/etc/kafka/secrets:ro
     ports:
       - "127.0.0.1:8089:8080"
     networks:

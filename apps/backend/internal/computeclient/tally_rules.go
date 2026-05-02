@@ -20,6 +20,37 @@ type TallyRuleInfo struct {
 	RequiresScoreRange         bool     `json:"requires_score_range"`
 }
 
+func normalizeBallotFormat(value string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	switch v {
+	case "scoring":
+		return "score"
+	default:
+		return v
+	}
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+
+	for _, value := range values {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			continue
+		}
+
+		if _, ok := seen[v]; ok {
+			continue
+		}
+
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+
+	return out
+}
+
 func (c *Client) ListTallyRules(ctx context.Context) ([]TallyRuleInfo, error) {
 	resp, err := c.client.ListTallyRules(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -34,16 +65,16 @@ func (c *Client) ListTallyRules(ctx context.Context) ([]TallyRuleInfo, error) {
 
 		formats := make([]string, 0, len(item.GetBallotFormats()))
 		for _, f := range item.GetBallotFormats() {
-			f = strings.TrimSpace(f)
-			if f != "" {
-				formats = append(formats, f)
+			format := normalizeBallotFormat(f)
+			if format != "" {
+				formats = append(formats, format)
 			}
 		}
 
 		out = append(out, TallyRuleInfo{
 			ID:                         strings.TrimSpace(item.GetId()),
 			Label:                      strings.TrimSpace(item.GetLabel()),
-			BallotFormats:              formats,
+			BallotFormats:              uniqueNonEmpty(formats),
 			SupportsElectionTally:      item.GetSupportsElectionTally(),
 			SupportsExperimentRuns:     item.GetSupportsExperimentRuns(),
 			RequiresCommitteeSize:      item.GetRequiresCommitteeSize(),

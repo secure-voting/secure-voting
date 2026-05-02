@@ -26,7 +26,28 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 		task.DatasetID,
 	)
 
+	candidates, code, err := loadDatasetCandidates(ctx, mdb, task.DatasetID)
+	if err != nil {
+		log.Printf("processExperimentRunTask: loadDatasetCandidates failed run_id=%s err=%v", task.RunID, err)
+		return makeErrorResult(task.RunID, "load dataset candidates failed: "+err.Error())
+	}
+	if code != "" {
+		log.Printf("processExperimentRunTask: loadDatasetCandidates code run_id=%s code=%s", task.RunID, code)
+		return makeErrorResult(task.RunID, code)
+	}
+
+	task.Dataset.Candidates = candidates
+	log.Printf("processExperimentRunTask: loaded dataset candidates run_id=%s count=%d", task.RunID, len(candidates))
+
 	header, code := buildHeader(task)
+	log.Printf(
+		"processExperimentRunTask: built header run_id=%s ballot_format=%s tally_rule=%s candidates=%d",
+		task.RunID,
+		header.BallotFormat,
+		header.TallyRule,
+		len(header.Candidates),
+	)
+
 	if code != "" {
 		log.Printf("processExperimentRunTask: buildHeader failed run_id=%s code=%s", task.RunID, code)
 		return makeErrorResult(task.RunID, code)

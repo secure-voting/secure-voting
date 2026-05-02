@@ -197,9 +197,5 @@ bash scripts/e2e_smoke.sh
 bash scripts/e2e_election_lifecycle.sh
 bash scripts/e2e_invite_only.sh
 bash scripts/e2e_smoke_experiment.sh
-
-if [[ "${RUN_OPTIONAL_VOTE_FORMATS_E2E:-0}" == "1" ]]; then
-  bash scripts/e2e_vote_formats.sh
-else
-  echo "SKIP: e2e_vote_formats.sh is optional until approval/score election tally is implemented"
-fi
+bash scripts/e2e_experiment_multi_rule.sh
+bash scripts/e2e_vote_formats.sh

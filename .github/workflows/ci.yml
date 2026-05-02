@@ -186,3 +186,39 @@ jobs:
           name: e2e-artifacts
           path: .ci-artifacts/
           if-no-files-found: ignore
+  
+  playwright-e2e-tests:
+    name: playwright api e2e tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs:
+      - backend-fast
+      - frontend-fast
+      - openapi-validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node for Playwright E2E
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y curl jq
+
+      - name: Ensure scripts are executable
+        run: chmod +x scripts/ci/*.sh scripts/*.sh
+
+      - name: Run Playwright E2E suite
+        run: bash scripts/ci/run_playwright_e2e_suite.sh
+
+      - name: Upload Playwright E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-artifacts
+          path: .ci-artifacts/playwright-e2e/
+          if-no-files-found: ignore
