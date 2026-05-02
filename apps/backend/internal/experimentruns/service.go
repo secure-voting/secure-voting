@@ -31,8 +31,13 @@ type Run struct {
 
 type Result struct {
 	RunID     string         `json:"run_id" bson:"run_id"`
+	Status    string         `json:"status,omitempty" bson:"status,omitempty"`
+	ErrorText string         `json:"error_text,omitempty" bson:"error_text,omitempty"`
+	Method    string         `json:"method,omitempty" bson:"method,omitempty"`
+	Params    any            `json:"params,omitempty" bson:"params,omitempty"`
 	Winners   []any          `json:"winners,omitempty" bson:"winners,omitempty"`
 	Metrics   map[string]any `json:"metrics,omitempty" bson:"metrics,omitempty"`
+	Protocol  any            `json:"protocol,omitempty" bson:"protocol,omitempty"`
 	Timings   map[string]any `json:"timings,omitempty" bson:"timings,omitempty"`
 	Artifacts map[string]any `json:"artifacts,omitempty" bson:"artifacts,omitempty"`
 }

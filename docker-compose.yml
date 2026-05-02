@@ -44,6 +44,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_TLS=true
       - REDIS_TLS_CA=/certs/ca.pem
+      - REDIS_TLS_SERVER_NAME=cache
       - IDEMPOTENCY_TTL=24h
 
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
@@ -124,6 +125,7 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_TLS=true
       - REDIS_TLS_CA=/certs/ca.pem
+      - REDIS_TLS_SERVER_NAME=cache
     volumes:
       - ./scripts/certs/out:/certs:ro
     depends_on:

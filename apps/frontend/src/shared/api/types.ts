@@ -382,6 +382,8 @@ export type ExperimentRunResultResp = {
   run_id: string;
   status?: "done" | "error" | string;
   error_text?: string;
+  method?: string;
+  params?: unknown;
   winners?: string[];
   metrics?: Record<string, unknown>;
   protocol?: {

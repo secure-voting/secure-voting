@@ -125,8 +125,8 @@ where
 mod tests {
     use super::*;
     use crate::{
-        models::{candidate_id::CandidateId, profile::Profile, ranking::RankingBallot},
         models::BallotData,
+        models::{candidate_id::CandidateId, profile::Profile, ranking::RankingBallot},
         tie_breaker::RuleOutcome,
         voting_rules::VotingRuleExec,
     };

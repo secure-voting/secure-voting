@@ -32,8 +32,8 @@ impl EliminationStopCondition<Vec<usize>, RankingBallot> for MajorityStop {
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::CandidateId;
     use crate::models::BallotData;
+    use crate::prelude::CandidateId;
 
     use super::*;
     use test_case::test_case;

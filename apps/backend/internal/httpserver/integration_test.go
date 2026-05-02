@@ -69,7 +69,14 @@ func newIntegrationEnv(t *testing.T) *integrationEnv {
 		t.Fatalf("postgres: %v", err)
 	}
 
-	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS, cfg.RedisTLSCA)
+	rdb, err := db.NewRedisClient(
+		bootCtx,
+		cfg.RedisAddr,
+		cfg.RedisPassword,
+		cfg.RedisTLS,
+		cfg.RedisTLSCA,
+		cfg.RedisTLSServerName,
+	)
 	if err != nil {
 		pg.Close()
 		t.Fatalf("redis: %v", err)

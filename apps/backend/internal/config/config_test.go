@@ -28,6 +28,9 @@ func TestFromEnv_Defaults(t *testing.T) {
 		"REFRESH_TOKEN_TTL",
 		"REDIS_ADDR",
 		"REDIS_PASSWORD",
+		"REDIS_TLS",
+		"REDIS_TLS_CA",
+		"REDIS_TLS_SERVER_NAME",
 		"IDEMPOTENCY_TTL",
 		"MONGO_DB",
 		"MONGO_URI",
@@ -68,6 +71,15 @@ func TestFromEnv_Defaults(t *testing.T) {
 	}
 	if cfg.RedisAddr != "cache:6379" || cfg.RedisPassword != "redis_dev_pass" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
+	}
+	if cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=false by default")
+	}
+	if cfg.RedisTLSCA != "" {
+		t.Fatalf("unexpected RedisTLSCA by default: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "" {
+		t.Fatalf("unexpected RedisTLSServerName by default: %q", cfg.RedisTLSServerName)
 	}
 	if cfg.IdempotencyTTL != 24*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL: %v", cfg.IdempotencyTTL)
@@ -135,6 +147,9 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	t.Setenv("REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("REDIS_ADDR", "redis:6380")
 	t.Setenv("REDIS_PASSWORD", "secret")
+	t.Setenv("REDIS_TLS", "true")
+	t.Setenv("REDIS_TLS_CA", "/tmp/redis-ca.pem")
+	t.Setenv("REDIS_TLS_SERVER_NAME", "redis.internal")
 	t.Setenv("IDEMPOTENCY_TTL", "12h")
 	t.Setenv("MONGO_DB", "dbx")
 	t.Setenv("MONGO_URI", "mongodb://custom")
@@ -174,6 +189,15 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	}
 	if cfg.RedisAddr != "redis:6380" || cfg.RedisPassword != "secret" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
+	}
+	if !cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=true")
+	}
+	if cfg.RedisTLSCA != "/tmp/redis-ca.pem" {
+		t.Fatalf("unexpected RedisTLSCA: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "redis.internal" {
+		t.Fatalf("unexpected RedisTLSServerName: %q", cfg.RedisTLSServerName)
 	}
 	if cfg.IdempotencyTTL != 12*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL: %v", cfg.IdempotencyTTL)
@@ -223,7 +247,6 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	if !reflect.DeepEqual(cfg.AdminTrustedCIDRs, []string{"203.0.113.0/24", "10.0.0.0/8"}) {
 		t.Fatalf("unexpected AdminTrustedCIDRs: %#v", cfg.AdminTrustedCIDRs)
 	}
-
 }
 
 func TestFromEnv_InvalidValuesFallback(t *testing.T) {
@@ -269,5 +292,23 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	}
 	if cfg.WriteRateLimitTTL != time.Minute {
 		t.Fatalf("unexpected WriteRateLimitTTL fallback: %v", cfg.WriteRateLimitTTL)
+	}
+}
+
+func TestFromEnv_RedisTLSDefaults(t *testing.T) {
+	t.Setenv("REDIS_TLS", "true")
+	t.Setenv("REDIS_TLS_CA", "")
+	t.Setenv("REDIS_TLS_SERVER_NAME", "")
+
+	cfg := FromEnv()
+
+	if !cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=true")
+	}
+	if cfg.RedisTLSCA != "/certs/ca.pem" {
+		t.Fatalf("unexpected RedisTLSCA: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "cache" {
+		t.Fatalf("unexpected RedisTLSServerName: %q", cfg.RedisTLSServerName)
 	}
 }

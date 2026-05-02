@@ -97,8 +97,8 @@ impl<R: VotingRuleExec<Ballot>, Ballot> Default for RequireUnique<R, Ballot> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
     use crate::models::BallotData;
+    use crate::models::{candidate_id::CandidateId, ranking::RankingBallot};
     use mockall::mock;
 
     mock! {
@@ -120,11 +120,8 @@ mod tests {
             CandidateId::new(2, "C"),
             CandidateId::new(1, "B"),
         ])];
-        Profile::try_from((
-            ballots,
-            vec!["A".into(), "B".into(), "C".into()],
-        ))
-        .expect("Profile is constructed incorrectly, revise test example.")
+        Profile::try_from((ballots, vec!["A".into(), "B".into(), "C".into()]))
+            .expect("Profile is constructed incorrectly, revise test example.")
     }
 
     #[test]

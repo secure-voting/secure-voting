@@ -11,7 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func NewRedisClient(ctx context.Context, addr, password string, useTLS bool, caPath string) (*redis.Client, error) {
+func NewRedisClient(ctx context.Context, addr, password string, useTLS bool, caPath string, serverName string) (*redis.Client, error) {
 	opt := &redis.Options{
 		Addr:        addr,
 		Password:    password,
@@ -22,6 +22,10 @@ func NewRedisClient(ctx context.Context, addr, password string, useTLS bool, caP
 	if useTLS {
 		if caPath == "" {
 			return nil, fmt.Errorf("redis tls enabled but ca path is empty")
+		}
+
+		if serverName == "" {
+			serverName = "cache"
 		}
 
 		caPEM, err := os.ReadFile(caPath)
@@ -37,6 +41,7 @@ func NewRedisClient(ctx context.Context, addr, password string, useTLS bool, caP
 		opt.TLSConfig = &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			RootCAs:    pool,
+			ServerName: serverName,
 		}
 	}
 

@@ -14,8 +14,8 @@ use tonic::{
     transport::{Identity, server::ServerTlsConfig},
 };
 
-use compute_service::registry::voting_rules::get_core_registry;
 use compute_service::registry::Registry;
+use compute_service::registry::voting_rules::get_core_registry;
 use compute_service::securevoting::compute::v1::{
     ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
     compute_server::{Compute, ComputeServer},

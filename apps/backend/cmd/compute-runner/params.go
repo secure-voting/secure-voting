@@ -90,8 +90,21 @@ func normalizeBallotFormat(s string) string {
 		return "ranking"
 	case "approval":
 		return "approval"
-	case "score":
+	case "score", "scoring":
 		return "score"
+	default:
+		return ""
+	}
+}
+
+func grpcBallotFormatName(format string) string {
+	switch normalizeBallotFormat(format) {
+	case "ranking":
+		return "ranking"
+	case "approval":
+		return "approval"
+	case "score":
+		return "scoring"
 	default:
 		return ""
 	}
@@ -116,6 +129,7 @@ func normalizeComputeTallyRule(s string) string {
 		"inverse-plurality",
 		"approval-2",
 		"approval-3",
+		"score",
 		"threshold",
 		"practical-condorcet",
 		"q-paretian-strong-simple-majority",

@@ -70,6 +70,8 @@ func (w *Worker) upsertExperimentResult(ctx context.Context, res ExperimentRunRe
 			"run_id":     res.RunID,
 			"status":     res.Status,
 			"error_text": res.ErrorText,
+			"method":     res.Method,
+			"params":     res.Params,
 			"winners":    res.Winners,
 			"metrics":    res.Metrics,
 			"protocol":   res.Protocol,

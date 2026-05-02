@@ -37,9 +37,9 @@ impl<Ballot> TieBreaker<Ballot> for FallthroughTieBreaker {
 
 #[cfg(test)]
 mod tests {
+    use crate::models::BallotData;
     use crate::models::candidate_id::CandidateId;
     use crate::models::ranking::RankingBallot;
-    use crate::models::BallotData;
 
     use super::*;
 

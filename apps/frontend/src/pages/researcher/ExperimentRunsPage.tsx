@@ -280,6 +280,13 @@ function metricLabel(key: string): string {
     ties_count: "Число ничьих",
     eliminated_count: "Исключено кандидатов",
     selected_count: "Выбрано кандидатов",
+    memory_rss_bytes: "RSS-память, байт",
+    cpu_usage_percent: "CPU, %",
+    throughput_ballots_per_sec: "Бюллетеней/с",
+    tie_detected: "Обнаружена ничья",
+    normalized_margin: "Нормированный отрыв",
+    round_sizes: "Размеры раундов",
+    candidate_scores_final: "Финальные оценки кандидатов",
   };
 
   return labels[key] || humanizeMetricKey(key) || key;
@@ -391,21 +398,74 @@ function canonicalIndicators(result: unknown) {
   const timings = rec && isObject(rec.timings) ? rec.timings : null;
 
   const timeSecondsDirect =
-    numberFromRecordByKeys(timings, ["total_seconds", "duration_seconds", "elapsed_seconds", "time_seconds"]) ??
-    numberFromRecordByKeys(metrics, ["total_seconds", "duration_seconds", "elapsed_seconds", "time_seconds"]);
+    numberFromRecordByKeys(timings, [
+      "total_seconds",
+      "duration_seconds",
+      "elapsed_seconds",
+      "time_seconds",
+    ]) ??
+    numberFromRecordByKeys(metrics, [
+      "total_seconds",
+      "duration_seconds",
+      "elapsed_seconds",
+      "time_seconds",
+    ]);
 
   const timeMilliseconds =
-    numberFromRecordByKeys(timings, ["total_ms", "duration_ms", "elapsed_ms", "time_ms"]) ??
-    numberFromRecordByKeys(metrics, ["total_ms", "duration_ms", "elapsed_ms", "time_ms"]);
+    numberFromRecordByKeys(timings, [
+      "total_ms",
+      "duration_ms",
+      "elapsed_ms",
+      "time_ms",
+    ]) ??
+    numberFromRecordByKeys(metrics, [
+      "total_ms",
+      "duration_ms",
+      "elapsed_ms",
+      "time_ms",
+    ]);
 
   const memoryBytesDirect =
-    numberFromRecordByKeys(metrics, ["peak_memory_bytes", "max_memory_bytes", "memory_bytes", "ram_bytes"]);
+    numberFromRecordByKeys(timings, [
+      "memory_rss_bytes",
+      "peak_memory_bytes",
+      "max_memory_bytes",
+      "memory_bytes",
+      "ram_bytes",
+    ]) ??
+    numberFromRecordByKeys(metrics, [
+      "memory_rss_bytes",
+      "peak_memory_bytes",
+      "max_memory_bytes",
+      "memory_bytes",
+      "ram_bytes",
+    ]);
 
   const memoryMb =
-    numberFromRecordByKeys(metrics, ["peak_memory_mb", "max_memory_mb", "memory_mb", "ram_mb"]);
+    numberFromRecordByKeys(timings, [
+      "peak_memory_mb",
+      "max_memory_mb",
+      "memory_mb",
+      "ram_mb",
+    ]) ??
+    numberFromRecordByKeys(metrics, [
+      "peak_memory_mb",
+      "max_memory_mb",
+      "memory_mb",
+      "ram_mb",
+    ]);
 
   const speedPerSecond =
+    numberFromRecordByKeys(timings, [
+      "throughput_ballots_per_sec",
+      "throughput_ops_per_sec",
+      "ops_per_sec",
+      "ballots_per_sec",
+      "speed_per_sec",
+      "throughput",
+    ]) ??
     numberFromRecordByKeys(metrics, [
+      "throughput_ballots_per_sec",
       "throughput_ops_per_sec",
       "ops_per_sec",
       "ballots_per_sec",
@@ -413,10 +473,20 @@ function canonicalIndicators(result: unknown) {
       "throughput",
     ]);
 
+  const cpuUsagePercent =
+    numberFromRecordByKeys(timings, ["cpu_usage_percent"]) ??
+    numberFromRecordByKeys(metrics, ["cpu_usage_percent"]);
+
+  const ballotsCount =
+    numberFromRecordByKeys(timings, ["ballots_count", "total_ballots"]) ??
+    numberFromRecordByKeys(metrics, ["ballots_count", "total_ballots"]);
+
   return {
     timeSeconds: timeSecondsDirect ?? (timeMilliseconds != null ? timeMilliseconds / 1000 : null),
     memoryBytes: memoryBytesDirect ?? (memoryMb != null ? memoryMb * 1024 * 1024 : null),
     speedPerSecond,
+    cpuUsagePercent,
+    ballotsCount,
   };
 }
 
@@ -434,6 +504,10 @@ function formatBytes(value: number | null) {
 
 function formatSpeed(value: number | null) {
   return value == null ? "—" : `${value.toFixed(3)} /s`;
+}
+
+function formatPercent(value: number | null) {
+  return value == null ? "—" : `${value.toFixed(2)} %`;
 }
 
 function winnerList(value: unknown): string[] {
@@ -505,6 +579,17 @@ function resultSummaryCsvRows(result: unknown) {
     section: "summary",
     key: "speed_per_second",
     value: canonical.speedPerSecond != null ? canonical.speedPerSecond : "",
+  });
+  rows.push({
+    section: "summary",
+    key: "cpu_usage_percent",
+    value: canonical.cpuUsagePercent != null ? canonical.cpuUsagePercent : "",
+  });
+
+  rows.push({
+    section: "summary",
+    key: "ballots_count",
+    value: canonical.ballotsCount != null ? canonical.ballotsCount : "",
   });
 
   const winners = winnerList(rec?.winners);
@@ -598,6 +683,8 @@ function buildRunReportText(
   lines.push(`- time_seconds: ${canonical.timeSeconds != null ? canonical.timeSeconds.toFixed(3) : "—"}`);
   lines.push(`- memory_bytes: ${canonical.memoryBytes != null ? canonical.memoryBytes.toFixed(0) : "—"}`);
   lines.push(`- speed_per_second: ${canonical.speedPerSecond != null ? canonical.speedPerSecond.toFixed(3) : "—"}`);
+  lines.push(`- cpu_usage_percent: ${canonical.cpuUsagePercent != null ? canonical.cpuUsagePercent.toFixed(2) : "—"}`);
+  lines.push(`- ballots_count: ${canonical.ballotsCount != null ? canonical.ballotsCount.toFixed(0) : "—"}`);
   lines.push("");
 
   lines.push("Победители:");
@@ -1002,7 +1089,7 @@ export function ExperimentRunsPage() {
           status: runStatusLabel(runStatus(item)),
           rule: experimentRuleLabel(experiment),
           ballot_format: formatBallotFormat(experimentBallotFormat(experiment)),
-          dataset: datasetLabel(item.dataset_id),
+          dataset: datasetLabel(item.dataset_id, datasetMap),
           duration_seconds: runDurationSeconds(item) ?? "",
           started_at: prettyValue((item as any)?.started_at),
           finished_at: prettyValue((item as any)?.finished_at),
@@ -1025,7 +1112,7 @@ export function ExperimentRunsPage() {
           status: runStatusLabel(runStatus(item)),
           rule: experimentRuleLabel(experiment),
           ballot_format: formatBallotFormat(experimentBallotFormat(experiment)),
-          dataset: datasetLabel(item.dataset_id),
+          dataset: datasetLabel(item.dataset_id, datasetMap),
           duration_seconds: runDurationSeconds(item) ?? "",
           started_at: prettyValue((item as any)?.started_at),
           finished_at: prettyValue((item as any)?.finished_at),
@@ -1230,7 +1317,7 @@ export function ExperimentRunsPage() {
                   <SummaryGrid
                     items={[
                       { label: "Статус", value: runStatusLabel(status) },
-                      { label: "Набор данных", value: datasetLabel((item as any)?.dataset_id) },
+                      { label: "Набор данных", value: datasetLabel((item as any)?.dataset_id, datasetMap) },
                       { label: "Формат", value: formatBallotFormat(ballotFormat) },
                       { label: "Начало", value: formatDateTime((item as any)?.started_at) },
                       { label: "Завершение", value: formatDateTime((item as any)?.finished_at) },
@@ -1340,7 +1427,7 @@ export function ExperimentRunsPage() {
                     label: "Формат бюллетеня",
                     value: formatBallotFormat(experimentBallotFormat(selectedExperiment)),
                   },
-                  { label: "Набор данных", value: datasetLabel(selectedRecord.dataset_id) },
+                  { label: "Набор данных", value: datasetLabel(selectedRecord.dataset_id, datasetMap) },
                   { label: "Начало", value: formatDateTime(selectedRecord.started_at) },
                   { label: "Завершение", value: formatDateTime(selectedRecord.finished_at) },
                   {
@@ -1439,6 +1526,11 @@ export function ExperimentRunsPage() {
                   { label: "Время", value: formatSeconds(canonical.timeSeconds) },
                   { label: "Память", value: formatBytes(canonical.memoryBytes) },
                   { label: "Скорость", value: formatSpeed(canonical.speedPerSecond) },
+                  { label: "CPU", value: formatPercent(canonical.cpuUsagePercent) },
+                  {
+                    label: "Бюллетени",
+                    value: canonical.ballotsCount == null ? "—" : canonical.ballotsCount.toFixed(0),
+                  },
                 ]}
               />
             </div>

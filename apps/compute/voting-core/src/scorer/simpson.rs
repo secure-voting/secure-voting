@@ -53,9 +53,9 @@ impl Scorer<RankingBallot> for SimpsonScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::BallotData;
     use crate::models::candidate_id::CandidateId;
     use crate::models::profile::Profile;
-    use crate::models::BallotData;
 
     fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();

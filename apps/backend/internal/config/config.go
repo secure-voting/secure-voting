@@ -19,9 +19,10 @@ type Config struct {
 	RedisPassword  string
 	IdempotencyTTL time.Duration
 
-	AdminTrustedCIDRs []string
-	RedisTLS          bool
-	RedisTLSCA        string
+	AdminTrustedCIDRs  []string
+	RedisTLS           bool
+	RedisTLSCA         string
+	RedisTLSServerName string
 
 	MongoURI    string
 	MongoDBName string
@@ -113,6 +114,11 @@ func FromEnv() Config {
 	redisTLSCA := strings.TrimSpace(os.Getenv("REDIS_TLS_CA"))
 	if redisTLS && redisTLSCA == "" {
 		redisTLSCA = "/certs/ca.pem"
+	}
+
+	redisTLSServerName := strings.TrimSpace(os.Getenv("REDIS_TLS_SERVER_NAME"))
+	if redisTLS && redisTLSServerName == "" {
+		redisTLSServerName = "cache"
 	}
 
 	idemTTL := 24 * time.Hour
@@ -297,11 +303,12 @@ func FromEnv() Config {
 		TokenTTL:        tokenTTL,
 		RefreshTokenTTL: refreshTokenTTL,
 
-		RedisAddr:      redisAddr,
-		RedisPassword:  redisPass,
-		RedisTLS:       redisTLS,
-		RedisTLSCA:     redisTLSCA,
-		IdempotencyTTL: idemTTL,
+		RedisAddr:          redisAddr,
+		RedisPassword:      redisPass,
+		RedisTLS:           redisTLS,
+		RedisTLSCA:         redisTLSCA,
+		RedisTLSServerName: redisTLSServerName,
+		IdempotencyTTL:     idemTTL,
 
 		MongoURI:    mongoURI,
 		MongoDBName: mongoDB,

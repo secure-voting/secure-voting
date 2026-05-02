@@ -72,7 +72,7 @@ func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 		ExperimentId: strings.TrimSpace(task.ExperimentID),
 		DatasetId:    strings.TrimSpace(task.DatasetID),
 		TallyRule:    grpcTallyRuleName(tallyRule),
-		BallotFormat: ballotFormat,
+		BallotFormat: grpcBallotFormatName(ballotFormat),
 		ParamsJson:   []byte(task.ExperimentParams),
 	}
 
@@ -177,7 +177,7 @@ func buildElectionHeader(task worker.ElectionTallyTask) (*pb.RunHeader, string) 
 		RunId:          strings.TrimSpace(task.JobID),
 		ElectionId:     strings.TrimSpace(task.ElectionID),
 		TallyRule:      grpcTallyRuleName(tallyRule),
-		BallotFormat:   ballotFormat,
+		BallotFormat:   grpcBallotFormatName(ballotFormat),
 		ParamsJson:     paramsJSON,
 		ShowAggregates: wrapperspb.Bool(task.ShowAggregates),
 	}

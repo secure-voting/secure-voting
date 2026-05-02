@@ -28,7 +28,14 @@ func run() error {
 	}
 	defer pg.Close()
 
-	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS, cfg.RedisTLSCA)
+	rdb, err := db.NewRedisClient(
+		bootCtx,
+		cfg.RedisAddr,
+		cfg.RedisPassword,
+		cfg.RedisTLS,
+		cfg.RedisTLSCA,
+		cfg.RedisTLSServerName,
+	)
 	if err != nil {
 		log.Printf("failed to init redis: %v", err)
 		cancel()

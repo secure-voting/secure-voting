@@ -55,6 +55,18 @@ function errorCode(value: unknown): string {
   return typeof errRec.code === "string" ? errRec.code : "";
 }
 
+function shouldRetryRateLimit(path: string): boolean {
+  const normalized = `/${apiPath(path)}`;
+
+  return (
+    normalized === "/auth/register" ||
+    normalized === "/auth/login" ||
+    normalized === "/auth/refresh" ||
+    normalized === "/auth/email/verification/request" ||
+    normalized === "/auth/email/verification/confirm"
+  );
+}
+
 export async function createApiClient() {
   const ctx = await request.newContext({
     baseURL: withTrailingSlash(env.apiBase),
@@ -85,6 +97,29 @@ export async function createApiClient() {
     extraHeaders?: Record<string, string>
   ): Promise<RawResponse> {
     const resp = await ctx.post(apiPath(path), {
+      data: body,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(extraHeaders || {}),
+      },
+    });
+
+    const text = await resp.text();
+
+    return {
+      status: resp.status(),
+      body: parseBody(text),
+      text,
+    };
+  }
+
+  async function rawPatch(
+    path: string,
+    body?: unknown,
+    token?: string,
+    extraHeaders?: Record<string, string>
+  ): Promise<RawResponse> {
+    const resp = await ctx.patch(apiPath(path), {
       data: body,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -134,7 +169,22 @@ export async function createApiClient() {
     extraHeaders?: Record<string, string>,
     expectedStatus = 200
   ): Promise<T> {
-    const result = await rawPost(path, body, token, extraHeaders);
+    const result = shouldRetryRateLimit(path)
+      ? await rawPostWithRateLimitRetry(path, body, token, extraHeaders)
+      : await rawPost(path, body, token, extraHeaders);
+
+    expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
+    return result.body as T;
+  }
+
+  async function patch<T>(
+    path: string,
+    body?: unknown,
+    token?: string,
+    extraHeaders?: Record<string, string>,
+    expectedStatus = 200
+  ): Promise<T> {
+    const result = await rawPatch(path, body, token, extraHeaders);
     expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
     return result.body as T;
   }
@@ -211,8 +261,10 @@ export async function createApiClient() {
     ctx,
     rawGet,
     rawPost,
+    rawPatch,
     get,
     post,
+    patch,
     login,
     loginWithInvite,
     register,

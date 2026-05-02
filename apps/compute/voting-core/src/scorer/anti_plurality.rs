@@ -57,8 +57,8 @@ impl Scorer<RankingBallot> for AntiPluralityScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::candidate_id::CandidateId;
     use crate::models::BallotData;
+    use crate::models::candidate_id::CandidateId;
     use test_case::test_case;
 
     #[test_case(

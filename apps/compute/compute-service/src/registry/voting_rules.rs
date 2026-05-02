@@ -224,7 +224,7 @@ impl_algorithm!(
     false
 );
 impl_algorithm!(
-    ScoreRule, "Score", true, true, true, false, false, true, false
+    ScoreRule, "Score", true, true, true, false, false, false, true
 );
 
 /// Return a registry with all the voting-core

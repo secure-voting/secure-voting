@@ -32,9 +32,34 @@ func anySliceToStringSlice(in []any) []string {
 	return out
 }
 
-func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, any, map[string]any, map[string]any) {
+func parseJSONAny(raw []byte) any {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var out any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil
+	}
+
+	return out
+}
+
+func parseRunResult(resp *pb.RunResult) (
+	string,
+	string,
+	string,
+	any,
+	[]any,
+	map[string]any,
+	any,
+	map[string]any,
+	map[string]any,
+) {
 	status := strings.TrimSpace(resp.GetStatus())
 	errText := strings.TrimSpace(resp.GetErrorText())
+	method := strings.TrimSpace(resp.GetMethod())
+	params := parseJSONAny(resp.GetParamsJson())
 
 	var winners []any
 	if len(resp.GetWinnersJson()) > 0 {
@@ -70,7 +95,7 @@ func parseRunResult(resp *pb.RunResult) (string, string, []any, map[string]any, 
 		artifacts = map[string]any{}
 	}
 
-	return status, errText, winners, metrics, protocol, timings, artifacts
+	return status, errText, method, params, winners, metrics, protocol, timings, artifacts
 }
 
 func makeErrorResult(runID, errText string) worker.ExperimentRunResult {
@@ -88,7 +113,7 @@ func makeErrorResult(runID, errText string) worker.ExperimentRunResult {
 	}
 }
 
-func makeDoneResult(runID string, winners []string, metrics map[string]any, protocol any, timings map[string]any, artifacts map[string]any) worker.ExperimentRunResult {
+func makeDoneResult(runID string, method string, params any, winners []string, metrics map[string]any, protocol any, timings map[string]any, artifacts map[string]any) worker.ExperimentRunResult {
 	runID = strings.TrimSpace(runID)
 
 	if metrics == nil {
@@ -106,6 +131,8 @@ func makeDoneResult(runID string, winners []string, metrics map[string]any, prot
 		RunID:     runID,
 		Status:    "done",
 		ErrorText: "",
+		Method:    method,
+		Params:    params,
 		Winners:   winners,
 		Metrics:   metrics,
 		Protocol:  protocol,

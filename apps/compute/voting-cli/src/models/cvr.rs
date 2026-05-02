@@ -113,10 +113,7 @@ impl ProfileParser<RankingBallot> for CVRParser {
 
         let names: Vec<String> = reverse_map.values().cloned().collect();
 
-        Ok((
-            Profile::try_from((votes, names))?,
-            reverse_map,
-        ))
+        Ok((Profile::try_from((votes, names))?, reverse_map))
     }
 }
 

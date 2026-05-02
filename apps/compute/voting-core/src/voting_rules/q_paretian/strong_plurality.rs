@@ -82,7 +82,9 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                 let scores = counts
                     .iter()
                     .zip(profile.active_candidates().iter())
-                    .map(|(score, cand)| (*score as f64).to_score(cand.to_string(), cand.get_name().to_owned()))
+                    .map(|(score, cand)| {
+                        (*score as f64).to_score(cand.to_string(), cand.get_name().to_owned())
+                    })
                     .collect();
                 return Ok((
                     RuleOutcome::from(winners.clone()),
@@ -107,7 +109,13 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                                 .step(1)
                                 .title("Round 1".to_owned())
                                 .action("declare_winner".to_owned())
-                                .remaining_candidate_ids(profile.active_candidates().iter().map(ToString::to_string).collect())
+                                .remaining_candidate_ids(
+                                    profile
+                                        .active_candidates()
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect(),
+                                )
                                 .scores(scores)
                                 .build(),
                         ])
@@ -141,8 +149,8 @@ impl<const LIMIT: usize> Default for SimplePluralityRule<LIMIT> {
 #[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
-    use crate::prelude::CandidateId;
     use crate::models::BallotData;
+    use crate::prelude::CandidateId;
 
     use super::*;
     use test_case::test_case;
