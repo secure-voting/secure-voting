@@ -31,6 +31,7 @@ type RunsLocationState = {
     jobId: string;
   }>;
   autoOpenRunId?: string;
+  experimentIdFilter?: string;
 };
 
 function prettyValue(value: unknown) {
@@ -68,6 +69,18 @@ function formatDateTime(value: unknown) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function datasetCandidatesCount(value: unknown, datasetMap?: Record<string, DatasetListItem>) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+
+  const dataset = datasetMap?.[raw];
+  const candidates = (dataset as any)?.candidates;
+
+  if (Array.isArray(candidates)) return String(candidates.length);
+
+  return "—";
 }
 
 function formatBallotFormat(value: unknown) {
@@ -750,7 +763,11 @@ export function ExperimentRunsPage() {
   const [selected, setSelected] = useState<ExperimentRunItem | null>(null);
   const [selectedResult, setSelectedResult] = useState<ExperimentRunResultResp | null>(null);
 
-  const [experimentIdFilter, setExperimentIdFilter] = useState("");
+  const location = useLocation();
+  const locationState = (location.state ?? null) as RunsLocationState | null;
+  const [experimentIdFilter, setExperimentIdFilter] = useState(
+    locationState?.experimentIdFilter || ""
+  );
   const [batchPayload, setBatchPayload] = useState("{\n  \n}");
 
   const [pollingOn, setPollingOn] = useState(true);
@@ -762,9 +779,6 @@ export function ExperimentRunsPage() {
   const [resultLoading, setResultLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-
-  const location = useLocation();
-  const locationState = (location.state ?? null) as RunsLocationState | null;
 
   const [experimentMap, setExperimentMap] = useState<Record<string, Experiment>>({});
   const [datasetMap, setDatasetMap] = useState<Record<string, DatasetListItem>>({});
@@ -934,10 +948,10 @@ export function ExperimentRunsPage() {
 
   const openRunCard = useCallback(
     async (id: string) => {
-      await loadDetail(id);
+      await Promise.all([loadDetail(id), loadResult(id)]);
       scrollToRunDetail();
     },
-    [loadDetail, scrollToRunDetail]
+    [loadDetail, loadResult, scrollToRunDetail]
   );
 
   const openRunResult = useCallback(
@@ -1355,6 +1369,7 @@ export function ExperimentRunsPage() {
                   <SummaryGrid
                     items={[
                       { label: "Статус", value: runStatusLabel(status) },
+                      { label: "Кандидаты", value: datasetCandidatesCount((item as any)?.dataset_id, datasetMap) },
                       { label: "Набор данных", value: datasetLabel((item as any)?.dataset_id, datasetMap) },
                       { label: "Формат", value: formatBallotFormat(ballotFormat) },
                       { label: "Начало", value: formatDateTime((item as any)?.started_at) },

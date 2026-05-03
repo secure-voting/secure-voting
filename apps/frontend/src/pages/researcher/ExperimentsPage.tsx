@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type { Experiment } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
@@ -189,6 +189,7 @@ function formatParams(params: unknown) {
 
 export function ExperimentsPage() {
   const { token, setToken, me } = useAuth();
+  const nav = useNavigate();
 
   const [items, setItems] = useState<Experiment[]>([]);
   const [selected, setSelected] = useState<Experiment | null>(null);
@@ -254,6 +255,14 @@ export function ExperimentsPage() {
     }
   };
 
+  const goToExperimentRuns = (experimentId: string) => {
+    nav("/research/runs", {
+      state: {
+        experimentIdFilter: experimentId,
+      },
+    });
+  };
+
   const selectedParams = useMemo(() => paramsObject(selected?.params), [selected]);
 
   return (
@@ -314,9 +323,12 @@ export function ExperimentsPage() {
                 </div>
               </details>
 
-              <div style={{ marginTop: 10 }}>
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button style={styles.btnPrimary} onClick={() => loadDetail(item.id)} disabled={detailLoading}>
                   Открыть карточку
+                </button>
+                <button style={styles.btn} onClick={() => goToExperimentRuns(item.id)}>
+                  Запуски и результаты
                 </button>
               </div>
             </div>
@@ -355,6 +367,12 @@ export function ExperimentsPage() {
             <div>
               <h4 style={{ marginBottom: 8 }}>Параметры</h4>
               {formatParams(selected.params)}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={styles.btnPrimary} onClick={() => goToExperimentRuns(selected.id)}>
+                Открыть запуски и результаты
+              </button>
             </div>
 
             <details>
