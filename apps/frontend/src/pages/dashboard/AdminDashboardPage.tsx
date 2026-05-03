@@ -416,7 +416,15 @@ export function AdminDashboardPage() {
 
       <div style={styles.grid2}>
         <div style={styles.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
             <h3 style={{ marginTop: 0 }}>Последние задачи</h3>
             <Link to="/monitor/jobs" style={{ textDecoration: "none" }}>
               <button style={styles.btn}>Все задачи</button>
@@ -436,7 +444,9 @@ export function AdminDashboardPage() {
                         Создана: {formatDateTime(item.created_at)}
                       </div>
                     </div>
-                    <Badge text={jobStatusLabel(jobStatusValue(item))} />
+                    <div style={{ display: "flex", alignItems: "center", minHeight: 36 }}>
+                      <Badge text={jobStatusLabel(jobStatusValue(item))} />
+                    </div>
                   </div>
 
                   <details style={{ marginTop: 8 }}>

@@ -61,6 +61,35 @@ function selectedRuleInfo(
   return rules.find((rule) => rule.id === ruleId);
 }
 
+function approvalLimitFromRule(rule: TallyRuleInfo | undefined): number | null {
+  const values = [rule?.id, rule?.label].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== ""
+  );
+
+  for (const value of values) {
+    const normalized = value.trim().toLowerCase();
+
+    const dashed = normalized.match(/^approval[-_\s]?(\d+)$/);
+    if (dashed) {
+      const parsed = Number(dashed[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+
+    const qValue = normalized.match(/^approval.*q\s*=?\s*(\d+)$/);
+    if (qValue) {
+      const parsed = Number(qValue[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 export function ElectionRulesPage() {
   const { id } = useParams();
   const electionId = String(id || "");
@@ -98,6 +127,12 @@ export function ElectionRulesPage() {
 
   const abortRef = useRef<AbortController | null>(null);
   const currentRule = selectedRuleInfo(availableRules, tallyRule);
+  const candidatesCount = item?.candidates.length ?? 1;
+  const approvalRuleLimit = approvalLimitFromRule(currentRule);
+  const effectiveApprovalMaxChoices =
+    ballotFormat === "approval"
+      ? clampInt(approvalRuleLimit ?? approvalMaxChoices, 1, Math.max(1, candidatesCount))
+      : approvalMaxChoices;
 
   const normalizedTopK = () => {
     const candidatesCount = item?.candidates.length ?? 1;
@@ -197,14 +232,24 @@ export function ElectionRulesPage() {
   }, [currentRule, ballotFormat]);
 
   useEffect(() => {
+    if (ballotFormat !== "approval") return;
+
+    const limit = approvalLimitFromRule(currentRule);
+    if (!limit) return;
+
+    const bounded = clampInt(limit, 1, Math.max(1, candidatesCount));
+    if (approvalMaxChoices !== bounded) {
+      setApprovalMaxChoices(bounded);
+    }
+  }, [ballotFormat, currentRule, candidatesCount, approvalMaxChoices]);
+
+  useEffect(() => {
     loadRules();
   }, [loadRules]);
 
 
   const validate = (): string | null => {
     if (!item) return "Нет данных голосования";
-
-    const candidatesCount = item.candidates.length;
 
     if (rulesLoading && availableRules.length === 0) {
       return "Список правил еще загружается";
@@ -226,8 +271,14 @@ export function ElectionRulesPage() {
     }
 
     if (ballotFormat === "approval" && currentRule.requires_approval_max_choices) {
-      if (approvalMaxChoices < 1) return "Максимум отметок должен быть не меньше 1";
-      if (approvalMaxChoices > candidatesCount) return "Максимум отметок не может превышать число кандидатов";
+      if (effectiveApprovalMaxChoices < 1) return "Максимум отметок должен быть не меньше 1";
+      if (effectiveApprovalMaxChoices > candidatesCount) {
+        return "Максимум отметок не может превышать число кандидатов";
+      }
+
+      if (approvalRuleLimit && approvalMaxChoices !== effectiveApprovalMaxChoices) {
+        return `Для выбранного approval-правила максимум отметок должен быть ${effectiveApprovalMaxChoices}`;
+      }
     }
 
     if (ballotFormat === "ranking" && currentRule.supports_ranking_top_k && limitRankingTopK) {
@@ -306,7 +357,7 @@ export function ElectionRulesPage() {
       }
 
       if (ballotFormat === "approval") {
-        body.approval_max_choices = approvalMaxChoices;
+        body.approval_max_choices = effectiveApprovalMaxChoices;
       }
 
       if (ballotFormat === "ranking") {
@@ -507,10 +558,16 @@ export function ElectionRulesPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={item.candidates.length}
-                    value={approvalMaxChoices}
+                    max={approvalRuleLimit ?? candidatesCount}
+                    value={effectiveApprovalMaxChoices}
+                    disabled={approvalRuleLimit != null}
                     onChange={(e) => setApprovalMaxChoices(Number(e.target.value))}
                   />
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    {approvalRuleLimit != null
+                      ? `Лимит задан выбранным правилом: ${effectiveApprovalMaxChoices}`
+                      : `Максимально допустимое значение: ${candidatesCount}`}
+                  </div>
                 </div>
               </div>
             ) : null}

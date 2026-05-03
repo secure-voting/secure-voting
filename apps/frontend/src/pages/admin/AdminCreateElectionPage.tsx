@@ -146,6 +146,35 @@ function ruleDisplayLabel(rule: TallyRuleInfo | undefined, fallbackId: string) {
   return tallyRuleLabel(rule?.id || fallbackId);
 }
 
+function approvalLimitFromRule(rule: TallyRuleInfo | undefined): number | null {
+  const values = [rule?.id, rule?.label].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== ""
+  );
+
+  for (const value of values) {
+    const normalized = value.trim().toLowerCase();
+
+    const dashed = normalized.match(/^approval[-_\s]?(\d+)$/);
+    if (dashed) {
+      const parsed = Number(dashed[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+
+    const qValue = normalized.match(/^approval.*q\s*=?\s*(\d+)$/);
+    if (qValue) {
+      const parsed = Number(qValue[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 function StepHeader({
   current,
   onGo,
@@ -422,6 +451,12 @@ export function AdminCreateElectionPage() {
     [availableRules, tallyRule]
   );
 
+  const approvalRuleLimit = approvalLimitFromRule(currentRule);
+  const effectiveApprovalMax =
+    ballotFormat === "approval"
+      ? clampInt(approvalRuleLimit ?? approvalMax, 1, Math.max(1, candidateCount))
+      : approvalMax;
+
   const allowedBallotFormats = useMemo(() => {
     const formats = new Set<"approval" | "ranking" | "score">();
 
@@ -482,6 +517,18 @@ export function AdminCreateElectionPage() {
       setScoreAllowSkip(false);
     }
   }, [currentRule, ballotFormat, committeeSize]);
+
+  useEffect(() => {
+    if (ballotFormat !== "approval") return;
+
+    const limit = approvalLimitFromRule(currentRule);
+    if (!limit) return;
+
+    const bounded = clampInt(limit, 1, Math.max(1, candidateCount));
+    if (approvalMax !== bounded) {
+      setApprovalMax(bounded);
+    }
+  }, [ballotFormat, currentRule, candidateCount, approvalMax]);
 
   const candidateErrors = useMemo(
     () => candidates.map((candidate) => candidateError(candidate, candidates)),
@@ -641,9 +688,13 @@ export function AdminCreateElectionPage() {
       }
 
       if (ballotFormat === "approval" && currentRule.requires_approval_max_choices) {
-        if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
-        if (approvalMax > candidateCount) {
+        if (effectiveApprovalMax < 1) return "approval_max_choices должен быть не меньше 1";
+        if (effectiveApprovalMax > candidateCount) {
           return "approval_max_choices не может превышать число кандидатов";
+        }
+
+        if (approvalRuleLimit && approvalMax !== effectiveApprovalMax) {
+          return `Для правила ${ruleDisplayLabel(currentRule, tallyRule)} максимум отметок должен быть ${effectiveApprovalMax}`;
         }
       }
 
@@ -799,7 +850,7 @@ export function AdminCreateElectionPage() {
       }
 
       if (ballotFormat === "approval") {
-        body.approval_max_choices = approvalMax;
+        body.approval_max_choices = effectiveApprovalMax;
       }
 
       if (ballotFormat === "ranking") {
@@ -1129,10 +1180,16 @@ export function AdminCreateElectionPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={Math.max(candidateCount, 1)}
-                    value={approvalMax}
+                    max={approvalRuleLimit ?? candidateCount}
+                    value={effectiveApprovalMax}
+                    disabled={approvalRuleLimit != null}
                     onChange={(e) => setApprovalMax(Number(e.target.value))}
                   />
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    {approvalRuleLimit != null
+                      ? `Лимит задан выбранным правилом: ${effectiveApprovalMax}`
+                      : `Максимально допустимое значение: ${candidateCount}`}
+                  </div>
                 </div>
               </div>
             ) : null}

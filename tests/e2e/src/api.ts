@@ -21,6 +21,14 @@ type RawResponse = {
   text: string;
 };
 
+type MultipartFile = {
+  name: string;
+  mimeType: string;
+  buffer: Buffer;
+};
+
+type MultipartValue = string | number | boolean | MultipartFile;
+
 function withTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
@@ -76,9 +84,6 @@ export async function createApiClient() {
   const ctx = await request.newContext({
     baseURL: withTrailingSlash(env.apiBase),
     ignoreHTTPSErrors: true,
-    extraHTTPHeaders: {
-      "Content-Type": "application/json",
-    },
   });
 
   async function rawGet(path: string, token?: string): Promise<RawResponse> {
@@ -104,6 +109,7 @@ export async function createApiClient() {
     const resp = await ctx.post(apiPath(path), {
       data: body,
       headers: {
+        "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(extraHeaders || {}),
       },
@@ -127,9 +133,29 @@ export async function createApiClient() {
     const resp = await ctx.patch(apiPath(path), {
       data: body,
       headers: {
+        "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(extraHeaders || {}),
       },
+    });
+
+    const text = await resp.text();
+
+    return {
+      status: resp.status(),
+      body: parseBody(text),
+      text,
+    };
+  }
+
+  async function rawPostMultipart(
+    path: string,
+    multipart: Record<string, MultipartValue>,
+    token?: string
+  ): Promise<RawResponse> {
+    const resp = await ctx.post(apiPath(path), {
+      multipart,
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
 
     const text = await resp.text();
@@ -193,6 +219,31 @@ export async function createApiClient() {
     return last as RawResponse;
   }
 
+  async function rawPostMultipartWithWriteRetry(
+    path: string,
+    multipart: Record<string, MultipartValue>,
+    token?: string
+  ): Promise<RawResponse> {
+    const delaysMs = [0, 5_000, 10_000, 20_000, 40_000, 60_000, 90_000, 120_000];
+
+    let last: RawResponse | null = null;
+
+    for (const delay of delaysMs) {
+      if (delay > 0) {
+        await sleep(delay);
+      }
+
+      const result = await rawPostMultipart(path, multipart, token);
+      last = result;
+
+      if (result.status !== 429 || errorCode(result.body) !== "rate_limited") {
+        return result;
+      }
+    }
+
+    return last as RawResponse;
+  }
+
   async function post<T>(
     path: string,
     body?: unknown,
@@ -216,6 +267,20 @@ export async function createApiClient() {
     expectedStatus = 200
   ): Promise<T> {
     const result = await rawPostWithWriteRetry(path, body, token, extraHeaders);
+    expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
+    return result.body as T;
+  }
+
+  async function postMultipart<T>(
+    path: string,
+    multipart: Record<string, MultipartValue>,
+    token?: string,
+    expectedStatus = 200
+  ): Promise<T> {
+    const result = shouldRetryRateLimit(path)
+      ? await rawPostMultipartWithWriteRetry(path, multipart, token)
+      : await rawPostMultipart(path, multipart, token);
+
     expect(result.status, `${path}: ${result.text}`).toBe(expectedStatus);
     return result.body as T;
   }
@@ -305,11 +370,14 @@ export async function createApiClient() {
     rawGet,
     rawPost,
     rawPatch,
+    rawPostMultipart,
     rawPostWithRateLimitRetry,
     rawPostWithWriteRetry,
+    rawPostMultipartWithWriteRetry,
     get,
     post,
     postWithWriteRetry,
+    postMultipart,
     patch,
     login,
     loginWithInvite,
