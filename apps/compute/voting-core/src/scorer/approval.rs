@@ -19,7 +19,7 @@ pub struct ApprovalScorer<const Q: usize>;
 
 /// Approval error type.
 ///
-/// Approval scoring has only one way to fail: not enough candidates to score the first Q.
+/// Approval scoring has only one way to fail: wrong count of candidates in a ballot for this Q.
 #[derive(Debug, Error)]
 #[error("Not enough candidates for this Q")]
 pub struct ApprovalScorerError;
@@ -75,6 +75,10 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
     ) -> Result<Score<Self::Output>, Self::Error> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
+
+        if (0..n_voters).any(|i| profile[i].iter().count() > Q) {
+            return Err(ApprovalScorerError);
+        }
 
         // The unwrap is used on a get_candidate_id return value,
         // which is called with a profile-related value, so is safe.
