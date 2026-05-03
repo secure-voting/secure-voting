@@ -63,12 +63,12 @@ services:
       - KAFKA_TLS_CA=/certs/ca.pem
       - KAFKA_TLS_SERVER_NAME=kafka
       - WORKER_POLL_INTERVAL=1s
-      
+
       - BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
       - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
       - BOOTSTRAP_RESEARCHER_EMAIL=${BOOTSTRAP_RESEARCHER_EMAIL}
       - BOOTSTRAP_RESEARCHER_PASSWORD=${BOOTSTRAP_RESEARCHER_PASSWORD}
-      
+
       - COMPUTE_GRPC_ADDR=rust-compute:50051
       - COMPUTE_TLS=true
       - COMPUTE_TLS_CA=/certs/ca.pem
@@ -117,7 +117,7 @@ services:
       - MONGO_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem
       - MONGO_DB=secure_voting
       - WORKER_POLL_INTERVAL=1s
-     
+
       - KAFKA_BROKERS=kafka:29092
       - KAFKA_TASKS_TOPIC=secure-voting.compute.tasks
       - KAFKA_RESULTS_TOPIC=secure-voting.compute.results
@@ -272,7 +272,7 @@ services:
       - debug
 
   mongo:
-    image: mongo:8.0
+    image: mongo:7.0.32
     container_name: mongo-db
     environment:
       - MONGO_INITDB_ROOT_USERNAME=root
@@ -337,7 +337,7 @@ services:
       - GRPC_ADDR=0.0.0.0:50051
       - TLS_CERT=/scripts/certs/out/compute.pem
       - TLS_KEY=/scripts/certs/out/compute.key
-      
+
     volumes:
       - ./scripts/certs/out:/scripts/certs/out:ro
     restart: unless-stopped
@@ -435,7 +435,7 @@ services:
           "CMD-SHELL",
           "cat > /tmp/kafka-health-ssl.properties <<'EOF'\nsecurity.protocol=SSL\nssl.truststore.location=/etc/kafka/secrets/kafka.truststore.p12\nssl.truststore.password=changeit\nssl.truststore.type=PKCS12\nssl.endpoint.identification.algorithm=\nEOF\nkafka-broker-api-versions --bootstrap-server localhost:29092 --command-config /tmp/kafka-health-ssl.properties > /dev/null 2>&1 || exit 1"
         ]
-      interval: 10s    
+      interval: 10s
       timeout: 10s
       retries: 15
     profiles:
@@ -466,7 +466,7 @@ services:
     restart: unless-stopped
     profiles:
       - debug
-  
+
   kafka-init:
     image: confluentinc/confluent-local:7.6.9-1-ubi8
     container_name: kafka-init
