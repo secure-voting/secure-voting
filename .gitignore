@@ -41,4 +41,3 @@ tests/e2e/test-results/
 # Load tests
 tests/load/node_modules/
 tests/load/load-results/
-tests/load/src/ballot-load.ts
