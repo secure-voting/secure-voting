@@ -10,7 +10,7 @@ import (
 	"secure-voting/apps/backend/internal/results"
 )
 
-type getFunc func(ctx context.Context, electionID, userID, email, role string) (any, string, error)
+type getFunc func(ctx context.Context, electionID, role, userID, email string) (any, string, error)
 
 type Handlers struct {
 	get getFunc
@@ -18,8 +18,8 @@ type Handlers struct {
 
 func NewHandlers(svc *results.Service) *Handlers {
 	return &Handlers{
-		get: func(ctx context.Context, electionID, userID, email, role string) (any, string, error) {
-			res, code, err := svc.Get(ctx, electionID, userID, email, role)
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
+			res, code, err := svc.Get(ctx, electionID, role, userID, email)
 			return res, code, err
 		},
 	}
@@ -32,7 +32,7 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) error {
 	uid, _ := middleware.UserIDFromContext(r.Context())
 	email, _ := middleware.EmailFromContext(r.Context())
 
-	res, code, err := h.get(r.Context(), eid, uid, email, role)
+	res, code, err := h.get(r.Context(), eid, role, uid, email)
 	if err != nil {
 		return err
 	}
@@ -47,6 +47,9 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		case "not_published":
 			httputil.WriteError(w, http.StatusForbidden, "not_published", "results not published")
+			return nil
+		case "no_results":
+			httputil.WriteError(w, http.StatusNotFound, "no_results", "results not found")
 			return nil
 		default:
 			httputil.WriteError(w, http.StatusBadRequest, code, code)
