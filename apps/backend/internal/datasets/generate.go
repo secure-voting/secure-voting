@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	maxGeneratedVoters             = 1_000_000_000
+	maxGeneratedVoters             = 10_000_000
 	generatedBallotInsertBatchSize = 1_000
 	generatedRawExportBallotLimit  = 10_000
 )

@@ -23,7 +23,7 @@ const GENERATION_MODELS = [
   { value: "polarized", label: "Поляризованная" },
 ] as const;
 
-const MAX_GENERATED_VOTERS = 1_000_000_000;
+const MAX_GENERATED_VOTERS = 10_000_000;
 
 type CreatedSyntheticRun = {
   rule: string;
