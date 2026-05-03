@@ -32,10 +32,10 @@ func TestNormalizeBallotFormatAcceptsScoringAlias(t *testing.T) {
 
 func TestGRPCBallotFormatNameMapsScoreToScoring(t *testing.T) {
 	tests := map[string]string{
-		"ranking": "ranking",
+		"ranking":  "ranking",
 		"approval": "approval",
-		"score":   "scoring",
-		"scoring": "scoring",
+		"score":    "scoring",
+		"scoring":  "scoring",
 	}
 
 	for in, want := range tests {

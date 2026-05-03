@@ -228,7 +228,6 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		}
 	}
 
-
 	_, err = s.db.Exec(ctx, `
 		UPDATE elections
 		SET

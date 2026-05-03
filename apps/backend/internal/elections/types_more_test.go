@@ -8,7 +8,7 @@ func intPtr(v int) *int { return &v }
 
 func TestNormalizeRuleName_More(t *testing.T) {
 	cases := map[string]string{
-		" minimax ":            "minmax",
+		" minimax ":           "minmax",
 		"condorcet_practical": "practical_condorcet",
 		"plurality":           "plurality",
 		"inverse-plurality":   "inverse_plurality",
@@ -20,7 +20,6 @@ func TestNormalizeRuleName_More(t *testing.T) {
 		}
 	}
 }
-
 
 func TestNormalizeCommitteeSize_More(t *testing.T) {
 	if _, err := normalizeCommitteeSize(true, nil, 3); err == nil {
@@ -83,7 +82,7 @@ func TestNormalizeCandidateNameAndDescription(t *testing.T) {
 
 func TestCandidateNormalizationCode(t *testing.T) {
 	cases := map[string]string{
-		"at least 2 candidates required":         "candidates_required",
+		"at least 2 candidates required":        "candidates_required",
 		"candidate #1: empty name":              "invalid_candidate_name",
 		"duplicate candidate name: Alice":       "duplicate_candidate_name",
 		"candidate Alice: description too long": "invalid_candidate_description",
@@ -99,11 +98,11 @@ func TestCandidateNormalizationCode(t *testing.T) {
 
 func TestCommitteeSizeCode(t *testing.T) {
 	cases := map[string]string{
-		"at least 2 candidates required":                      "candidates_required",
+		"at least 2 candidates required":                     "candidates_required",
 		"committee_size is required for selected tally rule": "committee_size_required",
 		"committee_size must be >= 1":                        "invalid_committee_size",
 		"committee_size must be <= candidates count (3)":     "committee_size_too_large",
-		"other":                                              "invalid_committee_size",
+		"other": "invalid_committee_size",
 	}
 
 	for msg, want := range cases {

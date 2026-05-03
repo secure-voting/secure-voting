@@ -41,7 +41,7 @@ type ElectionTallyResult struct {
 	Params     map[string]any `json:"params,omitempty"`
 	Winners    []string       `json:"winners,omitempty"`
 	Metrics    map[string]any `json:"metrics,omitempty"`
-	Protocol   any 			  `json:"protocol,omitempty"`
+	Protocol   any            `json:"protocol,omitempty"`
 	Timings    map[string]any `json:"timings,omitempty"`
 	Artifacts  map[string]any `json:"artifacts,omitempty"`
 }
