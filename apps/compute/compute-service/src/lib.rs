@@ -6,6 +6,10 @@
 #![warn(clippy::missing_docs_in_private_items)]
 #![forbid(unsafe_code)]
 
+use fastrace::collector::{Config, ConsoleReporter};
+use fastrace_tracing::FastraceCompatLayer;
+use tracing_subscriber::{Registry as TracingRegistry, layer::SubscriberExt, filter::EnvFilter};
+
 use std::collections::HashMap;
 
 use voting_core::models::{BallotData, candidate_id::CandidateId};
@@ -37,14 +41,39 @@ pub mod system_metrics;
 
 use crate::securevoting::compute::v1::ballot::Payload;
 
+/// Setup the fastrace subscribers.
+///
+/// # Panics
+///
+/// Would panic if the logging subscriber failed to be created.
+#[allow(clippy::expect_used)]
+pub fn setup_fastrace() {
+    fastrace::set_reporter(ConsoleReporter, Config::default());
+
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("compute_service=debug,h2=off,tower=off,tonic=warn"));
+
+    let subscriber = TracingRegistry::default()
+        .with(filter)
+        .with(FastraceCompatLayer::new());
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set tracing subscriber");
+}
+
 /// Helper function to create a response containing an error.
+#[fastrace::trace(
+    properties = {
+        "error.code": "{code}",
+    }
+)]
 pub fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunResult {
+    let msg = message.into();
+    fastrace::local::LocalSpan::add_property(|| ("error.message", msg.clone()));
     RunResult {
         method: String::new(),
         params_json: vec![],
 
         status: "error".to_owned(),
-        error_text: format!("ErrorCode: {code}, details: {}", message.into()),
+        error_text: format!("ErrorCode: {code}, details: {msg}"),
         winners_json: vec![],
         metrics_json: vec![],
         protocol_json: vec![],
@@ -62,6 +91,7 @@ pub fn create_error_type(code: tonic::Code, message: impl Into<String>) -> RunRe
 /// Shouldn't happen, as both implement `Serialize`.
 #[allow(clippy::expect_used)]
 #[must_use]
+#[fastrace::trace]
 pub fn create_winner_response(
     winners: Vec<String>,
     metrics: &Metrics,
@@ -98,6 +128,7 @@ pub fn create_winner_response(
 /// Returns an error if the payload of the ballot is empty.
 #[allow(clippy::cast_sign_loss)]
 #[allow(clippy::implicit_hasher)]
+#[fastrace::trace]
 pub fn parse_ballots(
     batches: &[BallotBatch],
     candidate_map: &HashMap<&str, usize>,
@@ -164,6 +195,7 @@ pub fn parse_ballots(
 /// Will panic if the system metrics couldn't be serialized.
 /// Shouldn't happen as the type implement `Serialize` trait.
 #[must_use]
+#[fastrace::trace]
 pub fn process_request(
     header: &RunHeader,
     batches: &[BallotBatch],
@@ -183,6 +215,8 @@ pub fn process_request(
         Err(e) => return create_error_type(tonic::Code::InvalidArgument, e),
     };
 
+    fastrace::local::LocalSpan::add_property(|| ("ballots.count", ballots.len().to_string()));
+
     if header.ballot_format != "ranking"
         && header.ballot_format != "approval"
         && header.ballot_format != "scoring"
@@ -200,8 +234,13 @@ pub fn process_request(
         &header.ballot_format,
     ) {
         Ok(result) => {
-            let timings_json =
-                serde_json::to_vec(&system_metrics.measure()).expect("Serialization failed");
+            let metrics = system_metrics.measure();
+            fastrace::local::LocalSpan::add_property(|| ("metrics.total_ms", metrics.total_ms.to_string()));
+            fastrace::local::LocalSpan::add_property(|| ("metrics.memory_rss_bytes", metrics.memory_rss_bytes.to_string()));
+            fastrace::local::LocalSpan::add_property(|| ("metrics.cpu_usage_percent", metrics.cpu_usage_percent.to_string()));
+            fastrace::local::LocalSpan::add_property(|| ("metrics.throughput", metrics.throughput_ballots_per_sec.to_string()));
+
+            let timings_json = serde_json::to_vec(&metrics).expect("Serialization failed");
             create_winner_response(result.0, &result.1, &result.2, &timings_json)
         }
         Err(AlgorithmError::NoSuchAlgorithm(a)) => create_error_type(
