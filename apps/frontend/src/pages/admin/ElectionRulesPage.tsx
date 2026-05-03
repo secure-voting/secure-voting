@@ -36,9 +36,17 @@ function Hint({ text }: { text: string }) {
   );
 }
 
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
+
 function toLocalInputValue(date: Date) {
-  const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return adjusted.toISOString().slice(0, 16);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return [
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}`,
+  ].join("T");
 }
 
 function toRFC3339FromLocalInput(value: string) {

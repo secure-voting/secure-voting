@@ -23,6 +23,8 @@ const GENERATION_MODELS = [
   { value: "polarized", label: "Поляризованная" },
 ] as const;
 
+const MAX_GENERATED_VOTERS = 1_000_000_000;
+
 type CreatedSyntheticRun = {
   rule: string;
   experimentId: string;
@@ -583,6 +585,11 @@ export function DatasetsPage() {
       return;
     }
 
+    if (genVoters > MAX_GENERATED_VOTERS) {
+      setGenerateErr(`Количество профилей не может превышать ${MAX_GENERATED_VOTERS.toLocaleString("ru-RU")}`);
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -1103,9 +1110,13 @@ export function DatasetsPage() {
             style={styles.input}
             type="number"
             min={1}
+            max={MAX_GENERATED_VOTERS}
             value={genVoters}
             onChange={(e) => setGenVoters(Number(e.target.value))}
           />
+          <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+            Для больших наборов профили сохраняются в отдельной коллекции dataset_ballots. Полный raw JSON в карточке датасета сохраняется только для небольших наборов.
+          </div>
 
           <div style={{ height: 10 }} />
 

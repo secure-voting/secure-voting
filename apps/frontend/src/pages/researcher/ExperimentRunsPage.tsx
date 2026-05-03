@@ -774,6 +774,9 @@ export function ExperimentRunsPage() {
   const detailAbortRef = useRef<AbortController | null>(null);
   const resultAbortRef = useRef<AbortController | null>(null);
 
+  const detailSectionRef = useRef<HTMLDivElement | null>(null);
+  const resultSectionRef = useRef<HTMLDivElement | null>(null);
+
   const timerRef = useRef<number | null>(null);
   const prevStatusRef = useRef<Map<string, string>>(new Map());
 
@@ -911,6 +914,40 @@ export function ExperimentRunsPage() {
     [token, setToken]
   );
 
+  const scrollToRunDetail = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      detailSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
+  const scrollToRunResult = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      resultSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
+  const openRunCard = useCallback(
+    async (id: string) => {
+      await loadDetail(id);
+      scrollToRunDetail();
+    },
+    [loadDetail, scrollToRunDetail]
+  );
+
+  const openRunResult = useCallback(
+    async (id: string) => {
+      await loadResult(id);
+      scrollToRunResult();
+    },
+    [loadResult, scrollToRunResult]
+  );
+
   useEffect(() => {
     loadList(false);
     return () => {
@@ -958,7 +995,8 @@ export function ExperimentRunsPage() {
 
     loadDetail(targetRunId);
     loadResult(targetRunId);
-  }, [items, locationState, loadDetail, loadResult]);
+    scrollToRunDetail();
+  }, [items, locationState, loadDetail, loadResult, scrollToRunDetail]);
 
   const handleDownload = async (id: string) => {
     if (!token) return;
@@ -1350,10 +1388,10 @@ export function ExperimentRunsPage() {
                 </details>
 
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={styles.btnPrimary} onClick={() => loadDetail(id)} disabled={detailLoading}>
+                  <button style={styles.btnPrimary} onClick={() => openRunCard(id)} disabled={detailLoading}>
                     Открыть карточку
                   </button>
-                  <button style={styles.btn} onClick={() => loadResult(id)} disabled={resultLoading}>
+                  <button style={styles.btn} onClick={() => openRunResult(id)} disabled={resultLoading}>
                     Загрузить результат
                   </button>
                   <button style={styles.btn} onClick={() => handleDownload(id)}>
@@ -1387,7 +1425,7 @@ export function ExperimentRunsPage() {
           </button>
         </div>
 
-        <div style={styles.card}>
+        <div ref={detailSectionRef} style={styles.card}>
           <h3 style={{ marginTop: 0 }}>Карточка запуска</h3>
           {detailLoading ? <div style={styles.muted}>Загрузка…</div> : null}
 
@@ -1486,7 +1524,7 @@ export function ExperimentRunsPage() {
         </div>
       </div>
 
-      <div style={styles.card}>
+      <div ref={resultSectionRef} style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Результат запуска</h3>
         {resultLoading ? <div style={styles.muted}>Загрузка…</div> : null}
 
