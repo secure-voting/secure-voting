@@ -64,7 +64,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <div style={{ display: "grid", gap: 4 }}>
               <h1 style={styles.title}>Secure Voting</h1>
               <div style={styles.muted}>
-                Клиент-серверная платформа электронных голосований
+                Клиент-серверное приложение электронных голосований
               </div>
             </div>
 
