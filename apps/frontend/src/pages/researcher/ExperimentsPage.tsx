@@ -201,6 +201,17 @@ export function ExperimentsPage() {
   const abortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
 
+  const detailSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToExperimentDetail = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      detailSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, []);
+
   const loadList = useCallback(async () => {
     if (!token) return;
 
@@ -253,6 +264,11 @@ export function ExperimentsPage() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const openExperimentCard = async (id: string) => {
+    await loadDetail(id);
+    scrollToExperimentDetail();
   };
 
   const goToExperimentRuns = (experimentId: string) => {
@@ -324,7 +340,7 @@ export function ExperimentsPage() {
               </details>
 
               <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button style={styles.btnPrimary} onClick={() => loadDetail(item.id)} disabled={detailLoading}>
+                <button style={styles.btnPrimary} onClick={() => openExperimentCard(item.id)} disabled={detailLoading}>
                   Открыть карточку
                 </button>
                 <button style={styles.btn} onClick={() => goToExperimentRuns(item.id)}>
@@ -336,7 +352,7 @@ export function ExperimentsPage() {
         </div>
       </div>
 
-      <div style={styles.card}>
+      <div ref={detailSectionRef} style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Карточка эксперимента</h3>
         {detailLoading ? <div style={styles.muted}>Загрузка…</div> : null}
 

@@ -172,6 +172,18 @@ function experimentRunExperiment(item: ExperimentRunItem, experimentMap: Record<
   return experimentID ? experimentMap[experimentID] ?? null : null;
 }
 
+function runComputeDurationSeconds(
+  item: ExperimentRunItem,
+  index: number,
+  resultMap: Record<string, ExperimentRunResultResp>
+): number | null {
+  const result = resultMap[runId(item, index)];
+  if (!result) return null;
+
+  const canonical = canonicalIndicators(result);
+  return canonical.timeSeconds;
+}
+
 function runDurationSeconds(item: ExperimentRunItem): number | null {
   const startedAt = (item as any)?.started_at;
   const finishedAt = (item as any)?.finished_at;
@@ -762,6 +774,7 @@ export function ExperimentRunsPage() {
   const [items, setItems] = useState<ExperimentRunItem[]>([]);
   const [selected, setSelected] = useState<ExperimentRunItem | null>(null);
   const [selectedResult, setSelectedResult] = useState<ExperimentRunResultResp | null>(null);
+  const [resultMap, setResultMap] = useState<Record<string, ExperimentRunResultResp>>({});
 
   const location = useLocation();
   const locationState = (location.state ?? null) as RunsLocationState | null;
@@ -863,6 +876,33 @@ export function ExperimentRunsPage() {
         prevStatusRef.current = next;
 
         setItems(list);
+
+        const doneRuns = list
+          .map((run, index) => ({
+            id: runId(run, index),
+            status: runStatus(run),
+          }))
+          .filter((run) => run.status === "done")
+          .slice(0, 50);
+
+        const resultEntries = await Promise.all(
+          doneRuns.map(async (run) => {
+            try {
+              const result = await api.experimentRuns.result(token, run.id, ac.signal);
+              return [run.id, result] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+
+        const nextResultMap: Record<string, ExperimentRunResultResp> = {};
+        for (const entry of resultEntries) {
+          if (entry) {
+            nextResultMap[entry[0]] = entry[1];
+          }
+        }
+        setResultMap(nextResultMap);
         setLastUpdatedAt(nowTimeLabel());
       } catch (e: any) {
         if (e?.name === "AbortError") return;
@@ -1119,7 +1159,7 @@ export function ExperimentRunsPage() {
     () =>
       items
         .map((item, index) => {
-          const duration = runDurationSeconds(item);
+          const duration = runComputeDurationSeconds(item, index, resultMap);
           if (duration == null) return null;
           return {
             label: experimentRunTitle(item, index, experimentMap),
@@ -1127,7 +1167,7 @@ export function ExperimentRunsPage() {
           };
         })
         .filter(Boolean) as Array<{ label: string; value: number }>,
-    [items, experimentMap]
+    [items, experimentMap, resultMap]
   );
 
   const exportRunsCsv = () => {
@@ -1322,7 +1362,7 @@ export function ExperimentRunsPage() {
           />
 
           <SimpleBarChart
-            title="Длительность завершённых запусков (сек)"
+            title="Время вычисления завершенных запусков (сек)"
             items={durationChartItems}
             emptyText="Недостаточно данных по времени выполнения"
             valueFormatter={(value) => `${value.toFixed(2)} s`}
