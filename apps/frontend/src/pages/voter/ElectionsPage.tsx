@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type { ElectionSummary } from "../../shared/api/types";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
@@ -88,6 +88,12 @@ export function ElectionsPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const nav = useNavigate();
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteErr, setInviteErr] = useState<string | null>(null);
+  const [inviteInfo, setInviteInfo] = useState<string | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
 
   const reload = useCallback(async () => {
@@ -121,6 +127,51 @@ export function ElectionsPage() {
   const isVoter = me?.role === "voter";
   const isAdmin = me?.role === "admin";
 
+  const acceptInvite = async () => {
+    if (!token) return;
+
+    const code = inviteCode.trim();
+    setInviteErr(null);
+    setInviteInfo(null);
+
+    if (code.length < 3) {
+      setInviteErr("Введите корректный код приглашения");
+      return;
+    }
+
+    setInviteLoading(true);
+
+    try {
+      const res = await api.auth.acceptInvite(token, code);
+
+      setInviteCode("");
+      setInviteInfo("Приглашение принято. Открываем страницу голосования.");
+
+      if (res.election_id) {
+        nav(`/elections/${res.election_id}/vote`);
+        return;
+      }
+      await reload();
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+        return;
+      }
+
+      if (e?.code === "invite_email_mismatch") {
+        setInviteErr("Код приглашения выписан на другой email");
+      } else if (e?.code === "invite_code_inactive") {
+        setInviteErr("Код приглашения уже использован или больше не активен");
+      } else if (e?.code === "invalid_invite_code") {
+        setInviteErr("Код приглашения не найден");
+      } else {
+        setInviteErr(e?.message || "Не удалось принять приглашение");
+      }
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
   return (
     <div style={styles.card}>
       <div
@@ -139,6 +190,56 @@ export function ElectionsPage() {
           </button>
         </div>
       </div>
+
+      {isVoter ? (
+        <div
+          style={{
+            ...styles.card,
+            marginTop: 12,
+            background: "#f9fafb",
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>Доступ по приглашению</div>
+          <div style={{ marginTop: 6, ...styles.muted }}>
+            Введите код приглашения, чтобы получить доступ к закрытому голосованию.
+          </div>
+
+          {inviteErr ? (
+            <div style={{ color: "#b91c1c", marginTop: 10 }}>{inviteErr}</div>
+          ) : null}
+
+          {inviteInfo ? (
+            <div style={{ color: "#166534", marginTop: 10 }}>{inviteInfo}</div>
+          ) : null}
+
+          <div
+            style={{
+              marginTop: 10,
+              display: "grid",
+              gridTemplateColumns: "minmax(220px, 1fr) auto",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <input
+              style={styles.input}
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              autoComplete="one-time-code"
+              placeholder="Код приглашения"
+              disabled={inviteLoading}
+            />
+            <button
+              style={styles.btnPrimary}
+              onClick={acceptInvite}
+              disabled={inviteLoading}
+              type="button"
+            >
+              {inviteLoading ? "Проверка…" : "Перейти к голосованию"}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <ErrorBanner error={err} />
 

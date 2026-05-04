@@ -120,6 +120,12 @@ type acceptedInvite struct {
 	ElectionID string
 }
 
+type AcceptInviteResult struct {
+	OK         bool   `json:"ok"`
+	InviteID   string `json:"invite_id"`
+	ElectionID string `json:"election_id"`
+}
+
 type ChangePasswordInput struct {
 	UserID          string
 	CurrentPassword string

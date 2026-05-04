@@ -5,7 +5,7 @@ import { candidates3 } from "../src/test-data.js";
 import { daysFromNowIso, futureIso, suffix } from "../src/ids.js";
 
 test.describe("invite-only elections", () => {
-  test("invited voter can access ballot and ordinary voter is denied", async () => {
+  test("invited voter can accept invite code and access ballot while ordinary voter is denied", async () => {
     const api = await createApiClient();
     const sfx = suffix();
 
@@ -17,7 +17,7 @@ test.describe("invite-only elections", () => {
       const ordinaryEmail = `ordinary_${sfx}@local.dev`;
       const ordinaryPassword = "ordinarypass1";
 
-      await api.register(invitedEmail, invitedPassword);
+      const invited = await api.register(invitedEmail, invitedPassword);
       const ordinary = await api.register(ordinaryEmail, ordinaryPassword);
 
       const election = await api.post<any>(
@@ -50,11 +50,16 @@ test.describe("invite-only elections", () => {
 
       expect(invite.invite_code).toBeTruthy();
 
-      const invited = await api.loginWithInvite(
-        invitedEmail,
-        invitedPassword,
-        invite.invite_code
+      const accept = await api.post<any>(
+        "/auth/invite/accept",
+        {
+          invite_code: invite.invite_code,
+        },
+        invited.accessToken
       );
+
+      expect(accept.ok).toBe(true);
+      expect(accept.election_id).toBe(election.id);
 
       const invitedBallot = await api.get<any>(
         `/elections/${election.id}/ballot`,

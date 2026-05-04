@@ -12,4 +12,5 @@ func registerAuthRoutes(r *routeCtx) {
 	r.mux.Handle("POST /api/v1/auth/change-password", r.RequireAuthLimited(r.authH.ChangePassword))
 	r.mux.Handle("PATCH /api/v1/auth/profile", r.RequireAuthLimited(r.authH.UpdateProfile))
 	r.mux.Handle("POST /api/v1/auth/email/verification/request", r.RequireAuthLimited(r.authH.RequestEmailVerification))
+	r.mux.Handle("POST /api/v1/auth/invite/accept", r.RequireAuthLimited(r.authH.AcceptInvite))
 }

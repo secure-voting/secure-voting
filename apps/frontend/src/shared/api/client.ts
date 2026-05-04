@@ -195,9 +195,8 @@ async function authorizedDownload(path: string, token: string, fallbackFilename:
 
 export const api = {
   auth: {
-    async register(email: string, password: string, inviteCode: string | null) {
+    async register(email: string, password: string) {
       const body: Record<string, unknown> = { email, password };
-      if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
 
       const resp = await request<any>(
         "/api/v1/auth/register",
@@ -208,14 +207,8 @@ export const api = {
       return extractAuthTokens(resp);
     },
 
-    async login(
-      email: string,
-      password: string,
-      inviteCode: string | null,
-      replaceExistingSession = false
-    ) {
+    async login(email: string, password: string, replaceExistingSession = false) {
       const body: Record<string, unknown> = { email, password };
-      if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
       if (replaceExistingSession) body.replace_existing_session = true;
 
       const resp = await request<any>(
@@ -225,6 +218,23 @@ export const api = {
       );
 
       return extractAuthTokens(resp);
+    },
+
+    async acceptInvite(token: string, inviteCode: string) {
+      return await request<{
+        ok: boolean;
+        invite_id: string;
+        election_id: string;
+      }>(
+        "/api/v1/auth/invite/accept",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            invite_code: inviteCode,
+          }),
+        },
+        token
+      );
     },
 
     async refresh(refreshToken: string) {

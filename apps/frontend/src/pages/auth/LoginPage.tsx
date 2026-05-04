@@ -9,7 +9,6 @@ import { useAuth } from "../../app/auth";
 type FieldErrors = {
   email?: string;
   password?: string;
-  inviteCode?: string;
 };
 
 type LocationState = {
@@ -26,7 +25,6 @@ function validateAuthFields(input: {
   mode: "login" | "register";
   email: string;
   password: string;
-  inviteCode: string;
 }): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -38,10 +36,6 @@ function validateAuthFields(input: {
     errors.password = "Введите пароль";
   } else if (input.mode === "register" && input.password.length < 8) {
     errors.password = "Пароль должен содержать не менее 8 символов";
-  }
-
-  if (input.inviteCode.trim() && input.inviteCode.trim().length < 3) {
-    errors.inviteCode = "Код приглашения выглядит некорректно";
   }
 
   return errors;
@@ -67,7 +61,6 @@ export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
 
   const [showPass, setShowPass] = useState(false);
 
@@ -88,7 +81,7 @@ export function LoginPage() {
 
   useEffect(() => {
     setActiveSessionWarning(false);
-  }, [email, password, inviteCode]);
+  }, [email, password]);
 
   const finishAuth = (normalizedEmail: string) => {
     const to =
@@ -115,7 +108,6 @@ export function LoginPage() {
         mode,
         email,
         password,
-        inviteCode,
       });
 
       setFieldErrors(nextErrors);
@@ -125,10 +117,9 @@ export function LoginPage() {
       }
 
       const normalizedEmail = email.trim();
-      const normalizedInviteCode = inviteCode.trim() ? inviteCode.trim() : null;
 
       if (mode === "register") {
-        const tokens = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
+        const tokens = await api.auth.register(normalizedEmail, password);
         setToken(tokens);
         finishAuth(normalizedEmail);
         return;
@@ -137,7 +128,6 @@ export function LoginPage() {
       const tokens = await api.auth.login(
         normalizedEmail,
         password,
-        normalizedInviteCode,
         replaceExistingSession
       );
 
@@ -255,20 +245,6 @@ export function LoginPage() {
 
         <div style={{ height: 10 }} />
 
-        <label style={{ display: "block", marginBottom: 6 }}>
-          Код приглашения <span style={styles.muted}>(если требуется)</span>
-        </label>
-        <input
-          style={styles.input}
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
-          autoComplete="one-time-code"
-          placeholder="Введите код приглашения"
-        />
-        {fieldErrorText(fieldErrors.inviteCode)}
-
-        <div style={{ height: 14 }} />
-
         <button style={styles.btnPrimary} onClick={() => submit(false)} disabled={loading} type="button">
           {loading ? "Загрузка…" : mode === "login" ? "Войти" : "Зарегистрироваться"}
         </button>
@@ -278,7 +254,7 @@ export function LoginPage() {
         <h3 style={{ marginTop: 0 }}>Информация</h3>
         <div style={{ ...styles.muted, display: "grid", gap: 8 }}>
           <div>• После успешного входа открывается рабочий раздел пользователя.</div>
-          <div>• В голосованиях с доступом по приглашению может понадобиться код приглашения.</div>
+          <div>• Код приглашения вводится в разделе голосований после входа в систему.</div>
           <div>• Самостоятельная регистрация создаёт учётную запись голосующего.</div>
           <div>• Учётные записи администратора и исследователя настраиваются отдельно.</div>
           <div>• При входе с нового устройства предыдущую активную сессию можно завершить.</div>

@@ -55,6 +55,13 @@ type fakeAuthService struct {
 
 	lastEmailVerificationUserID string
 	lastEmailVerificationToken  string
+
+	acceptInviteRes  asvc.AcceptInviteResult
+	acceptInviteCode string
+	acceptInviteErr  error
+
+	lastAcceptInviteUserID string
+	lastAcceptInviteCode   string
 }
 
 func (f *fakeAuthService) Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error) {
@@ -112,6 +119,12 @@ func (f *fakeAuthService) ConfirmEmailVerification(ctx context.Context, userID, 
 	f.lastEmailVerificationUserID = userID
 	f.lastEmailVerificationToken = code
 	return f.confirmEmailVerificationRes, f.confirmEmailVerificationCode, f.confirmEmailVerificationErr
+}
+
+func (f *fakeAuthService) AcceptInvite(ctx context.Context, userID, inviteCode string) (asvc.AcceptInviteResult, string, error) {
+	f.lastAcceptInviteUserID = userID
+	f.lastAcceptInviteCode = inviteCode
+	return f.acceptInviteRes, f.acceptInviteCode, f.acceptInviteErr
 }
 
 type fakeTokenVerifier struct {

@@ -22,6 +22,7 @@ type AuthService interface {
 	UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error)
 	RequestEmailVerification(ctx context.Context, userID string) (asvc.EmailVerificationRequestResult, string, error)
 	ConfirmEmailVerification(ctx context.Context, userID, code string) (asvc.User, string, error)
+	AcceptInvite(ctx context.Context, userID, inviteCode string) (asvc.AcceptInviteResult, string, error)
 }
 
 type Handlers struct {
@@ -36,6 +37,25 @@ type registerReq struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
 	InviteCode string `json:"invite_code,omitempty"`
+}
+
+type acceptInviteReq struct {
+	InviteCode string `json:"invite_code"`
+}
+
+func mapAcceptInviteCode(code string) error {
+	switch code {
+	case "unauthorized":
+		return apperr.Unauthorized("invalid or expired token")
+	case "invalid_invite_code":
+		return apperr.Invalid(code, "invalid invite_code")
+	case "invite_code_inactive":
+		return apperr.Invalid(code, "invite_code is not active")
+	case "invite_email_mismatch":
+		return apperr.Invalid(code, "invite_code does not match current user email")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
 }
 
 func mapRegisterCode(code string) error {
@@ -369,6 +389,29 @@ func (h *Handlers) ConfirmEmailVerification(w http.ResponseWriter, r *http.Reque
 	}
 	if code != "" {
 		return mapEmailVerificationCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *Handlers) AcceptInvite(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	var req acceptInviteReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.AcceptInvite(r.Context(), userID, req.InviteCode)
+	if err != nil {
+		return apperr.Internal(err, "accept invite failed")
+	}
+	if code != "" {
+		return mapAcceptInviteCode(code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, res)
