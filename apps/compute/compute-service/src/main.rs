@@ -14,7 +14,8 @@ use tonic::{
     transport::{Identity, server::ServerTlsConfig},
 };
 
-use compute_service::registry::Registry;
+use fastrace_tonic::FastraceServerLayer;
+
 use compute_service::registry::voting_rules::get_core_registry;
 use compute_service::securevoting::compute::v1::{
     ListTallyRulesResponse, RunChunk, RunResult, TallyRuleInfo,
@@ -22,6 +23,7 @@ use compute_service::securevoting::compute::v1::{
     run_chunk::Part,
 };
 use compute_service::{create_error_type, process_request};
+use compute_service::{registry::Registry, setup_fastrace};
 
 /// Compute service struct.
 #[derive(Debug, Default)]
@@ -33,6 +35,11 @@ struct ComputeService {
 #[allow(clippy::cast_sign_loss)]
 #[tonic::async_trait]
 impl Compute for ComputeService {
+    #[fastrace::trace(
+      properties = {
+        "method": "run",
+      }
+    )]
     async fn run(
         &self,
         request: tonic::Request<tonic::Streaming<RunChunk>>,
@@ -86,6 +93,11 @@ impl Compute for ComputeService {
         )))
     }
 
+    #[fastrace::trace(
+      properties = {
+        "method": "list_tally_rules",
+      }
+    )]
     #[allow(clippy::expect_used)]
     async fn list_tally_rules(
         &self,
@@ -122,6 +134,7 @@ impl Compute for ComputeService {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    setup_fastrace();
     let registry = get_core_registry();
 
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
@@ -145,6 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic::transport::Server::builder()
         .tls_config(tls_config)?
         .concurrency_limit_per_connection(256)
+        .layer(FastraceServerLayer::default())
         .add_service(ComputeServer::new(server))
         .serve(addr)
         .await?;
