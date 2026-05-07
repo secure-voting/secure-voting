@@ -47,3 +47,6 @@ tests/e2e/test-results/
 # Load tests
 tests/load/node_modules/
 tests/load/load-results/
+
+# Backups
+.backups/
