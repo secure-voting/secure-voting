@@ -127,6 +127,13 @@ jobs:
           cache-dependency-path: |
             apps/backend/go.sum
             apps/backend/go.mod
+      
+      - name: Install golangci-lint for Moon backend lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v1.64.2
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          golangci-lint --version
 
       - name: Setup Node for frontend
         uses: actions/setup-node@v4
