@@ -1,33 +1,15 @@
 language: 'bash'
 layer: 'configuration'
 
-fileGroups:
-  compose:
-    - 'docker-compose.yml'
-    - 'docker-compose.dev.yml'
-    - 'docker-compose.integration.yml'
-    - '.env.example'
-  scripts:
-    - 'install.sh'
-    - 'launch.sh'
-    - 'uninstall.sh'
-    - 'scripts/**/*.sh'
-  database:
-    - 'scripts/db/**/*'
-  certificates:
-    - 'scripts/certs/**/*'
-  ci:
-    - '.github/workflows/**/*'
-    - 'scripts/ci/**/*'
-  openapi:
-    - 'apps/backend/openapi/**/*'
-
 tasks:
   compose-config:
     description: 'Validate Docker Compose configuration'
     command: 'docker compose config --quiet'
     inputs:
-      - '@globs(compose)'
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
 
   scripts-syntax:
     description: 'Check shell script syntax'
@@ -37,14 +19,17 @@ tasks:
       bash -n uninstall.sh
       find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
     inputs:
-      - '@globs(scripts)'
+      - 'install.sh'
+      - 'launch.sh'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
 
   openapi-capabilities:
     description: 'Check capabilities OpenAPI contract'
     command: 'bash scripts/ci/check_openapi_capabilities.sh'
     inputs:
-      - '@globs(openapi)'
-      - '@globs(ci)'
+      - 'apps/backend/openapi/**/*'
+      - 'scripts/ci/**/*'
 
   check:
     description: 'Run root infrastructure checks'
@@ -57,10 +42,14 @@ tasks:
     description: 'Install full local stack'
     command: 'bash install.sh --fresh --reset-env'
     inputs:
-      - '@globs(compose)'
-      - '@globs(scripts)'
-      - '@globs(database)'
-      - '@globs(certificates)'
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
+      - 'install.sh'
+      - 'scripts/**/*.sh'
+      - 'scripts/db/**/*'
+      - 'scripts/certs/**/*'
     options:
       runInCI: false
 
@@ -68,10 +57,14 @@ tasks:
     description: 'Install full local stack with debug web UIs'
     command: 'bash install.sh --fresh --reset-env --with-debug'
     inputs:
-      - '@globs(compose)'
-      - '@globs(scripts)'
-      - '@globs(database)'
-      - '@globs(certificates)'
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
+      - 'install.sh'
+      - 'scripts/**/*.sh'
+      - 'scripts/db/**/*'
+      - 'scripts/certs/**/*'
     options:
       runInCI: false
 
@@ -79,8 +72,9 @@ tasks:
     description: 'Uninstall local stack with backup'
     command: 'bash uninstall.sh --yes'
     inputs:
-      - '@globs(compose)'
-      - '@globs(scripts)'
+      - 'docker-compose.yml'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
     options:
       runInCI: false
 
@@ -88,8 +82,9 @@ tasks:
     description: 'Uninstall local stack without backup'
     command: 'bash uninstall.sh --yes --no-backup'
     inputs:
-      - '@globs(compose)'
-      - '@globs(scripts)'
+      - 'docker-compose.yml'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
     options:
       runInCI: false
 
@@ -97,6 +92,8 @@ tasks:
     description: 'Create PostgreSQL and MongoDB backup'
     command: 'bash scripts/ops/backup_all.sh'
     inputs:
-      - '@globs(scripts)'
+      - 'scripts/ops/backup_all.sh'
+      - 'scripts/ops/backup_postgres.sh'
+      - 'scripts/ops/backup_mongo.sh'
     options:
       runInCI: false

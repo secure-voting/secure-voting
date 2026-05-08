@@ -10,8 +10,6 @@ fileGroups:
     - 'go.sum'
   tests:
     - '**/*_test.go'
-  lintConfig:
-    - '.golangci.yml'
   openapi:
     - 'openapi/**/*'
 
@@ -36,7 +34,7 @@ tasks:
     inputs:
       - '@globs(sources)'
       - '@globs(tests)'
-      - '@globs(lintConfig)'
+      - '.golangci.yml'
 
   build-api:
     description: 'Build backend API binary'
