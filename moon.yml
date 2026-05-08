@@ -1,0 +1,102 @@
+language: 'bash'
+layer: 'configuration'
+
+fileGroups:
+  compose:
+    - 'docker-compose.yml'
+    - 'docker-compose.dev.yml'
+    - 'docker-compose.integration.yml'
+    - '.env.example'
+  scripts:
+    - 'install.sh'
+    - 'launch.sh'
+    - 'uninstall.sh'
+    - 'scripts/**/*.sh'
+  database:
+    - 'scripts/db/**/*'
+  certificates:
+    - 'scripts/certs/**/*'
+  ci:
+    - '.github/workflows/**/*'
+    - 'scripts/ci/**/*'
+  openapi:
+    - 'apps/backend/openapi/**/*'
+
+tasks:
+  compose-config:
+    description: 'Validate Docker Compose configuration'
+    command: 'docker compose config --quiet'
+    inputs:
+      - '@globs(compose)'
+
+  scripts-syntax:
+    description: 'Check shell script syntax'
+    script: |
+      bash -n install.sh
+      bash -n launch.sh
+      bash -n uninstall.sh
+      find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+    inputs:
+      - '@globs(scripts)'
+
+  openapi-capabilities:
+    description: 'Check capabilities OpenAPI contract'
+    command: 'bash scripts/ci/check_openapi_capabilities.sh'
+    inputs:
+      - '@globs(openapi)'
+      - '@globs(ci)'
+
+  check:
+    description: 'Run root infrastructure checks'
+    deps:
+      - compose-config
+      - scripts-syntax
+      - openapi-capabilities
+
+  install:
+    description: 'Install full local stack'
+    command: 'bash install.sh --fresh --reset-env'
+    inputs:
+      - '@globs(compose)'
+      - '@globs(scripts)'
+      - '@globs(database)'
+      - '@globs(certificates)'
+    options:
+      runInCI: false
+
+  install-debug:
+    description: 'Install full local stack with debug web UIs'
+    command: 'bash install.sh --fresh --reset-env --with-debug'
+    inputs:
+      - '@globs(compose)'
+      - '@globs(scripts)'
+      - '@globs(database)'
+      - '@globs(certificates)'
+    options:
+      runInCI: false
+
+  uninstall:
+    description: 'Uninstall local stack with backup'
+    command: 'bash uninstall.sh --yes'
+    inputs:
+      - '@globs(compose)'
+      - '@globs(scripts)'
+    options:
+      runInCI: false
+
+  uninstall-no-backup:
+    description: 'Uninstall local stack without backup'
+    command: 'bash uninstall.sh --yes --no-backup'
+    inputs:
+      - '@globs(compose)'
+      - '@globs(scripts)'
+    options:
+      runInCI: false
+
+  backup:
+    description: 'Create PostgreSQL and MongoDB backup'
+    command: 'bash scripts/ops/backup_all.sh'
+    inputs:
+      - '@globs(scripts)'
+    options:
+      runInCI: false

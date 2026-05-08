@@ -103,6 +103,100 @@ jobs:
       - name: Check capabilities OpenAPI contract
         run: bash scripts/ci/check_openapi_capabilities.sh
 
+  
+  moon-workspace-check:
+    name: moon workspace checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - backend-fast
+      - frontend-fast
+      - openapi-validate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system tools
+        run: sudo apt-get update && sudo apt-get install -y curl jq protobuf-compiler
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/backend/go.mod
+          cache: true
+          cache-dependency-path: |
+            apps/backend/go.sum
+            apps/backend/go.mod
+
+      - name: Setup Node for frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/frontend
+        run: npm ci
+
+      - name: Setup Node for Playwright E2E
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: tests/e2e
+        run: npm ci
+
+      - name: Setup Node for load tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tests/load/package-lock.json
+
+      - name: Install load test dependencies
+        working-directory: tests/load
+        run: npm ci
+
+      - name: Setup Moon toolchain
+        uses: moonrepo/setup-toolchain@v0
+
+      - name: Run Moon project checks
+        run: |
+          moon project frontend
+          moon project backend
+          moon project compute
+          moon project root
+          moon project e2e
+          moon project load
+
+      - name: Run Moon frontend checks
+        run: |
+          moon run frontend:typecheck
+          moon run frontend:build
+
+      - name: Run Moon backend checks
+        run: |
+          moon run backend:test
+          moon run backend:vet
+          moon run backend:lint
+          moon run backend:build
+
+      - name: Run Moon root checks
+        run: |
+          moon run root:compose-config
+          moon run root:scripts-syntax
+          moon run root:openapi-capabilities
+          moon run root:check
+
+      - name: Run Moon test package typechecks
+        run: |
+          moon run e2e:typecheck
+          moon run load:typecheck
+
   integration-tests:
     name: integration tests
     runs-on: ubuntu-latest
@@ -111,6 +205,7 @@ jobs:
       - backend-fast
       - frontend-fast
       - openapi-validate
+      - moon-workspace-check
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -168,6 +263,7 @@ jobs:
       - backend-fast
       - frontend-fast
       - openapi-validate
+      - moon-workspace-check
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,6 +302,7 @@ jobs:
       - backend-fast
       - frontend-fast
       - openapi-validate
+      - moon-workspace-check
     steps:
       - name: Checkout
         uses: actions/checkout@v4

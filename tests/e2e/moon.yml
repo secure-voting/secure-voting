@@ -1,0 +1,54 @@
+language: 'typescript'
+layer: 'automation'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'tests/**/*'
+    - 'playwright.config.ts'
+    - 'tsconfig.json'
+    - 'package.json'
+    - 'package-lock.json'
+
+tasks:
+  typecheck:
+    description: 'Check Playwright E2E TypeScript types'
+    command: 'npm run typecheck'
+    inputs:
+      - '@globs(sources)'
+
+  test:
+    description: 'Run Playwright E2E tests'
+    command: 'npm run test'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  test-headed:
+    description: 'Run Playwright E2E tests in headed mode'
+    command: 'npm run test:headed'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  test-debug:
+    description: 'Run Playwright E2E tests in debug mode'
+    command: 'npm run test:debug'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  report:
+    description: 'Open Playwright E2E report'
+    command: 'npm run report'
+    options:
+      runInCI: false
