@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 use std::sync::{Arc, RwLock};
+use std::time::Instant;
 
 use tonic::{
     Response,
@@ -15,6 +16,7 @@ use tonic::{
 };
 
 use fastrace_tonic::FastraceServerLayer;
+use tracing::info;
 
 use compute_service::registry::voting_rules::get_core_registry;
 use compute_service::securevoting::compute::v1::{
@@ -44,6 +46,7 @@ impl Compute for ComputeService {
         &self,
         request: tonic::Request<tonic::Streaming<RunChunk>>,
     ) -> Result<tonic::Response<RunResult>, tonic::Status> {
+        let start = Instant::now();
         let (mut header, mut ballot_batch) = (None, vec![]);
 
         let (_metadatamap, _extensions, mut parts) = request.into_parts();
@@ -55,7 +58,15 @@ impl Compute for ComputeService {
 
             match message_part {
                 Part::Header(run_header) => {
+                    info!(
+                        tally_rule = %run_header.tally_rule,
+                        ballot_format = %run_header.ballot_format,
+                        candidates = run_header.candidates.len(),
+                        "Received election header"
+                    );
+
                     if header.is_some() {
+                        info!("Duplicate header in request, rejecting");
                         return Ok(Response::new(create_error_type(
                             tonic::Code::Internal,
                             "header was supplied twice",
@@ -71,6 +82,7 @@ impl Compute for ComputeService {
         }
 
         if ballot_batch.is_empty() {
+            info!("Request rejected: empty ballot chunks");
             return Ok(Response::new(create_error_type(
                 tonic::Code::Internal,
                 "empty ballot chunks",
@@ -78,6 +90,7 @@ impl Compute for ComputeService {
         }
 
         let Some(header) = header else {
+            info!("Request rejected: header was not supplied");
             return Ok(Response::new(create_error_type(
                 tonic::Code::Internal,
                 "header was not supplied",
@@ -86,11 +99,32 @@ impl Compute for ComputeService {
 
         #[allow(clippy::expect_used)]
         let registry = self.registry.read().expect("RwLock is poisoned");
-        Ok(Response::new(process_request(
+        let result = process_request(
             &header,
             &ballot_batch,
             &registry,
-        )))
+        );
+
+        let total_ballots: usize = ballot_batch.iter().map(|b| b.ballots.len()).sum();
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+
+        if result.status == "done" {
+            info!(
+                duration_ms = elapsed_ms,
+                ballots = total_ballots,
+                winners = result.winners_json.len(),
+                "Election computation completed"
+            );
+        } else {
+            info!(
+                duration_ms = elapsed_ms,
+                ballots = total_ballots,
+                error = %result.error_text,
+                "Election computation failed"
+            );
+        }
+
+        Ok(Response::new(result))
     }
 
     #[fastrace::trace(
@@ -135,11 +169,20 @@ impl Compute for ComputeService {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     setup_fastrace();
-    let registry = get_core_registry();
 
     let addr: std::net::SocketAddr = std::env::var("GRPC_ADDR")
         .unwrap_or_else(|_| "0.0.0.0:50051".to_string())
         .parse()?;
+
+    let registry = get_core_registry();
+    let algorithm_count = registry.algorithms().count();
+
+    info!(
+        addr = %addr,
+        algorithms = algorithm_count,
+        "Compute service started"
+    );
+
     let server = ComputeService {
         registry: Arc::new(RwLock::new(registry)),
     };
@@ -154,6 +197,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ))?;
 
     let tls_config = ServerTlsConfig::new().identity(Identity::from_pem(&cert, &key));
+
+    info!(addr = %addr, "gRPC server listening");
 
     tonic::transport::Server::builder()
         .tls_config(tls_config)?
