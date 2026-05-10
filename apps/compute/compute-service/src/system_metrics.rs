@@ -6,6 +6,7 @@
 use serde::Serialize;
 use std::time::Instant;
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, RefreshKind, System};
+use tracing::info;
 
 /// Metrics result containing timing, memory, and CPU measurements.
 #[derive(Debug, Clone, Serialize)]
@@ -101,6 +102,15 @@ impl SystemMetricsCollector {
         } else {
             0.0
         };
+
+        info!(
+            total_ms = elapsed_ms,
+            memory_delta_bytes = memory_end.saturating_sub(self.memory_start),
+            cpu_percent = cpu_end - self.cpu_start,
+            ballots = self.ballots_count,
+            throughput_per_sec = throughput,
+            "System metrics collected"
+        );
 
         SystemMetrics {
             total_ms: elapsed_ms,
