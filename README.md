@@ -48,19 +48,19 @@ flowchart TD
         KF[("Kafka (TLS)<br/>:29092")]
     end
 
-    Browser -->|HTTPS :443| Nginx
-    Nginx -->|HTTP :3001| API
+    Browser -->|"HTTPS :443"| Nginx
+    Nginx -->|"HTTP :3001"| API
 
     API --- PG
     API --- RD
     API --- MG
-    API -.->|publish tasks| KF
+    API -.->|"publish tasks"| KF
 
-    CR -.->|consume tasks| KF
-    CR -->|gRPC (TLS)| GRPC
-    CR -.->|publish results| KF
+    CR -.->|"consume tasks"| KF
+    CR -->|"gRPC (TLS)"| GRPC
+    CR -.->|"publish results"| KF
 
-    Worker -.->|consume results| KF
+    Worker -.->|"consume results"| KF
     Worker --- PG
     Worker --- MG
     Worker --- RD
