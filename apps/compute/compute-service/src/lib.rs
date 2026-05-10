@@ -8,7 +8,7 @@
 
 use fastrace::collector::{Config, ConsoleReporter};
 use fastrace_tracing::FastraceCompatLayer;
-use tracing_subscriber::{Registry as TracingRegistry, layer::SubscriberExt, filter::EnvFilter};
+use tracing_subscriber::{Registry as TracingRegistry, filter::EnvFilter, layer::SubscriberExt};
 
 use std::collections::HashMap;
 
@@ -235,10 +235,27 @@ pub fn process_request(
     ) {
         Ok(result) => {
             let metrics = system_metrics.measure();
-            fastrace::local::LocalSpan::add_property(|| ("metrics.total_ms", metrics.total_ms.to_string()));
-            fastrace::local::LocalSpan::add_property(|| ("metrics.memory_rss_bytes", metrics.memory_rss_bytes.to_string()));
-            fastrace::local::LocalSpan::add_property(|| ("metrics.cpu_usage_percent", metrics.cpu_usage_percent.to_string()));
-            fastrace::local::LocalSpan::add_property(|| ("metrics.throughput", metrics.throughput_ballots_per_sec.to_string()));
+            fastrace::local::LocalSpan::add_property(|| {
+                ("metrics.total_ms", metrics.total_ms.to_string())
+            });
+            fastrace::local::LocalSpan::add_property(|| {
+                (
+                    "metrics.memory_rss_bytes",
+                    metrics.memory_rss_bytes.to_string(),
+                )
+            });
+            fastrace::local::LocalSpan::add_property(|| {
+                (
+                    "metrics.cpu_usage_percent",
+                    metrics.cpu_usage_percent.to_string(),
+                )
+            });
+            fastrace::local::LocalSpan::add_property(|| {
+                (
+                    "metrics.throughput",
+                    metrics.throughput_ballots_per_sec.to_string(),
+                )
+            });
 
             let timings_json = serde_json::to_vec(&metrics).expect("Serialization failed");
             create_winner_response(result.0, &result.1, &result.2, &timings_json)
