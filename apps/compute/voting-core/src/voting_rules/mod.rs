@@ -2,6 +2,8 @@
 //!
 //! This module defines the trait [`VotingRuleExec`] and pre-defined voting rule implementations.
 
+#![allow(clippy::cast_precision_loss)]
+
 use std::fmt::Debug;
 
 use bon::Builder;
@@ -25,6 +27,7 @@ pub mod nanson;
 pub mod plurality;
 pub mod practical_condorcet;
 pub mod q_paretian;
+pub mod scoring;
 pub mod simpson;
 pub mod threshold;
 
@@ -33,19 +36,21 @@ pub mod threshold;
 /// Summary of the election results.
 pub struct Summary {
     /// Total number of ballots in the election.
-    total_ballots: usize,
+    pub total_ballots: usize,
     /// Number of valid ballots.
-    valid_ballots: usize,
+    pub valid_ballots: usize,
     /// Number of invalid ballots.
-    invalid_ballots: usize,
+    pub invalid_ballots: usize,
     /// Number of candidates in the election.
-    candidates_count: usize,
+    pub candidates_count: usize,
     /// Number of winners selected.
-    winner_count: usize,
+    pub winner_count: usize,
     /// Size of the committee.
-    committee_size: usize,
+    pub committee_size: usize,
     /// Number of rounds in the election.
-    rounds_count: usize,
+    pub rounds_count: usize,
+    /// Whether a tie was detected in the results.
+    pub tie_detected: bool,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -53,13 +58,15 @@ pub struct Summary {
 /// Numeric scores from the election.
 pub struct Numeric {
     /// Score of the winner.
-    winner_score: f64,
+    pub winner_score: f64,
     /// Score of the runner-up.
-    runner_up_score: f64,
+    pub runner_up_score: f64,
     /// Margin between winner and runner-up.
-    margin: f64,
+    pub margin: f64,
+    /// Normalized margin (`margin` / `total_ballots`).
+    pub normalized_margin: f64,
     /// Average score across candidates.
-    average_score: f64,
+    pub average_score: f64,
 }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -154,6 +161,7 @@ pub struct Final {
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Default, Builder)]
+#[allow(clippy::struct_field_names)]
 /// Individual step in the voting protocol.
 pub struct Step {
     /// Step number.
@@ -168,10 +176,13 @@ pub struct Step {
     /// Selected candidate IDs in this step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     selected_candidate_ids: Option<Vec<String>>,
+    /// Eliminated candidate IDs in this step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     eliminated_candidate_ids: Option<Vec<String>>,
+    /// Scores of the candidates after the current step.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     scores: Option<Vec<Score>>,
+    /// Optional notes on the round.
     note: Option<String>,
 }
 
@@ -201,7 +212,7 @@ impl Step {
 
     /// Set the action description for this step.
     pub fn set_action(&mut self, action: &str) {
-        self.action = action.to_owned();
+        action.clone_into(&mut self.action);
     }
 }
 

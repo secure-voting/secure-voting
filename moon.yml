@@ -1,0 +1,99 @@
+language: 'bash'
+layer: 'configuration'
+
+tasks:
+  compose-config:
+    description: 'Validate Docker Compose configuration'
+    command: 'docker compose config --quiet'
+    inputs:
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
+
+  scripts-syntax:
+    description: 'Check shell script syntax'
+    script: |
+      bash -n install.sh
+      bash -n launch.sh
+      bash -n uninstall.sh
+      find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+    inputs:
+      - 'install.sh'
+      - 'launch.sh'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
+
+  openapi-capabilities:
+    description: 'Check capabilities OpenAPI contract'
+    command: 'bash scripts/ci/check_openapi_capabilities.sh'
+    inputs:
+      - 'apps/backend/openapi/**/*'
+      - 'scripts/ci/**/*'
+
+  check:
+    description: 'Run root infrastructure checks'
+    deps:
+      - compose-config
+      - scripts-syntax
+      - openapi-capabilities
+
+  install:
+    description: 'Install full local stack'
+    command: 'bash install.sh --fresh --reset-env'
+    inputs:
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
+      - 'install.sh'
+      - 'scripts/**/*.sh'
+      - 'scripts/db/**/*'
+      - 'scripts/certs/**/*'
+    options:
+      runInCI: false
+
+  install-debug:
+    description: 'Install full local stack with debug web UIs'
+    command: 'bash install.sh --fresh --reset-env --with-debug'
+    inputs:
+      - 'docker-compose.yml'
+      - 'docker-compose.dev.yml'
+      - 'docker-compose.integration.yml'
+      - '.env.example'
+      - 'install.sh'
+      - 'scripts/**/*.sh'
+      - 'scripts/db/**/*'
+      - 'scripts/certs/**/*'
+    options:
+      runInCI: false
+
+  uninstall:
+    description: 'Uninstall local stack with backup'
+    command: 'bash uninstall.sh --yes'
+    inputs:
+      - 'docker-compose.yml'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
+    options:
+      runInCI: false
+
+  uninstall-no-backup:
+    description: 'Uninstall local stack without backup'
+    command: 'bash uninstall.sh --yes --no-backup'
+    inputs:
+      - 'docker-compose.yml'
+      - 'uninstall.sh'
+      - 'scripts/**/*.sh'
+    options:
+      runInCI: false
+
+  backup:
+    description: 'Create PostgreSQL and MongoDB backup'
+    command: 'bash scripts/ops/backup_all.sh'
+    inputs:
+      - 'scripts/ops/backup_all.sh'
+      - 'scripts/ops/backup_postgres.sh'
+      - 'scripts/ops/backup_mongo.sh'
+    options:
+      runInCI: false

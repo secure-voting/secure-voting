@@ -9,7 +9,6 @@ import { useAuth } from "../../app/auth";
 type FieldErrors = {
   email?: string;
   password?: string;
-  inviteCode?: string;
 };
 
 type LocationState = {
@@ -26,7 +25,6 @@ function validateAuthFields(input: {
   mode: "login" | "register";
   email: string;
   password: string;
-  inviteCode: string;
 }): FieldErrors {
   const errors: FieldErrors = {};
 
@@ -40,10 +38,6 @@ function validateAuthFields(input: {
     errors.password = "Пароль должен содержать не менее 8 символов";
   }
 
-  if (input.inviteCode.trim() && input.inviteCode.trim().length < 3) {
-    errors.inviteCode = "Код приглашения выглядит некорректно";
-  }
-
   return errors;
 }
 
@@ -51,6 +45,11 @@ function fieldErrorText(v?: string) {
   return v ? (
     <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 6 }}>{v}</div>
   ) : null;
+}
+
+function isActiveSessionConflict(e: unknown) {
+  const err = e as { status?: number; code?: string } | null;
+  return err?.status === 409 && err?.code === "active_session_exists";
 }
 
 export function LoginPage() {
@@ -62,13 +61,13 @@ export function LoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
 
   const [showPass, setShowPass] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [activeSessionWarning, setActiveSessionWarning] = useState(false);
 
   useEffect(() => {
     if (authed) nav("/dashboard", { replace: true });
@@ -77,9 +76,30 @@ export function LoginPage() {
   useEffect(() => {
     setErr(null);
     setFieldErrors({});
+    setActiveSessionWarning(false);
   }, [mode]);
 
-  const submit = async () => {
+  useEffect(() => {
+    setActiveSessionWarning(false);
+  }, [email, password]);
+
+  const finishAuth = (normalizedEmail: string) => {
+    const to =
+      loc?.state?.from && typeof loc.state.from === "string" ? loc.state.from : "/dashboard";
+
+    addNotification({
+      kind: "success",
+      title: mode === "register" ? "Регистрация завершена" : "Вход выполнен",
+      message:
+        mode === "register"
+          ? `Учётная запись для ${normalizedEmail} успешно создана`
+          : `Выполнен вход для ${normalizedEmail}`,
+    });
+
+    nav(to, { replace: true });
+  };
+
+  const submit = async (replaceExistingSession = false) => {
     setLoading(true);
     setErr(null);
 
@@ -88,7 +108,6 @@ export function LoginPage() {
         mode,
         email,
         password,
-        inviteCode,
       });
 
       setFieldErrors(nextErrors);
@@ -98,34 +117,43 @@ export function LoginPage() {
       }
 
       const normalizedEmail = email.trim();
-      const normalizedInviteCode = inviteCode.trim() ? inviteCode.trim() : null;
 
       if (mode === "register") {
-        const t = await api.auth.register(normalizedEmail, password, normalizedInviteCode);
-        setToken(t);
-        addNotification({
-          kind: "success",
-          title: "Регистрация завершена",
-          message: `Учётная запись для ${normalizedEmail} успешно создана`,
-        });
-      } else {
-        const t = await api.auth.login(normalizedEmail, password, normalizedInviteCode);
-        setToken(t);
-        addNotification({
-          kind: "success",
-          title: "Вход выполнен",
-          message: `Выполнен вход для ${normalizedEmail}`,
-        });
+        const tokens = await api.auth.register(normalizedEmail, password);
+        setToken(tokens);
+        finishAuth(normalizedEmail);
+        return;
       }
 
-      const to =
-        loc?.state?.from && typeof loc.state.from === "string" ? loc.state.from : "/dashboard";
-      nav(to, { replace: true });
+      const tokens = await api.auth.login(
+        normalizedEmail,
+        password,
+        replaceExistingSession
+      );
+
+      setToken(tokens);
+      setActiveSessionWarning(false);
+      finishAuth(normalizedEmail);
     } catch (e: any) {
+      if (mode === "login" && isActiveSessionConflict(e)) {
+        setErr(null);
+        setActiveSessionWarning(true);
+        return;
+      }
+
       setErr(e?.message || "Ошибка авторизации");
     } finally {
       setLoading(false);
     }
+  };
+
+  const confirmReplaceSession = async () => {
+    await submit(true);
+  };
+
+  const cancelReplaceSession = () => {
+    setActiveSessionWarning(false);
+    setErr(null);
   };
 
   return (
@@ -151,6 +179,41 @@ export function LoginPage() {
         </div>
 
         <ErrorBanner error={err} />
+
+        {activeSessionWarning ? (
+          <div
+            style={{
+              ...styles.card,
+              background: "#fff7ed",
+              borderColor: "#fed7aa",
+              marginBottom: 12,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Обнаружена активная сессия</div>
+            <div style={{ marginTop: 6, ...styles.muted }}>
+              Для этой учётной записи уже выполнен вход в другом окне, браузере или на другом
+              устройстве. Можно продолжить вход здесь, тогда предыдущая сессия будет завершена.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+              <button
+                type="button"
+                style={styles.btnDanger}
+                onClick={confirmReplaceSession}
+                disabled={loading}
+              >
+                Завершить предыдущую сессию и войти
+              </button>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={cancelReplaceSession}
+                disabled={loading}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <label style={{ display: "block", marginBottom: 6 }}>Email</label>
         <input
@@ -182,33 +245,19 @@ export function LoginPage() {
 
         <div style={{ height: 10 }} />
 
-        <label style={{ display: "block", marginBottom: 6 }}>
-          Код приглашения <span style={styles.muted}>(если требуется)</span>
-        </label>
-        <input
-          style={styles.input}
-          value={inviteCode}
-          onChange={(e) => setInviteCode(e.target.value)}
-          autoComplete="one-time-code"
-          placeholder="Введите код приглашения"
-        />
-        {fieldErrorText(fieldErrors.inviteCode)}
-
-        <div style={{ height: 14 }} />
-
-        <button style={styles.btnPrimary} onClick={submit} disabled={loading} type="button">
+        <button style={styles.btnPrimary} onClick={() => submit(false)} disabled={loading} type="button">
           {loading ? "Загрузка…" : mode === "login" ? "Войти" : "Зарегистрироваться"}
         </button>
       </div>
 
-      
       <div style={styles.card}>
         <h3 style={{ marginTop: 0 }}>Информация</h3>
         <div style={{ ...styles.muted, display: "grid", gap: 8 }}>
           <div>• После успешного входа открывается рабочий раздел пользователя.</div>
-          <div>• В голосованиях с доступом по приглашению может понадобиться код приглашения.</div>
+          <div>• Код приглашения вводится в разделе голосований после входа в систему.</div>
           <div>• Самостоятельная регистрация создаёт учётную запись голосующего.</div>
           <div>• Учётные записи администратора и исследователя настраиваются отдельно.</div>
+          <div>• При входе с нового устройства предыдущую активную сессию можно завершить.</div>
         </div>
       </div>
     </div>

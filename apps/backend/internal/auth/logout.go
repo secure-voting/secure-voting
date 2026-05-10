@@ -2,7 +2,11 @@ package auth
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error) {
@@ -10,6 +14,7 @@ func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *stri
 	if rawToken == "" {
 		return false, nil
 	}
+
 	tokenHashHex := sha256Hex(rawToken)
 
 	tx, err := authBeginTxFn(ctx, s.db)
@@ -18,18 +23,48 @@ func (s *Service) Logout(ctx context.Context, rawToken string, actorUserID *stri
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	ct, err := tx.Exec(ctx, `DELETE FROM api_tokens WHERE token_hash = $1`, tokenHashHex)
+	var sessionID sql.NullString
+	var deletedUserID string
+
+	err = tx.QueryRow(ctx,
+		`DELETE FROM api_tokens
+		 WHERE token_hash = $1
+		 RETURNING session_id::text, user_id::text`,
+		tokenHashHex,
+	).Scan(&sessionID, &deletedUserID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
 		return false, err
 	}
 
-	_ = s.insertAudit(ctx, tx, actorUserID, "user_logged_out", map[string]any{
-		"target_type": "api_token",
+	if sessionID.Valid && strings.TrimSpace(sessionID.String) != "" {
+		_, err = tx.Exec(ctx,
+			`UPDATE auth_sessions
+			 SET revoked_at = COALESCE(revoked_at, now()),
+			     revoked_reason = COALESCE(revoked_reason, 'logout')
+			 WHERE id = $1::uuid`,
+			sessionID.String,
+		)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	actor := actorUserID
+	if actor == nil && strings.TrimSpace(deletedUserID) != "" {
+		actor = &deletedUserID
+	}
+
+	_ = s.insertAudit(ctx, tx, actor, "user_logged_out", map[string]any{
+		"target_type": "auth_session",
+		"target_id":   sessionID.String,
 	})
 
 	if err := tx.Commit(ctx); err != nil {
 		return false, err
 	}
 
-	return ct.RowsAffected() > 0, nil
+	return true, nil
 }

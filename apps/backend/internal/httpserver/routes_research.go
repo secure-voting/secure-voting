@@ -27,30 +27,42 @@ func registerResearchRoutes(r *routeCtx) {
 	r.mux.Handle("POST /api/v1/datasets/import",
 		r.LimitWrite(
 			middleware.RequireAuth(r.authSvc,
-				middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Import)),
+				middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.Import)),
 			),
 		),
 	)
+
 	r.mux.Handle("POST /api/v1/datasets/generate",
 		r.LimitWrite(
 			middleware.RequireAuth(r.authSvc,
-				middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Generate)),
+				middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.Generate)),
 			),
 		),
 	)
+
+	r.mux.Handle("POST /api/v1/datasets/from-election",
+		r.LimitWrite(
+			middleware.RequireAuth(r.authSvc,
+				middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.FromElection)),
+			),
+		),
+	)
+
 	r.mux.Handle("GET /api/v1/datasets",
 		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.List)),
+			middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.List)),
 		),
 	)
+
 	r.mux.Handle("GET /api/v1/datasets/{id}",
 		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Get)),
+			middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.Get)),
 		),
 	)
+
 	r.mux.Handle("GET /api/v1/datasets/{id}/download",
 		middleware.RequireAuth(r.authSvc,
-			middleware.RequireRole("researcher", http.HandlerFunc(r.datasetsH.Download)),
+			middleware.RequireAnyRole([]string{"admin", "researcher"}, http.HandlerFunc(r.datasetsH.Download)),
 		),
 	)
 

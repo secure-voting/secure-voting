@@ -35,10 +35,12 @@ type ExperimentRunResult struct {
 	Kind      string         `json:"kind,omitempty"`
 	RunID     string         `json:"run_id"`
 	Status    string         `json:"status"`
+	ErrorText string         `json:"error_text,omitempty"`
+	Method    string         `json:"method,omitempty"`
+	Params    any            `json:"params,omitempty"`
 	Winners   []string       `json:"winners,omitempty"`
 	Metrics   map[string]any `json:"metrics,omitempty"`
 	Protocol  any            `json:"protocol,omitempty"`
 	Timings   map[string]any `json:"timings,omitempty"`
 	Artifacts map[string]any `json:"artifacts,omitempty"`
-	ErrorText string         `json:"error_text,omitempty"`
 }

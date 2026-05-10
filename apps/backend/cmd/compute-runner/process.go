@@ -26,11 +26,36 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 		task.DatasetID,
 	)
 
+	candidates, code, err := loadDatasetCandidates(ctx, mdb, task.DatasetID)
+	if err != nil {
+		log.Printf("processExperimentRunTask: loadDatasetCandidates failed run_id=%s err=%v", task.RunID, err)
+		return makeErrorResult(task.RunID, "load dataset candidates failed: "+err.Error())
+	}
+	if code != "" {
+		log.Printf("processExperimentRunTask: loadDatasetCandidates code run_id=%s code=%s", task.RunID, code)
+		return makeErrorResult(task.RunID, code)
+	}
+
+	task.Dataset.Candidates = candidates
+	log.Printf("processExperimentRunTask: loaded dataset candidates run_id=%s count=%d", task.RunID, len(candidates))
+
 	header, code := buildHeader(task)
 	if code != "" {
 		log.Printf("processExperimentRunTask: buildHeader failed run_id=%s code=%s", task.RunID, code)
 		return makeErrorResult(task.RunID, code)
 	}
+	if header == nil {
+		log.Printf("processExperimentRunTask: buildHeader returned nil header run_id=%s", task.RunID)
+		return makeErrorResult(task.RunID, "build_header_failed")
+	}
+
+	log.Printf(
+		"processExperimentRunTask: built header run_id=%s ballot_format=%s tally_rule=%s candidates=%d",
+		task.RunID,
+		header.BallotFormat,
+		header.TallyRule,
+		len(header.Candidates),
+	)
 
 	rctx, cancel := context.WithTimeout(ctx, cfg.RunTimeout)
 	defer cancel()
@@ -63,7 +88,7 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 		return makeErrorResult(task.RunID, "grpc close/recv failed: "+err.Error())
 	}
 
-	status, errText, winnersAny, metrics, protocol, timings, artifacts := parseRunResult(resp)
+	status, errText, method, params, winnersAny, metrics, protocol, timings, artifacts := parseRunResult(resp)
 
 	if status != "done" && status != "error" {
 		status = "error"
@@ -77,7 +102,7 @@ func processExperimentRunTask(ctx context.Context, mdb *mongo.Database, cfg Conf
 	}
 
 	winners := anySliceToStringSlice(winnersAny)
-	return makeDoneResult(task.RunID, winners, metrics, protocol, timings, artifacts)
+	return makeDoneResult(task.RunID, method, params, winners, metrics, protocol, timings, artifacts)
 }
 
 func processElectionTallyTask(ctx context.Context, db *pgxpool.Pool, cfg Config, compute pb.ComputeClient, task worker.ElectionTallyTask) worker.ElectionTallyResult {
@@ -105,6 +130,10 @@ func processElectionTallyTask(ctx context.Context, db *pgxpool.Pool, cfg Config,
 	if code != "" {
 		log.Printf("processElectionTallyTask: buildElectionHeader failed job_id=%s code=%s", task.JobID, code)
 		return makeElectionErrorResult(task, code)
+	}
+	if header == nil {
+		log.Printf("processElectionTallyTask: buildElectionHeader returned nil header job_id=%s", task.JobID)
+		return makeElectionErrorResult(task, "build_header_failed")
 	}
 
 	rctx, cancel := context.WithTimeout(ctx, cfg.RunTimeout)
@@ -138,7 +167,7 @@ func processElectionTallyTask(ctx context.Context, db *pgxpool.Pool, cfg Config,
 		return makeElectionErrorResult(task, "grpc close/recv failed: "+err.Error())
 	}
 
-	status, errText, winnersAny, metrics, protocol, timings, artifacts := parseRunResult(resp)
+	status, errText, _, _, winnersAny, metrics, protocol, timings, artifacts := parseRunResult(resp)
 
 	if status != "done" && status != "error" {
 		status = "error"

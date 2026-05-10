@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 
@@ -36,12 +37,13 @@ func (s *Service) GetProfile(ctx context.Context, userID string) (User, string, 
 	var out User
 	var fullName *string
 	var phone *string
+	var emailVerifiedAt sql.NullTime
 
 	err := authDBQueryRowFn(ctx, s.db, `
-		SELECT id::text, email, role, full_name, phone
+		SELECT id::text, email, role, full_name, phone, email_verified_at
 		FROM users
 		WHERE id = $1::uuid
-	`, userID).Scan(&out.ID, &out.Email, &out.Role, &fullName, &phone)
+	`, userID).Scan(&out.ID, &out.Email, &out.Role, &fullName, &phone, &emailVerifiedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return User{}, "unauthorized", nil
@@ -51,6 +53,7 @@ func (s *Service) GetProfile(ctx context.Context, userID string) (User, string, 
 
 	out.FullName = normalizeOptionalStringPtr(fullName)
 	out.Phone = normalizeOptionalStringPtr(phone)
+	out.EmailVerified, out.EmailVerifiedAt = emailVerificationFields(emailVerifiedAt)
 	return out, "", nil
 }
 
@@ -95,20 +98,22 @@ func (s *Service) UpdateProfile(ctx context.Context, userID, fullName, phone str
 	var out User
 	var afterFullName *string
 	var afterPhone *string
+	var afterEmailVerifiedAt sql.NullTime
 
 	err = tx.QueryRow(ctx, `
 		UPDATE users
 		SET full_name = $2, phone = $3
 		WHERE id = $1::uuid
-		RETURNING id::text, email, role, full_name, phone
+		RETURNING id::text, email, role, full_name, phone, email_verified_at
 	`, userID, normalizeOptionalStringValue(fullName), normalizeOptionalStringValue(phone)).
-		Scan(&out.ID, &out.Email, &out.Role, &afterFullName, &afterPhone)
+		Scan(&out.ID, &out.Email, &out.Role, &afterFullName, &afterPhone, &afterEmailVerifiedAt)
 	if err != nil {
 		return User{}, "", err
 	}
 
 	out.FullName = normalizeOptionalStringPtr(afterFullName)
 	out.Phone = normalizeOptionalStringPtr(afterPhone)
+	out.EmailVerified, out.EmailVerifiedAt = emailVerificationFields(afterEmailVerifiedAt)
 
 	_ = s.insertAudit(ctx, tx, &userID, "user_profile_updated", map[string]any{
 		"target_type": "user",

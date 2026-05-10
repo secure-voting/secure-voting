@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 	"time"
-
-	"github.com/jackc/pgx/v5"
 )
 
 func (s *Service) List(ctx context.Context, userID string, limit, offset int) ([]Item, string, error) {
@@ -255,8 +253,4 @@ func (s *Service) SeedIfEmpty(ctx context.Context, userID string) error {
 		Kind:    string(KindInfo),
 	})
 	return err
-}
-
-func isNoRows(err error) bool {
-	return err == pgx.ErrNoRows
 }

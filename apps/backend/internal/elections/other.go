@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

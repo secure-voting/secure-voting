@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"strings"
-	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -61,7 +60,7 @@ func (s *Service) Register(ctx context.Context, email, password, _ string, invit
 		return AuthResult{}, "", err
 	}
 
-	token, _, expiresAt, err := s.issueToken(ctx, tx, userID)
+	pair, err := s.issueTokenPair(ctx, tx, userID, "", "")
 	if err != nil {
 		return AuthResult{}, "", err
 	}
@@ -87,13 +86,9 @@ func (s *Service) Register(ctx context.Context, email, password, _ string, invit
 		return AuthResult{}, "", err
 	}
 
-	return AuthResult{
-		AccessToken: token,
-		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
-		User: User{
-			ID:    userID,
-			Email: email,
-			Role:  assignedRole,
-		},
-	}, "", nil
+	return authResultFromPair(User{
+		ID:    userID,
+		Email: email,
+		Role:  assignedRole,
+	}, pair), "", nil
 }

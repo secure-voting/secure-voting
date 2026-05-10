@@ -2,7 +2,9 @@ package auth
 
 import (
 	"context"
+	"net"
 	"net/http"
+	"strings"
 
 	"secure-voting/apps/backend/internal/apperr"
 	asvc "secure-voting/apps/backend/internal/auth"
@@ -12,11 +14,15 @@ import (
 
 type AuthService interface {
 	Register(ctx context.Context, email, password, role, inviteCode string) (asvc.AuthResult, string, error)
-	Login(ctx context.Context, email, password, inviteCode string) (asvc.AuthResult, string, error)
+	Login(ctx context.Context, email, password, inviteCode string, opts asvc.LoginOptions) (asvc.AuthResult, string, error)
+	Refresh(ctx context.Context, refreshToken string) (asvc.AuthResult, string, error)
 	Logout(ctx context.Context, rawToken string, actorUserID *string) (bool, error)
 	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) (string, error)
 	GetProfile(ctx context.Context, userID string) (asvc.User, string, error)
 	UpdateProfile(ctx context.Context, userID, fullName, phone string) (asvc.User, string, error)
+	RequestEmailVerification(ctx context.Context, userID string) (asvc.EmailVerificationRequestResult, string, error)
+	ConfirmEmailVerification(ctx context.Context, userID, code string) (asvc.User, string, error)
+	AcceptInvite(ctx context.Context, userID, inviteCode string) (asvc.AcceptInviteResult, string, error)
 }
 
 type Handlers struct {
@@ -31,6 +37,25 @@ type registerReq struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
 	InviteCode string `json:"invite_code,omitempty"`
+}
+
+type acceptInviteReq struct {
+	InviteCode string `json:"invite_code"`
+}
+
+func mapAcceptInviteCode(code string) error {
+	switch code {
+	case "unauthorized":
+		return apperr.Unauthorized("invalid or expired token")
+	case "invalid_invite_code":
+		return apperr.Invalid(code, "invalid invite_code")
+	case "invite_code_inactive":
+		return apperr.Invalid(code, "invite_code is not active")
+	case "invite_email_mismatch":
+		return apperr.Invalid(code, "invite_code does not match current user email")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
 }
 
 func mapRegisterCode(code string) error {
@@ -73,9 +98,36 @@ func (h *Handlers) Register(w http.ResponseWriter, r *http.Request) error {
 }
 
 type loginReq struct {
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-	InviteCode string `json:"invite_code,omitempty"`
+	Email                  string `json:"email"`
+	Password               string `json:"password"`
+	InviteCode             string `json:"invite_code,omitempty"`
+	ReplaceExistingSession bool   `json:"replace_existing_session,omitempty"`
+}
+
+type refreshReq struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func clientIPAddress(r *http.Request) string {
+	forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+	if forwardedFor != "" {
+		parts := strings.Split(forwardedFor, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
+	}
+
+	realIP := strings.TrimSpace(r.Header.Get("X-Real-IP"))
+	if realIP != "" {
+		return realIP
+	}
+
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil {
+		return host
+	}
+
+	return strings.TrimSpace(r.RemoteAddr)
 }
 
 func mapLoginCode(code string) error {
@@ -97,18 +149,58 @@ func mapLoginCode(code string) error {
 	}
 }
 
+func mapRefreshCode(code string) error {
+	switch code {
+	case "invalid_refresh_token":
+		return apperr.Unauthorized("invalid refresh token")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
+}
+
 func (h *Handlers) Login(w http.ResponseWriter, r *http.Request) error {
 	var req loginReq
 	if err := httputil.DecodeJSON(r, &req); err != nil {
 		return apperr.Invalid("invalid_json", "invalid json body")
 	}
 
-	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password, req.InviteCode)
+	res, code, err := h.svc.Login(r.Context(), req.Email, req.Password, req.InviteCode, asvc.LoginOptions{
+		ReplaceExistingSession: req.ReplaceExistingSession,
+		UserAgent:              r.UserAgent(),
+		IPAddress:              clientIPAddress(r),
+	})
 	if err != nil {
 		return apperr.Internal(err, "login failed")
 	}
+	if code == "active_session_exists" {
+		httputil.WriteJSON(w, http.StatusConflict, map[string]any{
+			"error": map[string]any{
+				"code":    "active_session_exists",
+				"message": "active session already exists",
+			},
+		})
+		return nil
+	}
 	if code != "" {
 		return mapLoginCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *Handlers) Refresh(w http.ResponseWriter, r *http.Request) error {
+	var req refreshReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.Refresh(r.Context(), req.RefreshToken)
+	if err != nil {
+		return apperr.Internal(err, "refresh token failed")
+	}
+	if code != "" {
+		return mapRefreshCode(code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, res)
@@ -235,6 +327,91 @@ func (h *Handlers) UpdateProfile(w http.ResponseWriter, r *http.Request) error {
 	}
 	if code != "" {
 		return mapUpdateProfileCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+type confirmEmailVerificationReq struct {
+	Code string `json:"code"`
+}
+
+func mapEmailVerificationCode(code string) error {
+	switch code {
+	case "unauthorized":
+		return apperr.Unauthorized("invalid or expired token")
+	case "email_delivery_not_configured":
+		return apperr.Invalid(code, "email delivery is not configured")
+	case "invalid_verification_code":
+		return apperr.Invalid(code, "invalid verification code")
+	case "verification_code_expired":
+		return apperr.Invalid(code, "verification code has expired")
+	case "verification_attempts_exceeded":
+		return apperr.Invalid(code, "verification attempts exceeded")
+	default:
+		return apperr.Invalid(code, "invalid input")
+	}
+}
+
+func (h *Handlers) RequestEmailVerification(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	res, code, err := h.svc.RequestEmailVerification(r.Context(), userID)
+	if err != nil {
+		return apperr.Internal(err, "request email verification failed")
+	}
+	if code != "" {
+		return mapEmailVerificationCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *Handlers) ConfirmEmailVerification(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	var req confirmEmailVerificationReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.ConfirmEmailVerification(r.Context(), userID, req.Code)
+	if err != nil {
+		return apperr.Internal(err, "confirm email verification failed")
+	}
+	if code != "" {
+		return mapEmailVerificationCode(code)
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, res)
+	return nil
+}
+
+func (h *Handlers) AcceptInvite(w http.ResponseWriter, r *http.Request) error {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return apperr.Unauthorized("invalid or expired token")
+	}
+
+	var req acceptInviteReq
+	if err := httputil.DecodeJSON(r, &req); err != nil {
+		return apperr.Invalid("invalid_json", "invalid json body")
+	}
+
+	res, code, err := h.svc.AcceptInvite(r.Context(), userID, req.InviteCode)
+	if err != nil {
+		return apperr.Internal(err, "accept invite failed")
+	}
+	if code != "" {
+		return mapAcceptInviteCode(code)
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, res)

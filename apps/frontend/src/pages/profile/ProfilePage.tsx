@@ -21,7 +21,7 @@ function kindLabel(kind?: string) {
 }
 
 export function ProfilePage() {
-  const { me, authed, token } = useAuth();
+  const { me, authed, token, updateMe } = useAuth();
   const { unreadCount, items } = useNotifications();
 
   const [fullName, setFullName] = useState("");
@@ -33,17 +33,27 @@ export function ProfilePage() {
   const [savedFullName, setSavedFullName] = useState("");
   const [savedPhone, setSavedPhone] = useState("");
 
+  const [emailVerificationSubmitting, setEmailVerificationSubmitting] = useState(false);
+  const [emailConfirmationSubmitting, setEmailConfirmationSubmitting] = useState(false);
+  const [emailVerificationError, setEmailVerificationError] = useState("");
+  const [emailVerificationSuccess, setEmailVerificationSuccess] = useState("");
+  const [emailVerificationCode, setEmailVerificationCode] = useState("");
+  const [emailVerificationDevCode, setEmailVerificationDevCode] = useState("");
+  const [emailVerificationExpiresAt, setEmailVerificationExpiresAt] = useState("");
+  const [emailVerificationMaxAttempts, setEmailVerificationMaxAttempts] = useState<number | null>(null);
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string>("");
-  const [formSuccess, setFormSuccess] = useState<string>("");
+  const [formError, setFormError] = useState("");
+  const [formSuccess, setFormSuccess] = useState("");
 
   useEffect(() => {
     const nextFullName = (me?.full_name || "").trim();
     const nextPhone = (me?.phone || "").trim();
+
     setFullName(nextFullName);
     setPhone(nextPhone);
     setSavedFullName(nextFullName);
@@ -72,6 +82,7 @@ export function ProfilePage() {
 
   async function onSaveProfile(e: React.FormEvent) {
     e.preventDefault();
+
     setProfileError("");
     setProfileSuccess("");
 
@@ -79,16 +90,19 @@ export function ProfilePage() {
       setProfileError("Сессия недействительна. Выполните вход заново.");
       return;
     }
+
     if (fullName.trim().length > 120) {
       setProfileError("Поле ФИО не должно превышать 120 символов.");
       return;
     }
+
     if (phone.trim() && !/^\+?[0-9 ()-]{5,32}$/.test(phone.trim())) {
       setProfileError("Укажите телефон в корректном формате.");
       return;
     }
 
     setProfileSubmitting(true);
+
     try {
       const updated = await api.auth.updateProfile(token, fullName, phone);
       const nextFullName = (updated.full_name || "").trim();
@@ -98,6 +112,7 @@ export function ProfilePage() {
       setPhone(nextPhone);
       setSavedFullName(nextFullName);
       setSavedPhone(nextPhone);
+      updateMe(updated);
       setProfileSuccess("Контактные данные успешно сохранены.");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -116,8 +131,110 @@ export function ProfilePage() {
     }
   }
 
+  async function onRequestEmailVerification() {
+    setEmailVerificationError("");
+    setEmailVerificationSuccess("");
+    setEmailVerificationCode("");
+    setEmailVerificationDevCode("");
+    setEmailVerificationExpiresAt("");
+    setEmailVerificationMaxAttempts(null);
+
+    if (!token) {
+      setEmailVerificationError("Сессия недействительна. Выполните вход заново.");
+      return;
+    }
+
+    setEmailVerificationSubmitting(true);
+
+    try {
+      const result = await api.auth.requestEmailVerification(token);
+
+      if (result.already_verified) {
+        const updated = await api.auth.me(token);
+        updateMe(updated);
+        setEmailVerificationSuccess("Почта уже подтверждена.");
+        return;
+      }
+
+      setEmailVerificationExpiresAt(result.expires_at || "");
+      setEmailVerificationMaxAttempts(
+        typeof result.max_attempts === "number" ? result.max_attempts : null
+      );
+
+      if (result.delivery === "smtp") {
+        setEmailVerificationSuccess("Код подтверждения отправлен на вашу почту.");
+      } else if (result.verification_code) {
+        setEmailVerificationDevCode(result.verification_code);
+        setEmailVerificationCode(result.verification_code);
+        setEmailVerificationSuccess("Проверочный код создан в dev-режиме.");
+      } else {
+        setEmailVerificationSuccess("Проверочный код создан.");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.code === "email_delivery_not_configured") {
+          setEmailVerificationError("Отправка почты не настроена. Обратитесь к администратору системы.");
+        } else {
+          setEmailVerificationError(err.message || "Не удалось создать код подтверждения.");
+        }
+      } else {
+        setEmailVerificationError("Не удалось создать код подтверждения. Повторите попытку позже.");
+      }
+    } finally {
+      setEmailVerificationSubmitting(false);
+    }
+  }
+
+  async function onConfirmEmailVerification(e: React.FormEvent) {
+    e.preventDefault();
+
+    setEmailVerificationError("");
+    setEmailVerificationSuccess("");
+
+    if (!token) {
+      setEmailVerificationError("Сессия недействительна. Выполните вход заново.");
+      return;
+    }
+
+    const code = emailVerificationCode.trim();
+    if (!code) {
+      setEmailVerificationError("Введите проверочный код из письма.");
+      return;
+    }
+
+    setEmailConfirmationSubmitting(true);
+
+    try {
+      const updated = await api.auth.confirmEmailVerification(token, code);
+
+      updateMe(updated);
+      setEmailVerificationCode("");
+      setEmailVerificationDevCode("");
+      setEmailVerificationExpiresAt("");
+      setEmailVerificationMaxAttempts(null);
+      setEmailVerificationSuccess("Почта успешно подтверждена.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.code === "invalid_verification_code") {
+          setEmailVerificationError("Проверочный код неверный.");
+        } else if (err.code === "verification_code_expired") {
+          setEmailVerificationError("Срок действия проверочного кода истек. Запросите новый код.");
+        } else if (err.code === "verification_attempts_exceeded") {
+          setEmailVerificationError("Превышено число попыток ввода. Запросите новый код.");
+        } else {
+          setEmailVerificationError(err.message || "Не удалось подтвердить почту.");
+        }
+      } else {
+        setEmailVerificationError("Не удалось подтвердить почту. Повторите попытку позже.");
+      }
+    } finally {
+      setEmailConfirmationSubmitting(false);
+    }
+  }
+
   async function onChangePassword(e: React.FormEvent) {
     e.preventDefault();
+
     setFormError("");
     setFormSuccess("");
 
@@ -125,20 +242,24 @@ export function ProfilePage() {
       setFormError("Сессия недействительна. Выполните вход заново.");
       return;
     }
+
     if (!currentPassword.trim()) {
       setFormError("Введите текущий пароль.");
       return;
     }
+
     if (newPassword.trim().length < 8) {
       setFormError("Новый пароль должен содержать не менее 8 символов.");
       return;
     }
+
     if (newPassword !== confirmPassword) {
       setFormError("Подтверждение пароля не совпадает.");
       return;
     }
 
     setSubmitting(true);
+
     try {
       await api.auth.changePassword(token, currentPassword, newPassword);
       setCurrentPassword("");
@@ -172,6 +293,7 @@ export function ProfilePage() {
         <div style={{ marginBottom: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {me?.role ? <Badge text={`Роль: ${roleLabel(me.role)}`} /> : null}
           <Badge text={authed ? "Сессия активна" : "Сессия неактивна"} />
+          <Badge text={me?.email_verified ? "Почта подтверждена" : "Почта не подтверждена"} />
           <Badge text={`Непрочитанных уведомлений: ${unreadCount}`} />
         </div>
 
@@ -179,11 +301,86 @@ export function ProfilePage() {
           items={[
             { label: "ID пользователя", value: me?.id || "—" },
             { label: "Электронная почта", value: me?.email || "—" },
+            {
+              label: "Статус почты",
+              value: me?.email_verified
+                ? `Подтверждена${me.email_verified_at ? `: ${me.email_verified_at}` : ""}`
+                : "Не подтверждена",
+            },
             { label: "Роль", value: roleLabel(me?.role) },
             { label: "ФИО", value: savedFullName || "—" },
             { label: "Телефон", value: savedPhone || "—" },
           ]}
         />
+
+        {!me?.email_verified ? (
+          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+            <div style={styles.muted}>
+              Для подтверждения почты запросите одноразовый код. В production-режиме код отправляется на email.
+              В dev-режиме код может быть показан прямо в интерфейсе.
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                style={styles.buttonPrimary}
+                onClick={onRequestEmailVerification}
+                disabled={emailVerificationSubmitting || !token}
+              >
+                {emailVerificationSubmitting ? "Создание кода..." : "Получить код подтверждения"}
+              </button>
+            </div>
+
+            {emailVerificationExpiresAt ? (
+              <div style={styles.muted}>Код действует до: {emailVerificationExpiresAt}</div>
+            ) : null}
+
+            {emailVerificationMaxAttempts != null ? (
+              <div style={styles.muted}>
+                Максимальное число попыток ввода: {emailVerificationMaxAttempts}
+              </div>
+            ) : null}
+
+            {emailVerificationDevCode ? (
+              <div style={{ ...styles.card, background: "#f9fafb", padding: 10 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Dev-код подтверждения</div>
+                <code style={{ wordBreak: "break-all" }}>{emailVerificationDevCode}</code>
+              </div>
+            ) : null}
+
+            <form onSubmit={onConfirmEmailVerification} style={{ display: "grid", gap: 8, maxWidth: 420 }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span>Проверочный код</span>
+                <input
+                  type="text"
+                  value={emailVerificationCode}
+                  onChange={(e) => setEmailVerificationCode(e.target.value)}
+                  style={styles.input}
+                  placeholder="ABCD-EFGH-JKLM-NPQR"
+                  autoComplete="one-time-code"
+                />
+              </label>
+
+              <div>
+                <button
+                  type="submit"
+                  style={styles.buttonPrimary}
+                  disabled={emailConfirmationSubmitting || !token || !emailVerificationCode.trim()}
+                >
+                  {emailConfirmationSubmitting ? "Проверка..." : "Подтвердить почту"}
+                </button>
+              </div>
+            </form>
+
+            {emailVerificationError ? (
+              <div style={{ color: "#b91c1c", fontSize: 14 }}>{emailVerificationError}</div>
+            ) : null}
+
+            {emailVerificationSuccess ? (
+              <div style={{ color: "#15803d", fontSize: 14 }}>{emailVerificationSuccess}</div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>

@@ -14,12 +14,10 @@ func TestHandleElectionTallyExternal_PublishesTask(t *testing.T) {
 	oldLoadTask := loadElectionTallyTaskFn
 	oldWriteTask := writeTaskMessageFn
 	oldUpdateProgress := updateProgressFn
-	oldHandleLocal := handleTallyLocalFn
 	defer func() {
 		loadElectionTallyTaskFn = oldLoadTask
 		writeTaskMessageFn = oldWriteTask
 		updateProgressFn = oldUpdateProgress
-		handleTallyLocalFn = oldHandleLocal
 	}()
 
 	electionID := "44444444-4444-4444-4444-444444444444"
@@ -58,13 +56,6 @@ func TestHandleElectionTallyExternal_PublishesTask(t *testing.T) {
 		progresses = append(progresses, progress)
 		return nil
 	}
-
-	localCalled := 0
-	handleTallyLocalFn = func(_ *Worker, _ context.Context, _ jobs.ClaimedJob) error {
-		localCalled++
-		return nil
-	}
-
 	var captured kafka.Message
 	writeTaskMessageFn = func(_ context.Context, _ *Worker, msg kafka.Message) error {
 		captured = msg
@@ -75,11 +66,6 @@ func TestHandleElectionTallyExternal_PublishesTask(t *testing.T) {
 	if err := w.handleElectionTallyExternal(context.Background(), job); err != nil {
 		t.Fatalf("handleElectionTallyExternal error: %v", err)
 	}
-
-	if localCalled != 0 {
-		t.Fatalf("expected localCalled=0, got %d", localCalled)
-	}
-
 	if string(captured.Key) != job.ID {
 		t.Fatalf("unexpected kafka key: %q", string(captured.Key))
 	}

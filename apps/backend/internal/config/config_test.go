@@ -25,8 +25,12 @@ func TestFromEnv_Defaults(t *testing.T) {
 		"POSTGRES_PASSWORD",
 		"POSTGRES_DSN",
 		"TOKEN_TTL",
+		"REFRESH_TOKEN_TTL",
 		"REDIS_ADDR",
 		"REDIS_PASSWORD",
+		"REDIS_TLS",
+		"REDIS_TLS_CA",
+		"REDIS_TLS_SERVER_NAME",
 		"IDEMPOTENCY_TTL",
 		"MONGO_DB",
 		"MONGO_URI",
@@ -59,11 +63,23 @@ func TestFromEnv_Defaults(t *testing.T) {
 	if cfg.PostgresDSN != "postgres://admin:postgres_dev_pass@db:5432/secure-voting?sslmode=disable" {
 		t.Fatalf("unexpected PostgresDSN: %q", cfg.PostgresDSN)
 	}
-	if cfg.TokenTTL != 30*24*time.Hour {
+	if cfg.TokenTTL != 15*time.Minute {
 		t.Fatalf("unexpected TokenTTL: %v", cfg.TokenTTL)
+	}
+	if cfg.RefreshTokenTTL != 30*24*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL: %v", cfg.RefreshTokenTTL)
 	}
 	if cfg.RedisAddr != "cache:6379" || cfg.RedisPassword != "redis_dev_pass" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
+	}
+	if cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=false by default")
+	}
+	if cfg.RedisTLSCA != "" {
+		t.Fatalf("unexpected RedisTLSCA by default: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "" {
+		t.Fatalf("unexpected RedisTLSServerName by default: %q", cfg.RedisTLSServerName)
 	}
 	if cfg.IdempotencyTTL != 24*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL: %v", cfg.IdempotencyTTL)
@@ -128,8 +144,12 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":9999")
 	t.Setenv("POSTGRES_DSN", "postgres://custom")
 	t.Setenv("TOKEN_TTL", "48h")
+	t.Setenv("REFRESH_TOKEN_TTL", "720h")
 	t.Setenv("REDIS_ADDR", "redis:6380")
 	t.Setenv("REDIS_PASSWORD", "secret")
+	t.Setenv("REDIS_TLS", "true")
+	t.Setenv("REDIS_TLS_CA", "/tmp/redis-ca.pem")
+	t.Setenv("REDIS_TLS_SERVER_NAME", "redis.internal")
 	t.Setenv("IDEMPOTENCY_TTL", "12h")
 	t.Setenv("MONGO_DB", "dbx")
 	t.Setenv("MONGO_URI", "mongodb://custom")
@@ -164,8 +184,20 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	if cfg.TokenTTL != 48*time.Hour {
 		t.Fatalf("unexpected TokenTTL: %v", cfg.TokenTTL)
 	}
+	if cfg.RefreshTokenTTL != 720*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL: %v", cfg.RefreshTokenTTL)
+	}
 	if cfg.RedisAddr != "redis:6380" || cfg.RedisPassword != "secret" {
 		t.Fatalf("unexpected redis config: %#v", cfg)
+	}
+	if !cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=true")
+	}
+	if cfg.RedisTLSCA != "/tmp/redis-ca.pem" {
+		t.Fatalf("unexpected RedisTLSCA: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "redis.internal" {
+		t.Fatalf("unexpected RedisTLSServerName: %q", cfg.RedisTLSServerName)
 	}
 	if cfg.IdempotencyTTL != 12*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL: %v", cfg.IdempotencyTTL)
@@ -215,11 +247,11 @@ func TestFromEnv_CustomValues(t *testing.T) {
 	if !reflect.DeepEqual(cfg.AdminTrustedCIDRs, []string{"203.0.113.0/24", "10.0.0.0/8"}) {
 		t.Fatalf("unexpected AdminTrustedCIDRs: %#v", cfg.AdminTrustedCIDRs)
 	}
-
 }
 
 func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	t.Setenv("TOKEN_TTL", "bad")
+	t.Setenv("REFRESH_TOKEN_TTL", "bad")
 	t.Setenv("IDEMPOTENCY_TTL", "bad")
 	t.Setenv("MAX_UPLOAD_BYTES", "-1")
 	t.Setenv("WORKER_POLL_INTERVAL", "bad")
@@ -231,8 +263,11 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 
 	cfg := FromEnv()
 
-	if cfg.TokenTTL != 30*24*time.Hour {
+	if cfg.TokenTTL != 15*time.Minute {
 		t.Fatalf("unexpected TokenTTL fallback: %v", cfg.TokenTTL)
+	}
+	if cfg.RefreshTokenTTL != 30*24*time.Hour {
+		t.Fatalf("unexpected RefreshTokenTTL fallback: %v", cfg.RefreshTokenTTL)
 	}
 	if cfg.IdempotencyTTL != 24*time.Hour {
 		t.Fatalf("unexpected IdempotencyTTL fallback: %v", cfg.IdempotencyTTL)
@@ -257,5 +292,23 @@ func TestFromEnv_InvalidValuesFallback(t *testing.T) {
 	}
 	if cfg.WriteRateLimitTTL != time.Minute {
 		t.Fatalf("unexpected WriteRateLimitTTL fallback: %v", cfg.WriteRateLimitTTL)
+	}
+}
+
+func TestFromEnv_RedisTLSDefaults(t *testing.T) {
+	t.Setenv("REDIS_TLS", "true")
+	t.Setenv("REDIS_TLS_CA", "")
+	t.Setenv("REDIS_TLS_SERVER_NAME", "")
+
+	cfg := FromEnv()
+
+	if !cfg.RedisTLS {
+		t.Fatalf("expected RedisTLS=true")
+	}
+	if cfg.RedisTLSCA != "/certs/ca.pem" {
+		t.Fatalf("unexpected RedisTLSCA: %q", cfg.RedisTLSCA)
+	}
+	if cfg.RedisTLSServerName != "cache" {
+		t.Fatalf("unexpected RedisTLSServerName: %q", cfg.RedisTLSServerName)
 	}
 }

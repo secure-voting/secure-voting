@@ -13,6 +13,7 @@ pub mod condorcet;
 pub mod copeland;
 pub mod minmax;
 pub mod plurality;
+pub mod scoring;
 pub mod simpson;
 pub mod threshold;
 
@@ -60,7 +61,7 @@ impl<T> Score<T> {
         let scores = self.score().as_ref();
         debug_assert_eq!(scores.len(), self.candidates.len());
 
-        scores.into_iter().zip(self.candidates.iter())
+        scores.iter().zip(self.candidates.iter())
     }
 }
 

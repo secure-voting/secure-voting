@@ -1,9 +1,9 @@
 package ballots
 
 import (
-	"github.com/jackc/pgx/v5/pgxpool"
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"strings"
 	"testing"
 	"time"

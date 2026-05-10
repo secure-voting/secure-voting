@@ -11,16 +11,18 @@ type Config struct {
 	HTTPAddr        string
 	ShutdownTimeout time.Duration
 
-	PostgresDSN string
-	TokenTTL    time.Duration
+	PostgresDSN     string
+	TokenTTL        time.Duration
+	RefreshTokenTTL time.Duration
 
 	RedisAddr      string
 	RedisPassword  string
 	IdempotencyTTL time.Duration
 
-	AdminTrustedCIDRs []string
-	RedisTLS   bool
-	RedisTLSCA string
+	AdminTrustedCIDRs  []string
+	RedisTLS           bool
+	RedisTLSCA         string
+	RedisTLSServerName string
 
 	MongoURI    string
 	MongoDBName string
@@ -33,9 +35,9 @@ type Config struct {
 	KafkaGroupID           string
 	WorkerPollInterval     time.Duration
 	WorkerScheduleInterval time.Duration
-	KafkaTLS           bool
-	KafkaTLSCA         string
-	KafkaTLSServerName string
+	KafkaTLS               bool
+	KafkaTLSCA             string
+	KafkaTLSServerName     string
 
 	ComputeGRPCAddr      string
 	ComputeTLS           bool
@@ -52,6 +54,15 @@ type Config struct {
 
 	WriteRateLimit    int
 	WriteRateLimitTTL time.Duration
+
+	EmailVerificationMode string
+	SMTPHost              string
+	SMTPPort              int
+	SMTPUsername          string
+	SMTPPassword          string
+	SMTPFromEmail         string
+	SMTPFromName          string
+	SMTPTLSMode           string
 }
 
 func FromEnv() Config {
@@ -70,10 +81,17 @@ func FromEnv() Config {
 		dsn = "postgres://admin:" + pgPass + "@db:5432/secure-voting?sslmode=disable"
 	}
 
-	tokenTTL := 30 * 24 * time.Hour
+	tokenTTL := 15 * time.Minute
 	if ttlStr := os.Getenv("TOKEN_TTL"); ttlStr != "" {
 		if parsed, err := time.ParseDuration(ttlStr); err == nil {
 			tokenTTL = parsed
+		}
+	}
+
+	refreshTokenTTL := 30 * 24 * time.Hour
+	if ttlStr := os.Getenv("REFRESH_TOKEN_TTL"); ttlStr != "" {
+		if parsed, err := time.ParseDuration(ttlStr); err == nil {
+			refreshTokenTTL = parsed
 		}
 	}
 
@@ -96,6 +114,11 @@ func FromEnv() Config {
 	redisTLSCA := strings.TrimSpace(os.Getenv("REDIS_TLS_CA"))
 	if redisTLS && redisTLSCA == "" {
 		redisTLSCA = "/certs/ca.pem"
+	}
+
+	redisTLSServerName := strings.TrimSpace(os.Getenv("REDIS_TLS_SERVER_NAME"))
+	if redisTLS && redisTLSServerName == "" {
+		redisTLSServerName = "cache"
 	}
 
 	idemTTL := 24 * time.Hour
@@ -255,18 +278,37 @@ func FromEnv() Config {
 		}
 	}
 
+	emailVerificationMode := strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_VERIFICATION_MODE")))
+	if emailVerificationMode == "" {
+		emailVerificationMode = "dev"
+	}
+
+	smtpPort := 587
+	if s := strings.TrimSpace(os.Getenv("SMTP_PORT")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			smtpPort = v
+		}
+	}
+
+	smtpTLSMode := strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_TLS_MODE")))
+	if smtpTLSMode == "" {
+		smtpTLSMode = "starttls"
+	}
+
 	return Config{
 		HTTPAddr:        addr,
 		ShutdownTimeout: 10 * time.Second,
 
-		PostgresDSN: dsn,
-		TokenTTL:    tokenTTL,
+		PostgresDSN:     dsn,
+		TokenTTL:        tokenTTL,
+		RefreshTokenTTL: refreshTokenTTL,
 
-		RedisAddr:      redisAddr,
-		RedisPassword:  redisPass,
-		RedisTLS:       redisTLS,
-		RedisTLSCA:     redisTLSCA,
-		IdempotencyTTL: idemTTL,
+		RedisAddr:          redisAddr,
+		RedisPassword:      redisPass,
+		RedisTLS:           redisTLS,
+		RedisTLSCA:         redisTLSCA,
+		RedisTLSServerName: redisTLSServerName,
+		IdempotencyTTL:     idemTTL,
 
 		MongoURI:    mongoURI,
 		MongoDBName: mongoDB,
@@ -279,9 +321,9 @@ func FromEnv() Config {
 		KafkaGroupID:           groupID,
 		WorkerPollInterval:     poll,
 		WorkerScheduleInterval: schedulePoll,
-		KafkaTLS:           kafkaTLS,
-		KafkaTLSCA:         kafkaTLSCA,
-		KafkaTLSServerName: kafkaTLSServerName,
+		KafkaTLS:               kafkaTLS,
+		KafkaTLSCA:             kafkaTLSCA,
+		KafkaTLSServerName:     kafkaTLSServerName,
 
 		ComputeGRPCAddr:      computeAddr,
 		ComputeTLS:           computeTLS,
@@ -298,6 +340,15 @@ func FromEnv() Config {
 
 		WriteRateLimit:    writeRateLimit,
 		WriteRateLimitTTL: writeRateLimitTTL,
+
+		EmailVerificationMode: emailVerificationMode,
+		SMTPHost:              strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:              smtpPort,
+		SMTPUsername:          strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:          strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPFromEmail:         strings.TrimSpace(os.Getenv("SMTP_FROM_EMAIL")),
+		SMTPFromName:          strings.TrimSpace(os.Getenv("SMTP_FROM_NAME")),
+		SMTPTLSMode:           smtpTLSMode,
 
 		AdminTrustedCIDRs: splitCSV(os.Getenv("ADMIN_TRUSTED_CIDRS")),
 	}

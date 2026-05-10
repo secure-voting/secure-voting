@@ -11,6 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+const (
+	maxGeneratedVoters             = 10_000_000
+	generatedBallotInsertBatchSize = 1_000
+	generatedRawExportBallotLimit  = 10_000
+)
+
 func normalizeGenerationModel(v string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "", "uniform":
@@ -98,6 +104,15 @@ func scoresFromOrder(order []string, levels []int) map[string]int {
 	return out
 }
 
+func (s *Service) insertGeneratedBallotBatch(ctx context.Context, batch []BallotDoc) error {
+	if len(batch) == 0 {
+		return nil
+	}
+
+	_, err := s.db.Collection("dataset_ballots").InsertMany(ctx, toAny(batch))
+	return err
+}
+
 func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string, error) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -118,6 +133,10 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 		return "", "invalid_voters", nil
 	}
 
+	if req.Voters > maxGeneratedVoters {
+		return "", "too_many_voters", nil
+	}
+
 	if code := validateCandidates(req.Candidates); code != "" {
 		return "", code, nil
 	}
@@ -133,6 +152,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 
 	params := map[string]any{
 		"generation_model": generationModel,
+		"voters":           req.Voters,
 	}
 	switch format {
 	case "approval":
@@ -199,7 +219,14 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 	baseOrder := shuffle(rng, cids)
 	oppositeOrder := reverseStrings(baseOrder)
 
-	ballots := make([]BallotDoc, 0, req.Voters)
+	storeRawExport := req.Voters <= generatedRawExportBallotLimit
+
+	var rawBallots []BallotDoc
+	if storeRawExport {
+		rawBallots = make([]BallotDoc, 0, req.Voters)
+	}
+
+	batch := make([]BallotDoc, 0, generatedBallotInsertBatchSize)
 
 	var scoreMin, scoreMax, scoreStep, scoreSteps int
 	var levels []int
@@ -261,42 +288,63 @@ func (s *Service) Generate(ctx context.Context, req GenerateReq) (string, string
 			}
 		}
 
-		ballots = append(ballots, b)
-	}
+		if storeRawExport {
+			rawBallots = append(rawBallots, b)
+		}
 
-	if len(ballots) > 0 {
-		_, err = s.db.Collection("dataset_ballots").InsertMany(ctx, toAny(ballots))
-		if err != nil {
-			return "", "", err
+		batch = append(batch, b)
+		if len(batch) >= generatedBallotInsertBatchSize {
+			if err := s.insertGeneratedBallotBatch(ctx, batch); err != nil {
+				return "", "", err
+			}
+			batch = batch[:0]
 		}
 	}
 
-	export := map[string]any{
-		"dataset": map[string]any{
-			"id":          dsid.Hex(),
-			"name":        dsDoc.Name,
-			"description": dsDoc.Description,
-			"source":      dsDoc.Source,
-			"format":      dsDoc.Format,
-			"candidates":  dsDoc.Candidates,
-			"created_at":  dsDoc.CreatedAt.UTC().Format(time.RFC3339),
-			"seed":        dsDoc.Seed,
-			"parameters":  dsDoc.Parameters,
-		},
-		"ballots": ballotsToJSON(ballots),
-	}
-	raw, _ := json.Marshal(export)
-
-	_, err = s.db.Collection("datasets").UpdateOne(ctx,
-		bson.M{"_id": dsid},
-		bson.M{"$set": bson.M{
-			"raw":          primitive.Binary{Subtype: 0x00, Data: raw},
-			"raw_filename": "dataset.json",
-			"raw_mime":     "application/json",
-		}},
-	)
-	if err != nil {
+	if err := s.insertGeneratedBallotBatch(ctx, batch); err != nil {
 		return "", "", err
+	}
+
+	if storeRawExport {
+		export := map[string]any{
+			"dataset": map[string]any{
+				"id":          dsid.Hex(),
+				"name":        dsDoc.Name,
+				"description": dsDoc.Description,
+				"source":      dsDoc.Source,
+				"format":      dsDoc.Format,
+				"candidates":  dsDoc.Candidates,
+				"created_at":  dsDoc.CreatedAt.UTC().Format(time.RFC3339),
+				"seed":        dsDoc.Seed,
+				"parameters":  dsDoc.Parameters,
+			},
+			"ballots": ballotsToJSON(rawBallots),
+		}
+		raw, _ := json.Marshal(export)
+
+		_, err = s.db.Collection("datasets").UpdateOne(ctx,
+			bson.M{"_id": dsid},
+			bson.M{"$set": bson.M{
+				"raw":          primitive.Binary{Subtype: 0x00, Data: raw},
+				"raw_filename": "dataset.json",
+				"raw_mime":     "application/json",
+			}},
+		)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		_, err = s.db.Collection("datasets").UpdateOne(ctx,
+			bson.M{"_id": dsid},
+			bson.M{"$set": bson.M{
+				"parameters.raw_export_omitted":      true,
+				"parameters.raw_export_ballot_limit": generatedRawExportBallotLimit,
+				"parameters.raw_export_omit_reason":  "generated dataset is stored in dataset_ballots; raw JSON export was skipped to avoid MongoDB document size limit",
+			}},
+		)
+		if err != nil {
+			return "", "", err
+		}
 	}
 
 	return dsid.Hex(), "", nil

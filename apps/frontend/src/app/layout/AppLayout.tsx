@@ -13,13 +13,30 @@ function roleLabel(role?: string) {
   return role || "Неизвестно";
 }
 
+function displayName(me: ReturnType<typeof useAuth>["me"]) {
+  const fullName = typeof me?.full_name === "string" ? me.full_name.trim() : "";
+  if (fullName) return fullName;
+  return me?.email || "Пользователь";
+}
+
 function NavButton({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <NavLink to={to} style={{ textDecoration: "none" }}>
       {({ isActive }) => (
-        <button style={isActive ? styles.btnPrimary : styles.btn}>{children}</button>
+        <button style={isActive ? styles.btnPrimary : styles.btn} type="button">
+          {children}
+        </button>
       )}
     </NavLink>
+  );
+}
+
+function NavGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280" }}>{title}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{children}</div>
+    </div>
   );
 }
 
@@ -34,50 +51,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={styles.page}>
       <div style={styles.topbar}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+        <div style={{ display: "grid", gap: 14, width: "100%" }}>
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 12,
+              alignItems: "flex-start",
               justifyContent: "space-between",
+              gap: 14,
               flexWrap: "wrap",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "grid", gap: 4 }}>
               <h1 style={styles.title}>Secure Voting</h1>
-              {authed ? (
-                <span style={styles.muted}>
-                  {me?.email} <Badge text={roleLabel(me?.role)} />
-                </span>
-              ) : null}
+              <div style={styles.muted}>
+                Клиент-серверное приложение электронных голосований
+              </div>
             </div>
 
-            {bootLoading ? <span style={styles.muted}>Проверка сессии</span> : null}
-          </div>
+            {authed ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ ...styles.muted, fontSize: 13 }}>{displayName(me)}</span>
+                <Badge text={roleLabel(me?.role)} />
 
-          {authed ? (
-            <>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <NavButton to="/dashboard">Дашборд</NavButton>
-                <NavButton to="/elections">Голосования</NavButton>
-
-                {isAdmin ? <NavButton to="/admin/elections/create">Создать голосование</NavButton> : null}
-                {isAdmin ? <NavButton to="/monitor/jobs">Задачи</NavButton> : null}
-                {isAdmin ? <NavButton to="/monitor/audit">Аудит</NavButton> : null}
-                {isAdmin ? <NavButton to="/admin/users">Пользователи</NavButton> : null}
-
-                {isResearcher ? <NavButton to="/research/datasets">Наборы данных</NavButton> : null}
-                {isResearcher ? <NavButton to="/research/experiments">Эксперименты</NavButton> : null}
-                {isResearcher ? <NavButton to="/research/runs">Запуски</NavButton> : null}
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <NavButton to="/notifications">
                   Уведомления{unreadCount > 0 ? ` (${unreadCount})` : ""}
                 </NavButton>
+
                 <NavButton to="/profile">Профиль</NavButton>
-                <NavButton to="/admin/settings">Настройки</NavButton>
 
                 <button
                   style={styles.btnDanger}
@@ -90,12 +98,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   Выйти
                 </button>
               </div>
-            </>
-          ) : (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <NavButton to="/login">Войти</NavButton>
+            ) : (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <NavButton to="/login">Войти</NavButton>
+              </div>
+            )}
+          </div>
+
+          {bootLoading ? <div style={styles.muted}>Проверка сессии…</div> : null}
+
+          {authed ? (
+            <div style={{ display: "grid", gap: 12 }}>
+              <NavGroup title="Основные разделы">
+                <NavButton to="/dashboard">Дашборд</NavButton>
+                <NavButton to="/elections">Голосования</NavButton>
+              </NavGroup>
+
+              {isAdmin ? (
+                <NavGroup title="Администрирование">
+                  <NavButton to="/admin/elections/create">Создать голосование</NavButton>
+                  <NavButton to="/monitor/jobs">Задачи</NavButton>
+                  <NavButton to="/monitor/audit">Аудит</NavButton>
+                  <NavButton to="/admin/users">Пользователи</NavButton>
+                  <NavButton to="/admin/settings">Настройки</NavButton>
+                </NavGroup>
+              ) : null}
+
+              {isResearcher ? (
+                <NavGroup title="Исследования">
+                  <NavButton to="/research/datasets">Наборы данных</NavButton>
+                  <NavButton to="/research/experiments">Эксперименты</NavButton>
+                  <NavButton to="/research/runs">Запуски</NavButton>
+                </NavGroup>
+              ) : null}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

@@ -5,8 +5,12 @@ $schema: './cache/schemas/workspace.json'
 
 projects:
   frontend: 'apps/frontend'
-  compute:  'apps/compute'
-  backend:  'apps/backend'
+  compute: 'apps/compute'
+  backend: 'apps/backend'
+  e2e: 'tests/e2e'
+  load: 'tests/load'
+  root: '.'
+
 vcs:
   client: 'git'
   defaultBranch: 'master'

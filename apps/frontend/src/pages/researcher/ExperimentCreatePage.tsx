@@ -9,6 +9,7 @@ import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
 import type { TallyRuleInfo } from "../../shared/api/types";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -96,6 +97,11 @@ function selectedRuleInfo(
   return rules.find((rule) => rule.id === ruleId);
 }
 
+function ruleDisplayLabel(rule: TallyRuleInfo | undefined, fallbackId: string) {
+  if (rule?.label?.trim()) return rule.label.trim();
+  return tallyRuleLabel(rule?.id || fallbackId);
+}
+
 export function ExperimentCreatePage() {
   const nav = useNavigate();
   const { token, setToken } = useAuth();
@@ -105,7 +111,7 @@ export function ExperimentCreatePage() {
 
   const [type, setType] = useState<"algo" | "behavior">("algo");
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
-  const [tallyRule, setTallyRule] = useState("borda");
+  const [tallyRule, setTallyRule] = useState("");
 
   const [candidates, setCandidates] = useState(5);
   const [voters, setVoters] = useState(100);
@@ -171,9 +177,11 @@ export function ExperimentCreatePage() {
         const experimentRules = mergedItems.filter((item) => item.supports_experiment_runs);
         setAvailableRules(experimentRules);
 
-        if (experimentRules.length > 0 && !experimentRules.some((item) => item.id === tallyRule)) {
-          setTallyRule(experimentRules[0].id);
-        }
+        setTallyRule((prev) => {
+          if (experimentRules.length === 0) return "";
+          if (experimentRules.some((item) => item.id === prev)) return prev;
+          return experimentRules[0].id;
+        });
       })
       .catch((e: any) => {
         if (e?.status === 401) {
@@ -187,7 +195,7 @@ export function ExperimentCreatePage() {
       });
 
     return () => ac.abort();
-  }, [token, setToken, tallyRule]);
+  }, [token, setToken]);
 
   useEffect(() => {
     if (allowedBallotFormats.length === 0) return;
@@ -539,7 +547,7 @@ export function ExperimentCreatePage() {
                 >
                   {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
-                      {rule.label}
+                      {ruleDisplayLabel(rule, rule.id)}
                     </option>
                   ))}
                 </select>
@@ -778,7 +786,7 @@ export function ExperimentCreatePage() {
                         ? "Ранжирование"
                         : "Оценивание",
                 },
-                { label: "Правило подсчёта", value: currentRule?.label || tallyRule },
+                { label: "Правило подсчёта", value: ruleDisplayLabel(currentRule, tallyRule) },
                 { label: "Количество кандидатов", value: String(candidates) },
                 { label: "Количество избирателей", value: String(voters) },
                 { label: "Размер комитета", value: String(committeeSize) },

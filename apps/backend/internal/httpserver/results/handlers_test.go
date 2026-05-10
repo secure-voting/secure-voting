@@ -40,7 +40,7 @@ func decodeErr(t *testing.T, rr *httptest.ResponseRecorder) apiErrResp {
 
 func TestGet_Success_ReturnsResultJSON(t *testing.T) {
 	h := &Handlers{
-		get: func(ctx context.Context, electionID, userID, email, role string) (any, string, error) {
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
 			return map[string]any{
 				"election_id":  "11111111-1111-1111-1111-111111111111",
 				"version":      1,
@@ -98,7 +98,7 @@ func TestGet_Success_ReturnsResultJSON(t *testing.T) {
 
 func TestGet_InvalidID_MapsTo400(t *testing.T) {
 	h := &Handlers{
-		get: func(ctx context.Context, electionID, userID, email, role string) (any, string, error) {
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
 			return nil, "invalid_id", nil
 		},
 	}
@@ -128,7 +128,7 @@ func TestGet_InvalidID_MapsTo400(t *testing.T) {
 
 func TestGet_NotFound_MapsTo404(t *testing.T) {
 	h := &Handlers{
-		get: func(ctx context.Context, electionID, userID, email, role string) (any, string, error) {
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
 			return nil, "not_found", nil
 		},
 	}
@@ -158,7 +158,7 @@ func TestGet_NotFound_MapsTo404(t *testing.T) {
 
 func TestGet_NotPublished_MapsTo403(t *testing.T) {
 	h := &Handlers{
-		get: func(ctx context.Context, electionID, userID, email, role string) (any, string, error) {
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
 			return nil, "not_published", nil
 		},
 	}
@@ -183,5 +183,61 @@ func TestGet_NotPublished_MapsTo403(t *testing.T) {
 	}
 	if er.Error.Message != "results not published" {
 		t.Fatalf("unexpected error message: %+v", er)
+	}
+}
+
+func TestGet_PassesAuthContextInServiceOrder(t *testing.T) {
+	var gotElectionID string
+	var gotRole string
+	var gotUserID string
+	var gotEmail string
+
+	h := &Handlers{
+		get: func(ctx context.Context, electionID, role, userID, email string) (any, string, error) {
+			gotElectionID = electionID
+			gotRole = role
+			gotUserID = userID
+			gotEmail = email
+
+			return map[string]any{
+				"election_id":  electionID,
+				"version":      1,
+				"method":       "score",
+				"winners":      []string{"c1"},
+				"published_at": "2026-05-03T10:39:00Z",
+			}, "", nil
+		},
+	}
+
+	ver := fakeVerifier{
+		uid:   "user-123",
+		email: "user@example.com",
+		role:  "voter",
+	}
+
+	handler := middleware.RequireAuth(ver, httputil.Wrap(h.Get))
+
+	req := httptest.NewRequest(http.MethodGet, "http://example/api/v1/elections/election-1/results", nil)
+	req.SetPathValue("id", "election-1")
+	req.Header.Set("Authorization", "Bearer t")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	if gotElectionID != "election-1" {
+		t.Fatalf("unexpected election id: %q", gotElectionID)
+	}
+	if gotRole != "voter" {
+		t.Fatalf("unexpected role: %q", gotRole)
+	}
+	if gotUserID != "user-123" {
+		t.Fatalf("unexpected user id: %q", gotUserID)
+	}
+	if gotEmail != "user@example.com" {
+		t.Fatalf("unexpected email: %q", gotEmail)
 	}
 }

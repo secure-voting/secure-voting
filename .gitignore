@@ -32,5 +32,21 @@ coverage/
 
 # cert artifacts
 scripts/certs/out/
+scripts/certs/out/ca.key
+scripts/certs/out/ca.pem
+scripts/certs/out/compute.csr
+scripts/certs/out/compute.key
+scripts/certs/out/compute.pem
+scripts/certs/out/compute.ext
 
-structure.md
+# Playwright E2E
+tests/e2e/node_modules/
+tests/e2e/playwright-report/
+tests/e2e/test-results/
+
+# Load tests
+tests/load/node_modules/
+tests/load/load-results/
+
+# Backups
+.backups/

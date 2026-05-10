@@ -10,13 +10,11 @@ import (
 func TestHandleTallyJob_RoutesApprovalToExternal(t *testing.T) {
 	oldLoadElectionRouteMetaFn := loadElectionRouteMetaFn
 	oldHandleElectionTallyExternalFn := handleElectionTallyExternalFn
-	oldHandleTallyLocalFn := handleTallyLocalFn
 	oldMarkJobErrorFn := markJobErrorFn
 
 	defer func() {
 		loadElectionRouteMetaFn = oldLoadElectionRouteMetaFn
 		handleElectionTallyExternalFn = oldHandleElectionTallyExternalFn
-		handleTallyLocalFn = oldHandleTallyLocalFn
 		markJobErrorFn = oldMarkJobErrorFn
 	}()
 
@@ -25,16 +23,10 @@ func TestHandleTallyJob_RoutesApprovalToExternal(t *testing.T) {
 	}
 
 	externalCalled := 0
-	localCalled := 0
 	markErrorCalled := 0
 
 	handleElectionTallyExternalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		externalCalled++
-		return nil
-	}
-
-	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
-		localCalled++
 		return nil
 	}
 
@@ -57,9 +49,6 @@ func TestHandleTallyJob_RoutesApprovalToExternal(t *testing.T) {
 
 	if externalCalled != 1 {
 		t.Fatalf("expected externalCalled=1, got %d", externalCalled)
-	}
-	if localCalled != 0 {
-		t.Fatalf("expected localCalled=0, got %d", localCalled)
 	}
 	if markErrorCalled != 0 {
 		t.Fatalf("expected markErrorCalled=0, got %d", markErrorCalled)
@@ -69,13 +58,11 @@ func TestHandleTallyJob_RoutesApprovalToExternal(t *testing.T) {
 func TestHandleTallyJob_RoutesUnsupportedRankingToExternal(t *testing.T) {
 	oldLoadElectionRouteMetaFn := loadElectionRouteMetaFn
 	oldHandleElectionTallyExternalFn := handleElectionTallyExternalFn
-	oldHandleTallyLocalFn := handleTallyLocalFn
 	oldMarkJobErrorFn := markJobErrorFn
 
 	defer func() {
 		loadElectionRouteMetaFn = oldLoadElectionRouteMetaFn
 		handleElectionTallyExternalFn = oldHandleElectionTallyExternalFn
-		handleTallyLocalFn = oldHandleTallyLocalFn
 		markJobErrorFn = oldMarkJobErrorFn
 	}()
 
@@ -84,16 +71,10 @@ func TestHandleTallyJob_RoutesUnsupportedRankingToExternal(t *testing.T) {
 	}
 
 	externalCalled := 0
-	localCalled := 0
 	markErrorCalled := 0
 
 	handleElectionTallyExternalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
 		externalCalled++
-		return nil
-	}
-
-	handleTallyLocalFn = func(w *Worker, ctx context.Context, job jobs.ClaimedJob) error {
-		localCalled++
 		return nil
 	}
 
@@ -116,9 +97,6 @@ func TestHandleTallyJob_RoutesUnsupportedRankingToExternal(t *testing.T) {
 
 	if externalCalled != 1 {
 		t.Fatalf("expected externalCalled=1, got %d", externalCalled)
-	}
-	if localCalled != 0 {
-		t.Fatalf("expected localCalled=0, got %d", localCalled)
 	}
 	if markErrorCalled != 0 {
 		t.Fatalf("expected markErrorCalled=0, got %d", markErrorCalled)

@@ -9,6 +9,7 @@ import { DateTimeField } from "../../shared/ui/DateTimeField";
 import { styles } from "../../shared/ui/styles";
 import type { CandidateDraft, CandidatePayload, TallyRuleInfo } from "../../shared/api/types";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const STEPS = [
   "Общие сведения",
@@ -18,11 +19,23 @@ const STEPS = [
   "Проверка",
 ] as const;
 
-const CREATE_ELECTION_DRAFT_KEY = "secure-voting:create-election-draft:v1";
+const CREATE_ELECTION_DRAFT_KEY = "secure-voting:create-election-draft:v2";
+
+function pad2(value: number) {
+  return String(value).padStart(2, "0");
+}
 
 function toLocalInputValue(date: Date) {
-  const adjusted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return adjusted.toISOString().slice(0, 16);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return [
+    `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+    `${pad2(date.getHours())}:${pad2(date.getMinutes())}`,
+  ].join("T");
+}
+
+function addMinutes(date: Date, minutes: number) {
+  return new Date(date.getTime() + minutes * 60_000);
 }
 
 function toRFC3339FromLocalInput(value: string) {
@@ -140,6 +153,40 @@ function selectedRuleInfo(
   return rules.find((rule) => rule.id === ruleId);
 }
 
+function ruleDisplayLabel(rule: TallyRuleInfo | undefined, fallbackId: string) {
+  if (rule?.label?.trim()) return rule.label.trim();
+  return tallyRuleLabel(rule?.id || fallbackId);
+}
+
+function approvalLimitFromRule(rule: TallyRuleInfo | undefined): number | null {
+  const values = [rule?.id, rule?.label].filter(
+    (value): value is string => typeof value === "string" && value.trim() !== ""
+  );
+
+  for (const value of values) {
+    const normalized = value.trim().toLowerCase();
+
+    const dashed = normalized.match(/^approval[-_\s]?(\d+)$/);
+    if (dashed) {
+      const parsed = Number(dashed[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+
+    const qValue = normalized.match(/^approval.*q\s*=?\s*(\d+)$/);
+    if (qValue) {
+      const parsed = Number(qValue[1]);
+      if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    }
+  }
+
+  return null;
+}
+
+function clampInt(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
 function StepHeader({
   current,
   onGo,
@@ -202,9 +249,11 @@ export function AdminCreateElectionPage() {
         const electionRules = mergedItems.filter((item) => item.supports_election_tally);
         setAvailableRules(electionRules);
 
-        if (electionRules.length > 0 && !electionRules.some((item) => item.id === tallyRule)) {
-          setTallyRule(electionRules[0].id);
-        }
+        setTallyRule((prev) => {
+          if (electionRules.length === 0) return "";
+          if (electionRules.some((item) => item.id === prev)) return prev;
+          return electionRules[0].id;
+        });
       })
       .catch((e: any) => {
         if (e?.status === 401) {
@@ -243,7 +292,7 @@ export function AdminCreateElectionPage() {
   const [importedCandidatesFileName, setImportedCandidatesFileName] = useState("");
 
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
-  const [tallyRule, setTallyRule] = useState("plurality");
+  const [tallyRule, setTallyRule] = useState("");
 
   const [committeeSize, setCommitteeSize] = useState<number>(1);
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
@@ -414,6 +463,12 @@ export function AdminCreateElectionPage() {
     [availableRules, tallyRule]
   );
 
+  const approvalRuleLimit = approvalLimitFromRule(currentRule);
+  const effectiveApprovalMax =
+    ballotFormat === "approval"
+      ? clampInt(approvalRuleLimit ?? approvalMax, 1, Math.max(1, candidateCount))
+      : approvalMax;
+
   const allowedBallotFormats = useMemo(() => {
     const formats = new Set<"approval" | "ranking" | "score">();
 
@@ -474,6 +529,18 @@ export function AdminCreateElectionPage() {
       setScoreAllowSkip(false);
     }
   }, [currentRule, ballotFormat, committeeSize]);
+
+  useEffect(() => {
+    if (ballotFormat !== "approval") return;
+
+    const limit = approvalLimitFromRule(currentRule);
+    if (!limit) return;
+
+    const bounded = clampInt(limit, 1, Math.max(1, candidateCount));
+    if (approvalMax !== bounded) {
+      setApprovalMax(bounded);
+    }
+  }, [ballotFormat, currentRule, candidateCount, approvalMax]);
 
   const candidateErrors = useMemo(
     () => candidates.map((candidate) => candidateError(candidate, candidates)),
@@ -633,9 +700,13 @@ export function AdminCreateElectionPage() {
       }
 
       if (ballotFormat === "approval" && currentRule.requires_approval_max_choices) {
-        if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
-        if (approvalMax > candidateCount) {
+        if (effectiveApprovalMax < 1) return "approval_max_choices должен быть не меньше 1";
+        if (effectiveApprovalMax > candidateCount) {
           return "approval_max_choices не может превышать число кандидатов";
+        }
+
+        if (approvalRuleLimit && approvalMax !== effectiveApprovalMax) {
+          return `Для правила ${ruleDisplayLabel(currentRule, tallyRule)} максимум отметок должен быть ${effectiveApprovalMax}`;
         }
       }
 
@@ -712,7 +783,12 @@ export function AdminCreateElectionPage() {
     ]);
     setImportedCandidatesFileName("");
     setBallotFormat("ranking");
-    setTallyRule(availableRules[0]?.id || "plurality");
+    const defaultRankingRule =
+      availableRules.find((rule) => supportsBallotFormat(rule, "ranking"))?.id ||
+      availableRules[0]?.id ||
+      "";
+
+    setTallyRule(defaultRankingRule);
     setCommitteeSize(1);
     setQuotaType("hare");
     setApprovalMax(2);
@@ -786,7 +862,7 @@ export function AdminCreateElectionPage() {
       }
 
       if (ballotFormat === "approval") {
-        body.approval_max_choices = approvalMax;
+        body.approval_max_choices = effectiveApprovalMax;
       }
 
       if (ballotFormat === "ranking") {
@@ -1053,7 +1129,7 @@ export function AdminCreateElectionPage() {
                 >
                   {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
-                      {rule.label}
+                      {ruleDisplayLabel(rule, rule.id)}
                     </option>
                   ))}
                 </select>
@@ -1116,10 +1192,16 @@ export function AdminCreateElectionPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={Math.max(candidateCount, 1)}
-                    value={approvalMax}
+                    max={approvalRuleLimit ?? candidateCount}
+                    value={effectiveApprovalMax}
+                    disabled={approvalRuleLimit != null}
                     onChange={(e) => setApprovalMax(Number(e.target.value))}
                   />
+                  <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                    {approvalRuleLimit != null
+                      ? `Лимит задан выбранным правилом: ${effectiveApprovalMax}`
+                      : `Максимально допустимое значение: ${candidateCount}`}
+                  </div>
                 </div>
               </div>
             ) : null}
@@ -1358,7 +1440,7 @@ export function AdminCreateElectionPage() {
                 { label: "Название", value: title.trim() || "—" },
                 { label: "Описание", value: description.trim() || "—" },
                 { label: "Формат бюллетеня", value: reviewBallotFormatLabel(ballotFormat) },
-                { label: "Правило подсчета", value: currentRule?.label || tallyRule },
+                { label: "Правило подсчёта", value: ruleDisplayLabel(currentRule, tallyRule) },
                 {
                   label: "Размер комитета",
                   value: currentRule?.requires_committee_size ? String(committeeSize) : "Один победитель",

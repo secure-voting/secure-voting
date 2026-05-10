@@ -5,10 +5,90 @@ import type { ElectionSummary } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
+import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
+
+function displayName(me: ReturnType<typeof useAuth>["me"]) {
+  const fullName = typeof me?.full_name === "string" ? me.full_name.trim() : "";
+  if (fullName) return fullName;
+  return me?.email || "голосующий";
+}
 
 function isActiveLike(status: string) {
   return status === "active" || status === "scheduled" || status === "paused";
+}
+
+function statusLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    draft: "Черновик",
+    scheduled: "Запланировано",
+    active: "Открыто",
+    paused: "Приостановлено",
+    closed: "Завершено",
+    results_ready: "Результаты готовы",
+    published: "Опубликовано",
+  };
+
+  return labels[raw] || raw || "Статус неизвестен";
+}
+
+function accessModeLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    open: "Открытый доступ",
+    invite: "По приглашению",
+  };
+
+  return labels[raw] || raw || "Доступ не указан";
+}
+
+function ballotFormatLabel(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+
+  const labels: Record<string, string> = {
+    approval: "Одобрение",
+    ranking: "Ранжирование",
+    score: "Оценивание",
+  };
+
+  return labels[raw] || raw || "Формат не указан";
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function electionSubtitle(item: ElectionSummary) {
+  const parts: string[] = [];
+
+  if (item.ballot_format) {
+    parts.push(ballotFormatLabel(item.ballot_format));
+  }
+
+  if (item.tally_rule) {
+    parts.push(tallyRuleLabel(item.tally_rule));
+  }
+
+  if (typeof item.candidate_count === "number") {
+    parts.push(`${item.candidate_count} кандидатов`);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : "Параметры голосования";
 }
 
 export function VoterDashboardPage() {
@@ -58,21 +138,43 @@ export function VoterDashboardPage() {
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
-        <h2 style={{ marginTop: 0 }}>Рабочий стол голосующего</h2>
-        <div style={styles.muted}>
-          Добро пожаловать{me?.email ? `, ${me.email}` : ""}. Здесь собраны доступные голосования и опубликованные результаты.
-        </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 12,
+            alignItems: "flex-start",
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>Рабочий стол голосующего</h2>
+            <div style={{ ...styles.muted, marginTop: 4 }}>
+              Добро пожаловать, {displayName(me)}. Здесь собраны доступные голосования и опубликованные результаты.
+            </div>
+          </div>
 
-        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Badge text={`all: ${items.length}`} />
-          <Badge text={`active_like: ${activeItems.length}`} />
-          <Badge text={`published: ${publishedItems.length}`} />
-          <button style={styles.btn} onClick={load} disabled={loading}>
-            Обновить
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.btn} onClick={load} disabled={loading}>
+              Обновить
+            </button>
+            <Link to="/elections" style={{ textDecoration: "none" }}>
+              <button style={styles.btnPrimary}>Все голосования</button>
+            </Link>
+          </div>
         </div>
 
         <ErrorBanner error={err} />
+
+        <div style={{ marginTop: 14 }}>
+          <KeyValueList
+            items={[
+              { label: "Доступных голосований", value: String(items.length) },
+              { label: "Открытых или запланированных", value: String(activeItems.length) },
+              { label: "Опубликованных результатов", value: String(publishedItems.length) },
+            ]}
+          />
+        </div>
       </div>
 
       <div style={styles.grid2}>
@@ -85,19 +187,55 @@ export function VoterDashboardPage() {
             <div style={{ display: "grid", gap: 8 }}>
               {activeItems.slice(0, 6).map((item) => (
                 <div key={item.id} style={{ ...styles.card, padding: 10 }}>
-                  <div style={{ fontWeight: 700 }}>{item.title}</div>
-                  <div style={styles.muted}>{item.description || "Описание отсутствует"}</div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 10,
+                      alignItems: "flex-start",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{item.title}</div>
+                      <div style={{ ...styles.muted, marginTop: 4 }}>
+                        {item.description || electionSubtitle(item)}
+                      </div>
+                    </div>
 
-                  <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <Badge text={item.status} />
-                    <Badge text={item.access_mode} />
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <Badge text={statusLabel(item.status)} />
+                      <Badge text={accessModeLabel(item.access_mode)} />
+                    </div>
                   </div>
 
-                  <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                    start: {item.start_at}
-                    <br />
-                    end: {item.end_at}
+                  <div style={{ marginTop: 10 }}>
+                    <KeyValueList
+                      items={[
+                        { label: "Начало", value: formatDateTime(item.start_at) },
+                        { label: "Окончание", value: formatDateTime(item.end_at) },
+                        { label: "Формат", value: ballotFormatLabel(item.ballot_format) },
+                        { label: "Правило", value: tallyRuleLabel(item.tally_rule) },
+                      ]}
+                    />
                   </div>
+
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer", ...styles.muted }}>
+                      Технические сведения
+                    </summary>
+                    <div style={{ marginTop: 8 }}>
+                      <KeyValueList
+                        items={[
+                          { label: "ID голосования", value: item.id },
+                          { label: "Статус", value: item.status },
+                          { label: "Режим доступа", value: item.access_mode },
+                          { label: "Начало", value: item.start_at },
+                          { label: "Окончание", value: item.end_at },
+                        ]}
+                      />
+                    </div>
+                  </details>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Link to={`/elections/${item.id}`} style={{ textDecoration: "none" }}>
@@ -121,10 +259,30 @@ export function VoterDashboardPage() {
             <div style={{ display: "grid", gap: 8 }}>
               {publishedItems.slice(0, 6).map((item) => (
                 <div key={item.id} style={{ ...styles.card, padding: 10 }}>
-                  <div style={{ fontWeight: 700 }}>{item.title}</div>
-                  <div style={{ marginTop: 6, ...styles.muted, fontSize: 12 }}>
-                    published_at: {item.published_at}
+                  <div style={{ fontWeight: 800 }}>{item.title}</div>
+                  <div style={{ marginTop: 6, ...styles.muted }}>
+                    Опубликовано: {formatDateTime(item.published_at)}
                   </div>
+
+                  <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <Badge text={ballotFormatLabel(item.ballot_format)} />
+                    <Badge text={tallyRuleLabel(item.tally_rule)} />
+                  </div>
+
+                  <details style={{ marginTop: 8 }}>
+                    <summary style={{ cursor: "pointer", ...styles.muted }}>
+                      Технические сведения
+                    </summary>
+                    <div style={{ marginTop: 8 }}>
+                      <KeyValueList
+                        items={[
+                          { label: "ID голосования", value: item.id },
+                          { label: "Опубликовано", value: item.published_at ?? "—" },
+                          { label: "Статус", value: item.status },
+                        ]}
+                      />
+                    </div>
+                  </details>
 
                   <div style={{ marginTop: 10 }}>
                     <Link to={`/elections/${item.id}/results`} style={{ textDecoration: "none" }}>
@@ -139,11 +297,25 @@ export function VoterDashboardPage() {
       </div>
 
       <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Последние выборы</h3>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 10,
+            alignItems: "baseline",
+            flexWrap: "wrap",
+          }}
+        >
+          <h3 style={{ margin: 0 }}>Последние голосования</h3>
+          <Link to="/elections" style={{ textDecoration: "none" }}>
+            <button style={styles.btn}>Открыть список</button>
+          </Link>
+        </div>
+
         {recentItems.length === 0 ? (
-          <div style={styles.muted}>Список пока пуст</div>
+          <div style={{ marginTop: 10, ...styles.muted }}>Список пока пуст</div>
         ) : (
-          <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
             {recentItems.map((item) => (
               <div
                 key={item.id}
@@ -157,8 +329,10 @@ export function VoterDashboardPage() {
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 700 }}>{item.title}</div>
-                  <div style={styles.muted}>{item.status}</div>
+                  <div style={{ fontWeight: 800 }}>{item.title}</div>
+                  <div style={{ ...styles.muted, marginTop: 4 }}>
+                    {statusLabel(item.status)} · {electionSubtitle(item)}
+                  </div>
                 </div>
                 <Link to={`/elections/${item.id}`} style={{ textDecoration: "none" }}>
                   <button style={styles.btn}>Открыть</button>

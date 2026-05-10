@@ -19,7 +19,7 @@ pub struct ApprovalScorer<const Q: usize>;
 
 /// Approval error type.
 ///
-/// Approval scoring has only one way to fail: not enough candidates to score the first Q.
+/// Approval scoring has only one way to fail: wrong count of candidates in a ballot for this Q.
 #[derive(Debug, Error)]
 #[error("Not enough candidates for this Q")]
 pub struct ApprovalScorerError;
@@ -76,7 +76,7 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
         let n_voters = profile.n_voters();
         let n_candidates = profile.n_candidates();
 
-        if n_candidates != Q {
+        if (0..n_voters).any(|i| profile[i].iter().count() > Q) {
             return Err(ApprovalScorerError);
         }
 
@@ -89,7 +89,9 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
                 .map(|i| {
                     let mut tmp = vec![0; n_candidates];
 
-                    (0..Q).for_each(|x| tmp[profile.index_of(&profile[i][x]).unwrap()] = 1);
+                    for candidate in profile[i].iter() {
+                        tmp[profile.index_of(candidate).unwrap()] = 1;
+                    }
 
                     tmp
                 })
@@ -109,12 +111,24 @@ impl<const Q: usize> Scorer<ApprovalBallot> for ApprovalScorer<Q> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::BallotData;
+    use crate::models::candidate_id::CandidateId;
     use test_case::test_case;
 
     fn profile(votes: Vec<Vec<usize>>, n: usize) -> Profile<RankingBallot> {
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect();
+        let ballots: Vec<BallotData> = votes
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, format!("C{id}")))
+                        .collect(),
+                )
+            })
+            .collect();
 
-        Profile::try_from((votes, names))
+        Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test examples.")
     }
 

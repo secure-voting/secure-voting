@@ -1,0 +1,52 @@
+language: 'typescript'
+layer: 'application'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'index.html'
+    - 'vite.config.ts'
+    - 'tsconfig.json'
+    - 'tsconfig.app.json'
+    - 'tsconfig.node.json'
+    - 'package.json'
+    - 'package-lock.json'
+  nginx:
+    - 'nginx/**/*'
+    - 'nginx.conf'
+
+tasks:
+  typecheck:
+    description: 'Check frontend TypeScript types'
+    command: 'npm run typecheck'
+    inputs:
+      - '@globs(sources)'
+
+  build:
+    description: 'Build frontend production bundle'
+    command: 'npm run build'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+      - '@globs(nginx)'
+    outputs:
+      - 'dist'
+
+  dev:
+    description: 'Run frontend development server'
+    command: 'npm run dev'
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  preview:
+    description: 'Preview frontend production build'
+    command: 'npm run preview'
+    deps:
+      - build
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false

@@ -17,6 +17,21 @@ func grpcTallyRuleName(rule string) string {
 	return rule
 }
 
+func computeCandidateIdentity(idValue, nameValue string) (string, string, bool) {
+	id := strings.TrimSpace(idValue)
+	name := strings.TrimSpace(nameValue)
+
+	canonical := id
+	if canonical == "" {
+		canonical = name
+	}
+	if canonical == "" {
+		return "", "", false
+	}
+
+	return canonical, canonical, true
+}
+
 func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 	params := parseParams(task.ExperimentParams)
 
@@ -57,7 +72,7 @@ func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 		ExperimentId: strings.TrimSpace(task.ExperimentID),
 		DatasetId:    strings.TrimSpace(task.DatasetID),
 		TallyRule:    grpcTallyRuleName(tallyRule),
-		BallotFormat: ballotFormat,
+		BallotFormat: grpcBallotFormatName(ballotFormat),
 		ParamsJson:   []byte(task.ExperimentParams),
 	}
 
@@ -90,7 +105,19 @@ func buildHeader(task worker.ExperimentRunTask) (*pb.RunHeader, string) {
 	}
 
 	for _, c := range task.Dataset.Candidates {
-		h.Candidates = append(h.Candidates, &pb.Candidate{Id: c.ID, Name: c.Name})
+		id, name, ok := computeCandidateIdentity(c.ID, c.Name)
+		if !ok {
+			continue
+		}
+
+		h.Candidates = append(h.Candidates, &pb.Candidate{
+			Id:   id,
+			Name: name,
+		})
+	}
+
+	if len(h.Candidates) == 0 {
+		return nil, "dataset_has_no_candidates"
 	}
 
 	_ = json.Valid(h.ParamsJson)
@@ -150,7 +177,7 @@ func buildElectionHeader(task worker.ElectionTallyTask) (*pb.RunHeader, string) 
 		RunId:          strings.TrimSpace(task.JobID),
 		ElectionId:     strings.TrimSpace(task.ElectionID),
 		TallyRule:      grpcTallyRuleName(tallyRule),
-		BallotFormat:   ballotFormat,
+		BallotFormat:   grpcBallotFormatName(ballotFormat),
 		ParamsJson:     paramsJSON,
 		ShowAggregates: wrapperspb.Bool(task.ShowAggregates),
 	}
@@ -179,10 +206,19 @@ func buildElectionHeader(task worker.ElectionTallyTask) (*pb.RunHeader, string) 
 	h.ScoreAllowSkip = wrapperspb.Bool(task.ScoreAllowSkip)
 
 	for _, c := range task.Candidates {
+		id, name, ok := computeCandidateIdentity(c.ID, c.Name)
+		if !ok {
+			continue
+		}
+
 		h.Candidates = append(h.Candidates, &pb.Candidate{
-			Id:   strings.TrimSpace(c.ID),
-			Name: strings.TrimSpace(c.Name),
+			Id:   id,
+			Name: name,
 		})
+	}
+
+	if len(h.Candidates) == 0 {
+		return nil, "election_has_no_candidates"
 	}
 
 	return h, ""

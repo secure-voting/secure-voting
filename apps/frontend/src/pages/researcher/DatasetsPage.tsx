@@ -5,10 +5,12 @@ import type {
   DatasetDetail,
   DatasetGenerateReq,
   DatasetListItem,
+  ElectionSummary,
   TallyRuleInfo,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
+import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import { useNotifications } from "../../app/notifications";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { Badge } from "../../shared/ui/Badge";
@@ -21,12 +23,16 @@ const GENERATION_MODELS = [
   { value: "polarized", label: "Поляризованная" },
 ] as const;
 
+const MAX_GENERATED_VOTERS = 10_000_000;
+
 type CreatedSyntheticRun = {
   rule: string;
   experimentId: string;
   runId: string;
   jobId: string;
 };
+
+type DatasetBallotFormat = "approval" | "ranking" | "score";
 
 function extractCreatedRun(value: unknown): { runId: string; jobId: string } {
   if (!value || typeof value !== "object") {
@@ -46,13 +52,6 @@ function extractCreatedRun(value: unknown): { runId: string; jobId: string } {
 
   return { runId, jobId };
 }
-
-type CreatedSyntheticRunNavState = {
-  rule: string;
-  experimentId: string;
-  runId: string;
-  jobId: string;
-};
 
 function formatLabel(value: string) {
   switch (value) {
@@ -75,9 +74,52 @@ function sourceLabel(value: string) {
       return "Импортирован";
     case "external":
       return "Внешний";
+    case "election":
+      return "Из голосования";
     default:
       return value;
   }
+}
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function formatDateTime(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) return "—";
+
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+
+  return d.toLocaleString("ru-RU", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function boolLabel(value: unknown) {
+  return value === true ? "Да" : value === false ? "Нет" : String(value ?? "—");
+}
+
+function parameterLabel(key: string) {
+  const labels: Record<string, string> = {
+    generation_model: "Модель генерации",
+    approval_max_choices: "Максимум одобрений",
+    ranking_top_k: "Глубина ранжирования",
+    score_min: "Минимальная оценка",
+    score_max: "Максимальная оценка",
+    score_step: "Шаг оценки",
+    voters: "Число профилей",
+    candidates: "Кандидаты",
+    seed: "Seed",
+  };
+
+  return labels[key] || key;
 }
 
 function generationModelLabel(value: string) {
@@ -107,27 +149,10 @@ function generationModelDescription(value: string) {
 }
 
 function ruleLabelRu(id: string, fallback?: string) {
-  const map: Record<string, string> = {
-    plurality: "Плюральное правило",
-    borda: "Правило Борда",
-    black: "Правило Блэка",
-    simpson: "Правило Симпсона",
-    hare: "Правило Хэра",
-    nanson: "Правило Нэнсона",
-    coombs: "Правило Кумбса",
-    copeland_1: "Правило Коупленда I",
-    copeland_2: "Правило Коупленда II",
-    copeland_3: "Правило Коупленда III",
-    inverse_borda: "Обратное правило Борда",
-    inverse_plurality: "Обратное плюральное правило",
-    minmax: "Правило Minmax",
-    threshold: "Пороговое правило",
-    practical_condorcet: "Практическое правило Кондорсе",
-    approval_2: "Одобрение q=2",
-    approval_3: "Одобрение q=3",
-  };
+  if (fallback?.trim()) return fallback.trim();
 
-  return map[id] || fallback || id;
+  const label = tallyRuleLabel(id);
+  return label !== "—" ? label : id;
 }
 
 function getGenerationModelFromParameters(parameters?: Record<string, unknown>) {
@@ -142,6 +167,32 @@ function getRankingTopKFromParameters(parameters?: Record<string, unknown>) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function isDatasetBallotFormat(value: unknown): value is DatasetBallotFormat {
+  return value === "approval" || value === "ranking" || value === "score";
+}
+
+function datasetBallotFormat(value?: DatasetDetail | null): DatasetBallotFormat | null {
+  return isDatasetBallotFormat(value?.format) ? value.format : null;
+}
+
+function numberParameter(parameters: Record<string, unknown> | undefined, key: string): number | null {
+  if (!parameters || typeof parameters !== "object") return null;
+
+  const value = parameters[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return null;
+}
+
+function ruleSupportsFormat(rule: TallyRuleInfo, format: DatasetBallotFormat) {
+  return rule.supports_experiment_runs && rule.ballot_formats.includes(format);
+}
+
 function renderParameters(value: Record<string, unknown> | undefined) {
   if (!value || Object.keys(value).length === 0) {
     return <span style={styles.muted}>Нет дополнительных параметров</span>;
@@ -149,11 +200,24 @@ function renderParameters(value: Record<string, unknown> | undefined) {
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
-      {Object.entries(value).map(([key, val]) => (
-        <div key={key}>
-          <b>{key}:</b> <span>{typeof val === "string" ? val : JSON.stringify(val)}</span>
-        </div>
-      ))}
+      {Object.entries(value).map(([key, val]) => {
+        let renderedValue: React.ReactNode =
+          typeof val === "string" ? val : JSON.stringify(val);
+
+        if (typeof val === "boolean") {
+          renderedValue = boolLabel(val);
+        }
+
+        if (key === "generation_model" && typeof val === "string") {
+          renderedValue = generationModelLabel(val);
+        }
+
+        return (
+          <div key={key}>
+            <b>{parameterLabel(key)}:</b> <span>{renderedValue}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -188,13 +252,28 @@ export function DatasetsPage() {
   const [genScoreMin, setGenScoreMin] = useState(0);
   const [genScoreMax, setGenScoreMax] = useState(10);
   const [genScoreStep, setGenScoreStep] = useState(1);
-  const [runRules, setRunRules] = useState<string[]>(["plurality", "borda", "black"]);
+
+  const [runRules, setRunRules] = useState<string[]>([]);
   const [runCommitteeSize, setRunCommitteeSize] = useState(1);
   const [runRankingTopK, setRunRankingTopK] = useState(3);
+  const [runApprovalMaxChoices, setRunApprovalMaxChoices] = useState(2);
+  const [runScoreMin, setRunScoreMin] = useState(0);
+  const [runScoreMax, setRunScoreMax] = useState(10);
+  const [runScoreStep, setRunScoreStep] = useState(1);
+
   const [runLoading, setRunLoading] = useState(false);
   const [createdRuns, setCreatedRuns] = useState<CreatedSyntheticRun[]>([]);
   const [availableRunRules, setAvailableRunRules] = useState<TallyRuleInfo[]>([]);
   const [rulesLoading, setRulesLoading] = useState(false);
+
+  const [electionItems, setElectionItems] = useState<ElectionSummary[]>([]);
+  const [electionsLoading, setElectionsLoading] = useState(false);
+
+  const [electionDatasetElectionId, setElectionDatasetElectionId] = useState("");
+  const [electionDatasetName, setElectionDatasetName] = useState("");
+  const [electionDatasetDescription, setElectionDatasetDescription] = useState("");
+  const [electionDatasetLoading, setElectionDatasetLoading] = useState(false);
+  const [electionDatasetErr, setElectionDatasetErr] = useState<string | null>(null);
 
   const [importErr, setImportErr] = useState<string | null>(null);
   const [generateErr, setGenerateErr] = useState<string | null>(null);
@@ -242,28 +321,43 @@ export function DatasetsPage() {
     if (!token) return;
 
     const ac = new AbortController();
+    setElectionsLoading(true);
+
+    api.elections
+      .list(token, ac.signal)
+      .then((list) => {
+        setElectionItems(
+          list.filter((item) =>
+            ["closed", "results_ready", "published"].includes(String(item.status || ""))
+          )
+        );
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setElectionItems([]);
+      })
+      .finally(() => {
+        setElectionsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
     setRulesLoading(true);
 
     api.capabilities
       .tallyRules(token, ac.signal)
-      .then((items) => {
-        const mergedItems = mergeRuleItems(items);
-        const rankingExperimentRules = mergedItems.filter(
-          (item) =>
-            item.supports_experiment_runs &&
-            item.ballot_formats.includes("ranking") &&
-            !item.requires_approval_max_choices &&
-            !item.requires_score_range
-        );
-
-        setAvailableRunRules(rankingExperimentRules);
-
-        setRunRules((prev) => {
-          const allowed = new Set(rankingExperimentRules.map((item) => item.id));
-          const next = prev.filter((item) => allowed.has(item));
-          if (next.length > 0) return next;
-          return rankingExperimentRules.slice(0, 3).map((item) => item.id);
-        });
+      .then((rules) => {
+        const mergedRules = mergeRuleItems(rules);
+        setAvailableRunRules(mergedRules.filter((rule) => rule.supports_experiment_runs));
       })
       .catch((e: any) => {
         if (e?.name === "AbortError") return;
@@ -280,6 +374,56 @@ export function DatasetsPage() {
 
     return () => ac.abort();
   }, [token, setToken]);
+
+  useEffect(() => {
+    if (!selected) {
+      setRunRules([]);
+      return;
+    }
+
+    const format = datasetBallotFormat(selected);
+    if (!format) {
+      setRunRules([]);
+      return;
+    }
+
+    const formatRules = availableRunRules.filter((rule) => ruleSupportsFormat(rule, format));
+    const allowed = new Set(formatRules.map((rule) => rule.id));
+
+    setRunRules((prev) => {
+      const next = prev.filter((rule) => allowed.has(rule));
+      if (next.length > 0) return next;
+      return formatRules.slice(0, 3).map((rule) => rule.id);
+    });
+
+    const candidateCount = Math.max(1, selected.candidates.length);
+
+    if (format === "approval") {
+      const fromDataset = numberParameter(selected.parameters, "approval_max_choices");
+      setRunApprovalMaxChoices(Math.max(1, Math.min(candidateCount, fromDataset ?? 2)));
+    }
+
+    if (format === "ranking") {
+      const fromDataset = numberParameter(selected.parameters, "ranking_top_k");
+      if (fromDataset != null) {
+        setRunRankingTopKEnabled(true);
+        setRunRankingTopK(Math.max(1, Math.min(candidateCount, fromDataset)));
+      } else {
+        setRunRankingTopKEnabled(false);
+        setRunRankingTopK(Math.max(1, Math.min(candidateCount, 3)));
+      }
+    }
+
+    if (format === "score") {
+      const min = numberParameter(selected.parameters, "score_min");
+      const max = numberParameter(selected.parameters, "score_max");
+      const step = numberParameter(selected.parameters, "score_step");
+
+      setRunScoreMin(min ?? 0);
+      setRunScoreMax(max ?? 10);
+      setRunScoreStep(step ?? 1);
+    }
+  }, [selected, availableRunRules]);
 
   const loadDetail = async (id: string) => {
     if (!token) return;
@@ -362,7 +506,7 @@ export function DatasetsPage() {
         file: importFile,
       });
 
-      setInfo(`Набор данных импортирован: ${id}`);
+      setInfo(`Набор данных импортирован. Технический ID: ${shortId(id)}`);
       setImportName("");
       setImportDescription("");
       setImportFile(null);
@@ -370,7 +514,7 @@ export function DatasetsPage() {
       addNotification({
         kind: "success",
         title: "Импорт набора данных завершен",
-        message: `Новый набор данных создан с id ${id}`,
+        message: `Новый набор данных создан. Технический ID: ${shortId(id)}`,
       });
 
       await loadList();
@@ -408,7 +552,7 @@ export function DatasetsPage() {
       }
     }
 
-    const ids = new Set(parsed.map((x) => x.id));
+    const ids = new Set(parsed.map((item) => item.id));
     if (ids.size !== parsed.length) {
       throw new Error("Идентификаторы кандидатов не должны повторяться");
     }
@@ -438,6 +582,11 @@ export function DatasetsPage() {
 
     if (genVoters < 1) {
       setGenerateErr("Количество профилей должно быть не меньше 1");
+      return;
+    }
+
+    if (genVoters > MAX_GENERATED_VOTERS) {
+      setGenerateErr(`Количество профилей не может превышать ${MAX_GENERATED_VOTERS.toLocaleString("ru-RU")}`);
       return;
     }
 
@@ -482,18 +631,28 @@ export function DatasetsPage() {
 
       const id = await api.datasets.generate(token, body);
 
+      if (genFormat === "approval") {
+        setRunApprovalMaxChoices(genApprovalMax);
+      }
+
       if (genFormat === "ranking") {
         setRunRankingTopKEnabled(genRankingTopKEnabled);
         setRunRankingTopK(genRankingTopK);
       }
 
+      if (genFormat === "score") {
+        setRunScoreMin(genScoreMin);
+        setRunScoreMax(genScoreMax);
+        setRunScoreStep(genScoreStep);
+      }
+
       setCreatedRuns([]);
-      setInfo(`Синтетический набор данных создан: ${id}`);
+      setInfo(`Синтетический набор данных создан. Технический ID: ${shortId(id)}`);
 
       addNotification({
         kind: "success",
         title: "Синтетический набор данных создан",
-        message: `Создан набор данных с id ${id}`,
+        message: `Создан синтетический набор данных. Технический ID: ${shortId(id)}`,
       });
 
       await loadList();
@@ -506,6 +665,64 @@ export function DatasetsPage() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateDatasetFromElection = async () => {
+    if (!token) return;
+
+    setElectionDatasetErr(null);
+    setImportErr(null);
+    setGenerateErr(null);
+    setRunErr(null);
+    setErr(null);
+    setInfo(null);
+
+    const electionId = electionDatasetElectionId.trim();
+    if (!electionId) {
+      setElectionDatasetErr("Выберите голосование для создания датасета");
+      return;
+    }
+
+    setElectionDatasetLoading(true);
+
+    try {
+      const id = await api.datasets.fromElection(token, {
+        election_id: electionId,
+        name: electionDatasetName.trim() || undefined,
+        description: electionDatasetDescription.trim() || undefined,
+      });
+
+      setInfo(`Датасет из голосования создан. Технический ID: ${shortId(id)}`);
+      setElectionDatasetName("");
+      setElectionDatasetDescription("");
+
+      addNotification({
+        kind: "success",
+        title: "Датасет из голосования создан",
+        message: `Реальные бюллетени анонимизированы и перенесены в исследовательский датасет. Технический ID: ${shortId(id)}`,
+      });
+
+      await loadList();
+      await loadDetail(id);
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setToken(null);
+      } else if (e?.code === "election_not_published") {
+        setElectionDatasetErr("Исследователь может использовать только опубликованные голосования.");
+      } else if (e?.code === "election_not_ready") {
+        setElectionDatasetErr("Голосование еще не завершено.");
+      } else if (e?.code === "aggregates_disabled") {
+        setElectionDatasetErr("Для этого голосования отключен доступ к агрегированным результатам.");
+      } else if (e?.code === "no_accepted_ballots") {
+        setElectionDatasetErr("В голосовании нет принятых бюллетеней.");
+      } else if (e?.code === "forbidden") {
+        setElectionDatasetErr("Недостаточно прав для создания датасета из этого голосования.");
+      } else {
+        setElectionDatasetErr(e?.message || "Не удалось создать датасет из голосования");
+      }
+    } finally {
+      setElectionDatasetLoading(false);
     }
   };
 
@@ -523,8 +740,9 @@ export function DatasetsPage() {
       return;
     }
 
-    if (selected.format !== "ranking") {
-      setRunErr("Серия экспериментов из этой формы сейчас поддерживается только для ранжированных наборов");
+    const format = datasetBallotFormat(selected);
+    if (!format) {
+      setRunErr("Формат выбранного набора данных не поддерживается");
       return;
     }
 
@@ -533,14 +751,15 @@ export function DatasetsPage() {
       return;
     }
 
-    if (availableRunRules.length === 0) {
-      setRunErr("Нет доступных правил для ranking-экспериментов");
+    const formatRules = availableRunRules.filter((rule) => ruleSupportsFormat(rule, format));
+    if (formatRules.length === 0) {
+      setRunErr(`Нет доступных правил для формата "${formatLabel(format)}"`);
       return;
     }
 
-    const allowedRuleIds = new Set(availableRunRules.map((item) => item.id));
+    const allowedRuleIds = new Set(formatRules.map((rule) => rule.id));
     if (runRules.some((rule) => !allowedRuleIds.has(rule))) {
-      setRunErr("Выбрано недопустимое правило подсчета");
+      setRunErr("Выбрано недопустимое правило подсчета для текущего формата набора данных");
       return;
     }
 
@@ -554,7 +773,21 @@ export function DatasetsPage() {
       return;
     }
 
-    if (runRankingTopKEnabled) {
+    const selectedRuleInfos = formatRules.filter((rule) => runRules.includes(rule.id));
+
+    if (format === "approval") {
+      if (runApprovalMaxChoices < 1) {
+        setRunErr("Максимум одобрений должен быть не меньше 1");
+        return;
+      }
+
+      if (runApprovalMaxChoices > selected.candidates.length) {
+        setRunErr("Максимум одобрений не может превышать число кандидатов");
+        return;
+      }
+    }
+
+    if (format === "ranking" && runRankingTopKEnabled) {
       if (runRankingTopK < 1) {
         setRunErr("Ограничение top-k должно быть не меньше 1");
         return;
@@ -566,6 +799,25 @@ export function DatasetsPage() {
       }
     }
 
+    if (format === "score") {
+      if (runScoreMax <= runScoreMin) {
+        setRunErr("Максимальная оценка должна быть больше минимальной");
+        return;
+      }
+
+      if (runScoreStep <= 0) {
+        setRunErr("Шаг оценки должен быть больше 0");
+        return;
+      }
+
+      const range = runScoreMax - runScoreMin;
+      const steps = range / runScoreStep;
+      if (!Number.isInteger(steps)) {
+        setRunErr("Диапазон оценок должен делиться на шаг без остатка");
+        return;
+      }
+    }
+
     setRunLoading(true);
     setCreatedRuns([]);
 
@@ -573,14 +825,26 @@ export function DatasetsPage() {
       const created: CreatedSyntheticRun[] = [];
 
       for (const rule of runRules) {
+        const ruleInfo = selectedRuleInfos.find((item) => item.id === rule);
+
         const params: Record<string, unknown> = {
-          ballot_format: "ranking",
+          ballot_format: format,
           tally_rule: rule,
           committee_size: runCommitteeSize,
         };
 
-        if (runRankingTopKEnabled) {
+        if (format === "approval") {
+          params.approval_max_choices = runApprovalMaxChoices;
+        }
+
+        if (format === "ranking" && runRankingTopKEnabled) {
           params.ranking_top_k = runRankingTopK;
+        }
+
+        if (format === "score") {
+          params.score_min = runScoreMin;
+          params.score_max = runScoreMax;
+          params.score_step = runScoreStep;
         }
 
         const experimentId = await api.experiments.create(token, {
@@ -597,7 +861,7 @@ export function DatasetsPage() {
         const { runId, jobId } = extractCreatedRun(first);
 
         if (!runId) {
-          throw new Error(`Не удалось получить run_id для правила ${ruleLabelRu(rule)}`);
+          throw new Error(`Не удалось получить run_id для правила ${ruleLabelRu(rule, ruleInfo?.label)}`);
         }
 
         created.push({
@@ -633,6 +897,24 @@ export function DatasetsPage() {
     }
   };
 
+  const generatedCandidatesCount = genCandidatesText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean).length;
+
+  const selectedFormat = datasetBallotFormat(selected);
+  const formatRunRules = selectedFormat
+    ? availableRunRules.filter((rule) => ruleSupportsFormat(rule, selectedFormat))
+    : [];
+
+  const selectedRuleInfos = formatRunRules.filter((rule) => runRules.includes(rule.id));
+  const needsApprovalMaxChoices =
+    selectedFormat === "approval" &&
+    selectedRuleInfos.some((rule) => rule.requires_approval_max_choices);
+  const needsScoreRange =
+    selectedFormat === "score" &&
+    selectedRuleInfos.some((rule) => rule.requires_score_range);
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
@@ -656,27 +938,59 @@ export function DatasetsPage() {
 
           {items.map((item) => (
             <div key={item.id} style={{ ...styles.card, padding: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 10,
+                  alignItems: "flex-start",
+                  flexWrap: "wrap",
+                }}
+              >
                 <div>
-                  <div style={{ fontWeight: 700 }}>{item.name}</div>
-                  <div style={styles.muted}>{item.id}</div>
+                  <div style={{ fontWeight: 800 }}>{item.name}</div>
+                  <div style={{ ...styles.muted, marginTop: 4 }}>
+                    {sourceLabel(item.source)} · {formatLabel(item.format)}
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <Badge text={item.source} />
-                  <Badge text={item.format} />
+                  <Badge text={sourceLabel(item.source)} />
+                  <Badge text={formatLabel(item.format)} />
                 </div>
               </div>
 
-              <div style={{ marginTop: 8, ...styles.muted, fontSize: 12 }}>
-                created_at: {item.created_at}
+              <div style={{ marginTop: 10 }}>
+                <KeyValueList
+                  items={[
+                    { label: "Создан", value: formatDateTime(item.created_at) },
+                    { label: "Формат", value: formatLabel(item.format) },
+                    { label: "Источник", value: sourceLabel(item.source) },
+                  ]}
+                />
               </div>
+
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", ...styles.muted }}>
+                  Технические сведения
+                </summary>
+                <div style={{ marginTop: 8 }}>
+                  <KeyValueList
+                    items={[
+                      { label: "ID набора данных", value: item.id },
+                      { label: "Источник", value: item.source },
+                      { label: "Формат", value: item.format },
+                      { label: "Создан", value: item.created_at },
+                    ]}
+                  />
+                </div>
+              </details>
 
               <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button style={styles.btnPrimary} onClick={() => loadDetail(item.id)} disabled={detailLoading}>
-                  Открыть
+                  Открыть карточку
                 </button>
                 <button style={styles.btn} onClick={() => handleDownload(item.id)}>
-                  Скачать
+                  Скачать файл
                 </button>
               </div>
             </div>
@@ -736,7 +1050,7 @@ export function DatasetsPage() {
 
           {importFile ? (
             <div style={{ marginTop: 8, ...styles.muted }}>
-              {importFile.name} · {importFile.size} bytes
+              {importFile.name} · {importFile.size} байт
             </div>
           ) : null}
 
@@ -796,13 +1110,17 @@ export function DatasetsPage() {
             style={styles.input}
             type="number"
             min={1}
+            max={MAX_GENERATED_VOTERS}
             value={genVoters}
             onChange={(e) => setGenVoters(Number(e.target.value))}
           />
+          <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+            Для больших наборов профили сохраняются в отдельной коллекции dataset_ballots. Полный raw JSON в карточке датасета сохраняется только для небольших наборов.
+          </div>
 
           <div style={{ height: 10 }} />
 
-          <label>Seed</label>
+          <label>Seed (зерно генерации)</label>
           <input style={styles.input} value={genSeed} onChange={(e) => setGenSeed(e.target.value)} />
           <div style={{ marginTop: 8, ...styles.muted }}>
             Если поле оставить пустым, сервер сгенерирует seed автоматически.
@@ -810,7 +1128,7 @@ export function DatasetsPage() {
 
           <div style={{ height: 10 }} />
 
-          <label>Кандидаты (каждая строка: id,name)</label>
+          <label>Кандидаты (каждая строка: технический ID, имя)</label>
           <textarea
             style={{
               ...styles.input,
@@ -825,7 +1143,7 @@ export function DatasetsPage() {
 
           {genFormat === "approval" ? (
             <>
-              <label>approval_max_choices</label>
+              <label>Максимум одобрений</label>
               <input
                 style={styles.input}
                 type="number"
@@ -860,7 +1178,7 @@ export function DatasetsPage() {
                     style={styles.input}
                     type="number"
                     min={1}
-                    max={parseCandidates().length}
+                    max={Math.max(1, generatedCandidatesCount)}
                     value={genRankingTopK}
                     onChange={(e) => setGenRankingTopK(Number(e.target.value))}
                   />
@@ -873,7 +1191,7 @@ export function DatasetsPage() {
 
           {genFormat === "score" ? (
             <>
-              <label>score_min</label>
+              <label>Минимальная оценка</label>
               <input
                 style={styles.input}
                 type="number"
@@ -882,7 +1200,7 @@ export function DatasetsPage() {
               />
               <div style={{ height: 10 }} />
 
-              <label>score_max</label>
+              <label>Максимальная оценка</label>
               <input
                 style={styles.input}
                 type="number"
@@ -891,7 +1209,7 @@ export function DatasetsPage() {
               />
               <div style={{ height: 10 }} />
 
-              <label>score_step</label>
+              <label>Шаг оценки</label>
               <input
                 style={styles.input}
                 type="number"
@@ -910,6 +1228,80 @@ export function DatasetsPage() {
             <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 13 }}>{generateErr}</div>
           ) : null}
         </div>
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>Датасет из реального голосования</h3>
+
+        <div style={{ ...styles.muted, marginBottom: 12 }}>
+          Завершенное или опубликованное голосование можно перенести в исследовательский датасет.
+          Бюллетени сохраняются без идентификаторов пользователей.
+        </div>
+
+        <label>Голосование</label>
+        <select
+          style={styles.input}
+          value={electionDatasetElectionId}
+          onChange={(e) => {
+            const value = e.target.value;
+            setElectionDatasetElectionId(value);
+
+            const selectedElection = electionItems.find((item) => item.id === value);
+            if (selectedElection && !electionDatasetName.trim()) {
+              setElectionDatasetName(`Dataset from election: ${selectedElection.title}`);
+            }
+          }}
+        >
+          <option value="">
+            {electionsLoading ? "Загрузка голосований..." : "Выберите голосование"}
+          </option>
+          {electionItems.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.title} · {formatLabel(String(item.ballot_format || ""))} · {item.status}
+            </option>
+          ))}
+        </select>
+
+        <div style={{ height: 10 }} />
+
+        <label>Название датасета</label>
+        <input
+          style={styles.input}
+          value={electionDatasetName}
+          onChange={(e) => setElectionDatasetName(e.target.value)}
+          placeholder="Например: Dataset from published election"
+        />
+
+        <div style={{ height: 10 }} />
+
+        <label>Описание</label>
+        <input
+          style={styles.input}
+          value={electionDatasetDescription}
+          onChange={(e) => setElectionDatasetDescription(e.target.value)}
+          placeholder="Краткое описание назначения датасета"
+        />
+
+        <div style={{ marginTop: 8, ...styles.muted }}>
+          Для исследователя доступны опубликованные голосования с разрешенными агрегатами.
+          Администратор может экспортировать свои завершенные голосования.
+        </div>
+
+        <div style={{ height: 12 }} />
+
+        <button
+          style={styles.btnPrimary}
+          onClick={handleCreateDatasetFromElection}
+          disabled={electionDatasetLoading || !electionDatasetElectionId.trim()}
+        >
+          {electionDatasetLoading ? "Создание датасета..." : "Создать датасет из голосования"}
+        </button>
+
+        {electionDatasetErr ? (
+          <div style={{ marginTop: 10, color: "#b91c1c", fontSize: 13 }}>
+            {electionDatasetErr}
+          </div>
+        ) : null}
       </div>
 
       <div style={styles.card}>
@@ -937,11 +1329,29 @@ export function DatasetsPage() {
 
             <KeyValueList
               items={[
-                { label: "Идентификатор набора", value: selected.id },
-                { label: "Дата создания", value: selected.created_at },
+                { label: "Источник", value: sourceLabel(selected.source) },
+                { label: "Формат", value: formatLabel(selected.format) },
+                { label: "Дата создания", value: formatDateTime(selected.created_at) },
                 { label: "Число кандидатов", value: String(selected.candidates.length) },
+                { label: "Seed", value: selected.seed != null ? String(selected.seed) : "—" },
               ]}
             />
+
+            <details>
+              <summary style={{ cursor: "pointer", ...styles.muted }}>
+                Технические сведения
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                <KeyValueList
+                  items={[
+                    { label: "ID набора данных", value: selected.id },
+                    { label: "Источник", value: selected.source },
+                    { label: "Формат", value: selected.format },
+                    { label: "Создан", value: selected.created_at },
+                  ]}
+                />
+              </div>
+            </details>
 
             <div>
               <h4 style={{ marginBottom: 8 }}>Кандидаты</h4>
@@ -950,7 +1360,14 @@ export function DatasetsPage() {
                   {selected.candidates.map((candidate) => (
                     <div key={candidate.id} style={{ ...styles.card, padding: 10 }}>
                       <b>{candidate.name}</b>
-                      <div style={styles.muted}>{candidate.id}</div>
+                      <details style={{ marginTop: 4 }}>
+                        <summary style={{ cursor: "pointer", ...styles.muted }}>
+                          Технические сведения
+                        </summary>
+                        <div style={{ marginTop: 4, ...styles.muted }}>
+                          ID кандидата: {candidate.id}
+                        </div>
+                      </details>
                     </div>
                   ))}
                 </div>
@@ -964,27 +1381,30 @@ export function DatasetsPage() {
               {renderParameters(selected.parameters)}
             </div>
 
-            {selected.format === "ranking" ? (
+            {selectedFormat ? (
               <div style={{ ...styles.card, padding: 12 }}>
                 <h4 style={{ marginTop: 0, marginBottom: 8 }}>Создание и запуск экспериментов</h4>
 
                 <div style={{ ...styles.muted, marginBottom: 12 }}>
-                  Для ранжированного набора данных можно сразу создать и запустить серию экспериментов.
+                  Для выбранного набора данных можно сразу создать и запустить серию экспериментов
+                  по правилам, которые поддерживают формат "{formatLabel(selectedFormat)}".
                 </div>
 
                 <div style={{ display: "grid", gap: 12 }}>
-                                    <div>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 8 }}>Правила подсчёта</div>
 
                     {rulesLoading ? (
                       <div style={styles.muted}>Загрузка списка правил…</div>
                     ) : null}
 
-                    {!rulesLoading && availableRunRules.length === 0 ? (
-                      <div style={styles.muted}>Нет доступных правил для ranking-экспериментов</div>
+                    {!rulesLoading && formatRunRules.length === 0 ? (
+                      <div style={styles.muted}>
+                        Нет доступных правил для формата "{formatLabel(selectedFormat)}"
+                      </div>
                     ) : null}
 
-                    {availableRunRules.length > 0 ? (
+                    {formatRunRules.length > 0 ? (
                       <div
                         style={{
                           display: "grid",
@@ -992,7 +1412,7 @@ export function DatasetsPage() {
                           gap: 8,
                         }}
                       >
-                        {availableRunRules.map((rule) => {
+                        {formatRunRules.map((rule) => {
                           const checked = runRules.includes(rule.id);
 
                           return (
@@ -1036,35 +1456,91 @@ export function DatasetsPage() {
                       </div>
                     </div>
 
-                    <div>
-                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {selectedFormat === "approval" ? (
+                      <div>
+                        <label>Максимум одобрений</label>
                         <input
-                          type="checkbox"
-                          checked={runRankingTopKEnabled}
-                          onChange={(e) => setRunRankingTopKEnabled(e.target.checked)}
+                          style={styles.input}
+                          type="number"
+                          min={1}
+                          max={selected.candidates.length}
+                          value={runApprovalMaxChoices}
+                          onChange={(e) => setRunApprovalMaxChoices(Number(e.target.value))}
                         />
-                        Ограничивать число учитываемых первых k позиций
-                      </label>
-
-                      <div style={{ marginTop: 8, ...styles.muted }}>
-                        Поле необязательно. Если ограничение выключено, в эксперимент будет передано полное ранжирование.
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          {needsApprovalMaxChoices
+                            ? "Выбранные правила требуют параметр максимального числа одобрений."
+                            : "Параметр будет передан в эксперимент для approval-набора."}
+                        </div>
                       </div>
+                    ) : null}
 
-                      {runRankingTopKEnabled ? (
-                        <>
-                          <div style={{ height: 10 }} />
-                          <label>Ограничение на количество k позиций</label>
+                    {selectedFormat === "ranking" ? (
+                      <div>
+                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="checkbox"
+                            checked={runRankingTopKEnabled}
+                            onChange={(e) => setRunRankingTopKEnabled(e.target.checked)}
+                          />
+                          Ограничивать число учитываемых первых k позиций
+                        </label>
+
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          Поле необязательно. Если ограничение выключено, в эксперимент будет передано полное ранжирование.
+                        </div>
+
+                        {runRankingTopKEnabled ? (
+                          <>
+                            <div style={{ height: 10 }} />
+                            <label>Ограничение на количество k позиций</label>
+                            <input
+                              style={styles.input}
+                              type="number"
+                              min={1}
+                              max={selected.candidates.length}
+                              value={runRankingTopK}
+                              onChange={(e) => setRunRankingTopK(Number(e.target.value))}
+                            />
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {selectedFormat === "score" ? (
+                      <div>
+                        <label>Диапазон оценок</label>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                          <input
+                            style={styles.input}
+                            type="number"
+                            value={runScoreMin}
+                            onChange={(e) => setRunScoreMin(Number(e.target.value))}
+                            aria-label="Минимальная оценка"
+                          />
+                          <input
+                            style={styles.input}
+                            type="number"
+                            value={runScoreMax}
+                            onChange={(e) => setRunScoreMax(Number(e.target.value))}
+                            aria-label="Максимальная оценка"
+                          />
                           <input
                             style={styles.input}
                             type="number"
                             min={1}
-                            max={selected.candidates.length}
-                            value={runRankingTopK}
-                            onChange={(e) => setRunRankingTopK(Number(e.target.value))}
+                            value={runScoreStep}
+                            onChange={(e) => setRunScoreStep(Number(e.target.value))}
+                            aria-label="Шаг оценки"
                           />
-                        </>
-                      ) : null}
-                    </div>
+                        </div>
+                        <div style={{ marginTop: 8, ...styles.muted }}>
+                          {needsScoreRange
+                            ? "Выбранные правила требуют диапазон оценок."
+                            : "Диапазон будет передан в эксперимент для score-набора."}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1093,10 +1569,28 @@ export function DatasetsPage() {
 
                       {createdRuns.map((item) => (
                         <div key={`${item.rule}-${item.runId}`} style={{ ...styles.card, padding: 10 }}>
-                          <div><b>{item.rule}</b></div>
-                          <div style={styles.muted}>experiment_id: {item.experimentId}</div>
-                          <div style={styles.muted}>run_id: {item.runId}</div>
-                          <div style={styles.muted}>job_id: {item.jobId || "—"}</div>
+                          <div>
+                            <b>{ruleLabelRu(item.rule)}</b>
+                          </div>
+                          <div style={{ ...styles.muted, marginTop: 4 }}>
+                            Запуск создан и передан в очередь выполнения
+                          </div>
+
+                          <details style={{ marginTop: 8 }}>
+                            <summary style={{ cursor: "pointer", ...styles.muted }}>
+                              Технические сведения
+                            </summary>
+                            <div style={{ marginTop: 8 }}>
+                              <KeyValueList
+                                items={[
+                                  { label: "ID эксперимента", value: item.experimentId },
+                                  { label: "ID запуска", value: item.runId },
+                                  { label: "ID задачи", value: item.jobId || "—" },
+                                  { label: "Правило", value: item.rule },
+                                ]}
+                              />
+                            </div>
+                          </details>
                         </div>
                       ))}
                     </div>

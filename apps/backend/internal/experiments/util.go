@@ -24,30 +24,6 @@ var allowedQuotaTypes = map[string]bool{
 	"droop": true,
 }
 
-var allowedTallyRules = map[string]bool{
-	"plurality":            true,
-	"approval":             true,
-	"approval-2":           true,
-	"approval-3":           true,
-	"inverse-plurality":    true,
-	"borda":                true,
-	"black":                true,
-	"copeland-i":           true,
-	"copeland-ii":          true,
-	"copeland-iii":         true,
-	"simpson":              true,
-	"minmax":               true,
-	"minimax":              true,
-	"hare":                 true,
-	"inverse-borda":        true,
-	"nanson":               true,
-	"coombs":               true,
-	"threshold":            true,
-	"q-paretian-strong-simple-majority":    true,
-	"q-paretian-strongest-simple-majority": true,
-	"q-paretian-strong-plurality":          true,
-}
-
 func norm(s string) string {
 	v := strings.ToLower(strings.TrimSpace(s))
 	v = strings.ReplaceAll(v, "_", "-")
@@ -108,7 +84,7 @@ func validateParams(params map[string]any) string {
 	}
 	if hasRule {
 		s, ok := ruleValue.(string)
-		if !ok || !allowedTallyRules[norm(s)] {
+		if !ok || strings.TrimSpace(s) == "" {
 			return "invalid_tally_rule"
 		}
 	}

@@ -19,6 +19,10 @@ version = "0.1.0"
 
 build = "src/build.rs"
 
+[[bin]]
+name = "compute-service"
+path = "src/main.rs"
+
 [dependencies]
 prost = "0.14.3"
 tokio = { version = "1.49.0", features = ["macros", "rt-multi-thread"] }
@@ -26,7 +30,14 @@ tonic = { version = "0.14.2", features = ["_tls-any", "tls-ring"] }
 tonic-prost = "0.14.2"
 prost-types = "0.14.3"
 voting-core = {path = "../voting-core", version = "0.1.0", features = ["serde"]}
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.149"
+sysinfo = "0.38.4"
+fastrace = { version = "0.7.17", features = ["enable"] }
+fastrace-tracing = "0.1.1"
+tracing-subscriber = "0.3.23"
+tracing = "0.1.44"
+fastrace-tonic = "0.2.0"
 
 [lints]
 workspace=true

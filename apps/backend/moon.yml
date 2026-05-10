@@ -1,0 +1,70 @@
+language: 'go'
+layer: 'application'
+
+fileGroups:
+  sources:
+    - 'cmd/**/*'
+    - 'internal/**/*'
+    - 'proto/**/*'
+    - 'go.mod'
+    - 'go.sum'
+  tests:
+    - '**/*_test.go'
+  openapi:
+    - 'openapi/**/*'
+
+tasks:
+  test:
+    description: 'Run backend Go tests'
+    command: 'go test ./...'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  vet:
+    description: 'Run go vet'
+    command: 'go vet ./...'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+
+  lint:
+    description: 'Run golangci-lint'
+    command: 'golangci-lint run ./...'
+    inputs:
+      - '@globs(sources)'
+      - '@globs(tests)'
+      - '.golangci.yml'
+
+  build-api:
+    description: 'Build backend API binary'
+    command: 'go build ./cmd/api'
+    inputs:
+      - '@globs(sources)'
+
+  build-worker:
+    description: 'Build backend worker binary'
+    command: 'go build ./cmd/worker'
+    inputs:
+      - '@globs(sources)'
+
+  build-compute-runner:
+    description: 'Build backend compute-runner binary'
+    command: 'go build ./cmd/compute-runner'
+    inputs:
+      - '@globs(sources)'
+
+  build:
+    description: 'Build all backend binaries'
+    deps:
+      - build-api
+      - build-worker
+      - build-compute-runner
+
+  check:
+    description: 'Run backend fast checks'
+    deps:
+      - test
+      - vet
+      - lint
+      - build

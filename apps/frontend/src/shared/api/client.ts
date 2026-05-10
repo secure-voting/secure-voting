@@ -1,5 +1,6 @@
 import type {
   APIErrorResponse,
+  AuthTokens,
   AuditLogItem,
   BallotMeta,
   DatasetDetail,
@@ -29,6 +30,8 @@ import type {
   ScoreEntry,
   ProtocolStep,
   ExperimentRunResultResp,
+  EmailVerificationRequestResult,
+  DatasetFromElectionReq,
 } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -128,6 +131,34 @@ function extractToken(payload: unknown): string | null {
   return null;
 }
 
+function extractAuthTokens(payload: unknown): AuthTokens {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Ответ авторизации пустой или имеет неверный формат");
+  }
+
+  const p: any = payload;
+  const accessToken = extractToken(payload);
+  const refreshToken = typeof p.refresh_token === "string" ? p.refresh_token.trim() : "";
+  const expiresAt = typeof p.expires_at === "string" ? p.expires_at : "";
+  const refreshExpiresAt =
+    typeof p.refresh_expires_at === "string" ? p.refresh_expires_at : "";
+
+  if (!accessToken) {
+    throw new Error("Авторизация выполнена, но access token не найден в ответе");
+  }
+
+  if (!refreshToken) {
+    throw new Error("Авторизация выполнена, но refresh token не найден в ответе");
+  }
+
+  return {
+    access_token: accessToken,
+    expires_at: expiresAt,
+    refresh_token: refreshToken,
+    refresh_expires_at: refreshExpiresAt,
+  };
+}
+
 function newIdempotencyKey(): string {
   const g: any = globalThis as any;
   const uuid =
@@ -164,9 +195,8 @@ async function authorizedDownload(path: string, token: string, fallbackFilename:
 
 export const api = {
   auth: {
-    async register(email: string, password: string, inviteCode: string | null) {
+    async register(email: string, password: string) {
       const body: Record<string, unknown> = { email, password };
-      if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
 
       const resp = await request<any>(
         "/api/v1/auth/register",
@@ -174,18 +204,50 @@ export const api = {
         null
       );
 
-      const t = extractToken(resp);
-      if (!t) throw new Error("Регистрация выполнена, но токен не найден в ответе");
-      return t;
+      return extractAuthTokens(resp);
     },
 
-    async login(email: string, password: string, inviteCode: string | null) {
-      const body: any = { email, password };
-      if (inviteCode && inviteCode.trim()) body.invite_code = inviteCode.trim();
-      const resp = await request<any>("/api/v1/auth/login", { method: "POST", body: JSON.stringify(body) }, null);
-      const t = extractToken(resp);
-      if (!t) throw new Error("Вход выполнен, но токен не найден в ответе");
-      return t;
+    async login(email: string, password: string, replaceExistingSession = false) {
+      const body: Record<string, unknown> = { email, password };
+      if (replaceExistingSession) body.replace_existing_session = true;
+
+      const resp = await request<any>(
+        "/api/v1/auth/login",
+        { method: "POST", body: JSON.stringify(body) },
+        null
+      );
+
+      return extractAuthTokens(resp);
+    },
+
+    async acceptInvite(token: string, inviteCode: string) {
+      return await request<{
+        ok: boolean;
+        invite_id: string;
+        election_id: string;
+      }>(
+        "/api/v1/auth/invite/accept",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            invite_code: inviteCode,
+          }),
+        },
+        token
+      );
+    },
+
+    async refresh(refreshToken: string) {
+      const resp = await request<any>(
+        "/api/v1/auth/refresh",
+        {
+          method: "POST",
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        },
+        null
+      );
+
+      return extractAuthTokens(resp);
     },
 
     async me(token: string, signal?: AbortSignal) {
@@ -218,6 +280,30 @@ export const api = {
           body: JSON.stringify({
             full_name: fullName,
             phone,
+          }),
+        },
+        token
+      );
+    },
+
+    async requestEmailVerification(token: string) {
+      return await request<EmailVerificationRequestResult>(
+        "/api/v1/auth/email/verification/request",
+        {
+          method: "POST",
+          body: "{}",
+        },
+        token
+      );
+    },
+
+    async confirmEmailVerification(token: string, code: string) {
+      return await request<Me>(
+        "/api/v1/auth/email/verification/confirm",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            code,
           }),
         },
         token
@@ -601,6 +687,16 @@ export const api = {
         token
       );
       if (!resp?.id) throw new Error("Набор данных создан, но id не найден в ответе");
+      return resp.id;
+    },
+
+    async fromElection(token: string, body: DatasetFromElectionReq) {
+      const resp = await request<{ id: string }>(
+        "/api/v1/datasets/from-election",
+        { method: "POST", body: JSON.stringify(body) },
+        token
+      );
+      if (!resp?.id) throw new Error("Набор данных создан из голосования, но id не найден в ответе");
       return resp.id;
     },
   },

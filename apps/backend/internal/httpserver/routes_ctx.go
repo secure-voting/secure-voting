@@ -62,7 +62,7 @@ type routeCtx struct {
 	notificationsH  *nh.Handlers
 	adminUsersH     *auusersh.Handlers
 	authRateLimiter *middleware.RateLimiter
-	redisClient *redis.Client
+	redisClient     *redis.Client
 
 	writeRateLimiter *middleware.RateLimiter
 	adminSettingsH   *ash.Handlers
@@ -88,14 +88,15 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 		}
 	}
 
-	authSvc := asvc.NewService(db, cfg.TokenTTL)
+	authSvc := asvc.NewServiceWithRefreshTTL(db, cfg.TokenTTL, cfg.RefreshTokenTTL).
+		WithEmailVerificationSender(newEmailVerificationSender(cfg))
 	electionsSvc := elections.NewService(db, computeClient)
 	ballotsSvc := ballots.NewService(db, rdb, cfg.IdempotencyTTL)
 	resultsSvc := results.NewService(db)
 
 	jobsSvc := jobs.NewService(db)
 	auditSvc := audit.NewService(db)
-	datasetsSvc := datasets.NewService(mdb)
+	datasetsSvc := datasets.NewService(mdb, db)
 	experimentsSvc := experiments.NewService(db)
 	runsSvc := experimentruns.NewService(db, mdb)
 	capabilitiesSvc := capabilities.NewService(computeClient)
@@ -144,7 +145,7 @@ func newRouteCtx(cfg config.Config, db *pgxpool.Pool, rdb *redis.Client, mdb *mo
 		authRateLimiter:  authRateLimiter,
 		writeRateLimiter: writeRateLimiter,
 		adminSettingsH:   ash.NewHandlers(adminSettingsSvc),
-		redisClient: rdb,
+		redisClient:      rdb,
 	}
 }
 
@@ -188,4 +189,24 @@ func (c *routeCtx) RequireAdminTrusted(fn httputil.HandlerFunc) http.Handler {
 		middleware.RequireTrustedCIDRs(c.cfg.AdminTrustedCIDRs, httputil.Wrap(fn)),
 	)
 	return middleware.RequireAuth(c.authSvc, protected)
+}
+
+func newEmailVerificationSender(cfg config.Config) asvc.EmailVerificationSender {
+	switch cfg.EmailVerificationMode {
+	case "smtp":
+		return asvc.NewSMTPEmailVerificationSender(asvc.EmailVerificationSenderConfig{
+			Mode:      cfg.EmailVerificationMode,
+			Host:      cfg.SMTPHost,
+			Port:      cfg.SMTPPort,
+			Username:  cfg.SMTPUsername,
+			Password:  cfg.SMTPPassword,
+			FromEmail: cfg.SMTPFromEmail,
+			FromName:  cfg.SMTPFromName,
+			TLSMode:   cfg.SMTPTLSMode,
+		})
+	case "disabled":
+		return asvc.NewDisabledEmailVerificationSender()
+	default:
+		return asvc.NewDevEmailVerificationSender()
+	}
 }

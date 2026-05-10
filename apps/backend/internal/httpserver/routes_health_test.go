@@ -116,18 +116,18 @@ func TestSystemStatus_Handler_WithWorkerHeartbeat(t *testing.T) {
 
 	var resp struct {
 		Backend struct {
-			OK     bool           `json:"ok"`
-			Status string         `json:"status"`
+			OK      bool           `json:"ok"`
+			Status  string         `json:"status"`
 			Details map[string]any `json:"details"`
 		} `json:"backend"`
 		Compute struct {
-			OK     bool           `json:"ok"`
-			Status string         `json:"status"`
+			OK      bool           `json:"ok"`
+			Status  string         `json:"status"`
 			Details map[string]any `json:"details"`
 		} `json:"compute"`
 		Worker struct {
-			OK     bool           `json:"ok"`
-			Status string         `json:"status"`
+			OK      bool           `json:"ok"`
+			Status  string         `json:"status"`
 			Details map[string]any `json:"details"`
 		} `json:"worker"`
 		CheckedAt string `json:"checked_at"`

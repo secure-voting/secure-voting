@@ -1,0 +1,66 @@
+language: 'typescript'
+layer: 'automation'
+
+fileGroups:
+  sources:
+    - 'src/**/*'
+    - 'tsconfig.json'
+    - 'package.json'
+    - 'package-lock.json'
+
+tasks:
+  typecheck:
+    description: 'Check load test TypeScript types'
+    command: 'npm run typecheck'
+    inputs:
+      - '@globs(sources)'
+
+  test:
+    description: 'Run default load smoke test'
+    command: 'npm run test'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  ballot:
+    description: 'Run ballot load smoke test'
+    command: 'npm run ballot'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  datasets:
+    description: 'Run dataset load smoke test'
+    command: 'npm run datasets'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  jobs:
+    description: 'Run jobs polling load smoke test'
+    command: 'npm run jobs'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false
+
+  experiments:
+    description: 'Run experiment-run load smoke test'
+    command: 'npm run experiments'
+    deps:
+      - typecheck
+    inputs:
+      - '@globs(sources)'
+    options:
+      runInCI: false

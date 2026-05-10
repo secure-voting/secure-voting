@@ -57,7 +57,7 @@ mod tests {
         CandidateId::new(id, format!("C{id}"))
     }
 
-    fn ids(v: Vec<CandidateId>) -> Vec<usize> {
+    fn ids(v: &[CandidateId]) -> Vec<usize> {
         v.iter().map(CandidateId::get_id).collect()
     }
 
@@ -67,7 +67,7 @@ mod tests {
 
         assert_eq!(
             vec![0],
-            ids(MinScoreDecider::new().decide(&scores).unwrap())
+            ids(&MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -77,7 +77,7 @@ mod tests {
 
         assert_eq!(
             vec![2, 0],
-            ids(MinScoreDecider::new().decide(&scores).unwrap())
+            ids(&MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 
@@ -90,7 +90,7 @@ mod tests {
 
         assert_eq!(
             vec![10, 1, 2, 9, 0],
-            ids(MinScoreDecider::new().decide(&scores).unwrap())
+            ids(&MinScoreDecider::new().decide(&scores).unwrap())
         );
     }
 }

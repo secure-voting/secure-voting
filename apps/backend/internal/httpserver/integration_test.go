@@ -69,7 +69,14 @@ func newIntegrationEnv(t *testing.T) *integrationEnv {
 		t.Fatalf("postgres: %v", err)
 	}
 
-	rdb, err := db.NewRedisClient(bootCtx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisTLS, cfg.RedisTLSCA)
+	rdb, err := db.NewRedisClient(
+		bootCtx,
+		cfg.RedisAddr,
+		cfg.RedisPassword,
+		cfg.RedisTLS,
+		cfg.RedisTLSCA,
+		cfg.RedisTLSServerName,
+	)
 	if err != nil {
 		pg.Close()
 		t.Fatalf("redis: %v", err)
@@ -488,6 +495,137 @@ func TestIntegration_RegisterDoesNotGrantPrivilegedRole(t *testing.T) {
 	dbRole := getUserRole(t, env.pg, email)
 	if dbRole == "admin" || dbRole == "researcher" {
 		t.Fatalf("privileged role was granted in db: %q", dbRole)
+	}
+}
+
+func TestIntegration_SingleSessionLoginReplaceRevokesPreviousSession(t *testing.T) {
+	env := newIntegrationEnv(t)
+
+	email := uniqueEmail("single_session")
+	password := "StrongPass123!"
+	upsertUser(t, env.pg, email, password, "voter")
+
+	status, firstLogin, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodPost,
+		env.server.URL+"/api/v1/auth/login",
+		"",
+		map[string]any{
+			"email":    email,
+			"password": password,
+		},
+	)
+	if status != http.StatusOK {
+		t.Fatalf("first login status=%d body=%s", status, string(raw))
+	}
+
+	firstAccessToken := mustGetString(t, firstLogin, "access_token")
+	firstRefreshToken := mustGetString(t, firstLogin, "refresh_token")
+
+	if firstAccessToken == "" {
+		t.Fatal("first access token is empty")
+	}
+	if firstRefreshToken == "" {
+		t.Fatal("first refresh token is empty")
+	}
+
+	status, secondLoginConflict, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodPost,
+		env.server.URL+"/api/v1/auth/login",
+		"",
+		map[string]any{
+			"email":    email,
+			"password": password,
+		},
+	)
+	if status != http.StatusConflict {
+		t.Fatalf("second login without replacement should return 409; status=%d body=%s", status, string(raw))
+	}
+	if code := responseErrorCode(t, secondLoginConflict); code != "active_session_exists" {
+		t.Fatalf("expected active_session_exists, got %q; body=%s", code, string(raw))
+	}
+
+	status, secondLogin, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodPost,
+		env.server.URL+"/api/v1/auth/login",
+		"",
+		map[string]any{
+			"email":                    email,
+			"password":                 password,
+			"replace_existing_session": true,
+		},
+	)
+	if status != http.StatusOK {
+		t.Fatalf("second login with replacement status=%d body=%s", status, string(raw))
+	}
+
+	secondAccessToken := mustGetString(t, secondLogin, "access_token")
+	secondRefreshToken := mustGetString(t, secondLogin, "refresh_token")
+
+	if secondAccessToken == "" {
+		t.Fatal("second access token is empty")
+	}
+	if secondRefreshToken == "" {
+		t.Fatal("second refresh token is empty")
+	}
+	if secondAccessToken == firstAccessToken {
+		t.Fatal("replacement login returned the same access token")
+	}
+	if secondRefreshToken == firstRefreshToken {
+		t.Fatal("replacement login returned the same refresh token")
+	}
+
+	status, oldMe, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodGet,
+		env.server.URL+"/api/v1/auth/me",
+		firstAccessToken,
+		nil,
+	)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("old access token should be unauthorized after replacement; status=%d body=%s", status, string(raw))
+	}
+	if code := responseErrorCode(t, oldMe); code != "unauthorized" {
+		t.Fatalf("expected unauthorized for old access token, got %q; body=%s", code, string(raw))
+	}
+
+	status, oldRefresh, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodPost,
+		env.server.URL+"/api/v1/auth/refresh",
+		"",
+		map[string]any{
+			"refresh_token": firstRefreshToken,
+		},
+	)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("old refresh token should be unauthorized after replacement; status=%d body=%s", status, string(raw))
+	}
+	if code := responseErrorCode(t, oldRefresh); code != "unauthorized" {
+		t.Fatalf("expected unauthorized for old refresh token, got %q; body=%s", code, string(raw))
+	}
+
+	status, newMe, raw := doJSONRequest(
+		t,
+		env.client,
+		http.MethodGet,
+		env.server.URL+"/api/v1/auth/me",
+		secondAccessToken,
+		nil,
+	)
+	if status != http.StatusOK {
+		t.Fatalf("new access token should work; status=%d body=%s", status, string(raw))
+	}
+
+	if gotEmail := mustGetString(t, newMe, "email"); gotEmail != email {
+		t.Fatalf("unexpected current user email: got=%q want=%q", gotEmail, email)
 	}
 }
 

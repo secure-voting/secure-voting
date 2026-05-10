@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"secure-voting/apps/backend/internal/computeclient"
 )
 
 func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID string, in UpdateRulesInput) (string, error) {
@@ -83,13 +84,26 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		finalFormat = f
 	}
 
+	var rules []computeclient.TallyRuleInfo
+	if s.capabilities != nil {
+		rules, err = s.capabilities.ListTallyRules(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		if !validateKnownTallyRule(finalTally, rules) {
+			return "invalid_tally_rule", nil
+		}
+	}
+
 	finalCommittee := curCommittee
 	if in.CommitteeSize != nil {
 		v := *in.CommitteeSize
 		finalCommittee = &v
 	}
 
-	finalCommittee, err = normalizeCommitteeSize(finalTally, finalCommittee, candidateCount)
+	committeeRequired := ruleRequiresCommitteeSize(finalTally, rules, s.capabilities == nil)
+	finalCommittee, err = normalizeCommitteeSize(committeeRequired, finalCommittee, candidateCount)
 	if err != nil {
 		return committeeSizeCode(err), nil
 	}
@@ -193,15 +207,6 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		return code, nil
 	}
 
-	rules, err := s.capabilities.ListTallyRules(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	if !validateKnownTallyRule(finalTally, rules) {
-		return "invalid_tally_rule", nil
-	}
-
 	params := map[string]any{
 		"committee_size":       finalCommittee,
 		"quota_type":           finalQuota,
@@ -212,15 +217,16 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		"score_step":           finalScoreStep,
 	}
 
-	if err := validateRuleCompatibility(
-		finalTally,
-		finalFormat,
-		params,
-		rules,
-	); err != nil {
-		return err.Error(), nil
+	if s.capabilities != nil {
+		if err := validateRuleCompatibility(
+			finalTally,
+			finalFormat,
+			params,
+			rules,
+		); err != nil {
+			return err.Error(), nil
+		}
 	}
-
 
 	_, err = s.db.Exec(ctx, `
 		UPDATE elections

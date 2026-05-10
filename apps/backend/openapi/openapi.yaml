@@ -28,7 +28,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: opaque-token
+      bearerFormat: opaque-access-token
 
   schemas:
     ErrorEnvelope:
@@ -43,6 +43,37 @@ components:
               type: string
             message:
               type: string
+    
+    EmailVerificationRequestResponse:
+      type: object
+      required: [ok, already_verified]
+      properties:
+        ok:
+          type: boolean
+        already_verified:
+          type: boolean
+        delivery:
+          type: string
+          enum: [dev, smtp]
+          description: dev returns the code in response; smtp sends the code by email.
+        expires_at:
+          type: string
+          format: date-time
+        max_attempts:
+          type: integer
+          example: 5
+        verification_code:
+          type: string
+          description: Present only in dev mode.
+
+    ConfirmEmailVerificationRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          example: ABCD-EFGH-JKLM-NPQR
+          description: One-time email verification code sent by email or returned in dev mode.
 
     OkResponse:
       type: object
@@ -52,9 +83,21 @@ components:
           type: boolean
           const: true
 
+    DatasetFromElectionRequest:
+      type: object
+      required: [election_id]
+      properties:
+        election_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+
     User:
       type: object
-      required: [id, email, role]
+      required: [id, email, role, email_verified]
       properties:
         id:
           type: string
@@ -68,16 +111,32 @@ components:
           type: string
         phone:
           type: string
+        email_verified:
+          type: boolean
+          description: Whether the user email has been verified.
+        email_verified_at:
+          type: string
+          format: date-time
+          description: Timestamp when the user email was verified.
 
     AuthResponse:
       type: object
-      required: [access_token, expires_at, user]
+      required: [access_token, expires_at, refresh_token, refresh_expires_at, user]
       properties:
         access_token:
           type: string
+          description: Short-lived opaque bearer token used in the Authorization header.
         expires_at:
           type: string
           format: date-time
+          description: Access token expiration timestamp.
+        refresh_token:
+          type: string
+          description: Long-lived opaque refresh token used only with /api/v1/auth/refresh.
+        refresh_expires_at:
+          type: string
+          format: date-time
+          description: Refresh token expiration timestamp.
         user:
           $ref: '#/components/schemas/User'
     
@@ -139,6 +198,19 @@ components:
           type: string
         invite_code:
           type: string
+        replace_existing_session:
+          type: boolean
+          description: >
+            When true, an existing active session for the same user is revoked and replaced
+            by the newly created session.
+
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+          description: Opaque refresh token returned by register, login, or refresh.
 
     ChangePasswordRequest:
       type: object
@@ -759,7 +831,7 @@ components:
           type: string
         source:
           type: string
-          enum: [import, generate, external]
+          enum: [import, generate, external, election]
         format:
           type: string
           enum: [approval, ranking, score]
@@ -1209,7 +1281,116 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Active session already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              examples:
+                activeSessionExists:
+                  value:
+                    error:
+                      code: active_session_exists
+                      message: active session already exists
+  
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotate access and refresh tokens
+      description: >
+        Accepts a valid refresh token, invalidates the previous access token for the session,
+        rotates the refresh token, and returns a new token pair.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refresh succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid JSON body or malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Invalid, expired, or revoked refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/email/verification/request:
+    post:
+      tags: [Auth]
+      summary: Request email verification code
+      description: >
+        Creates a short-lived one-time email verification code for the current user.
+        In dev mode the code is returned in the response. In smtp mode the code is sent by email.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification code created or sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationRequestResponse'
+        '400':
+          description: Email delivery is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
+  /api/v1/auth/email/verification/confirm:
+    post:
+      tags: [Auth]
+      summary: Confirm email verification code
+      description: >
+        Confirms the current user's email using a one-time code. The code is short-lived
+        and becomes invalid after the configured number of failed attempts.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmEmailVerificationRequest'
+      responses:
+        '200':
+          description: Email verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid, expired, or blocked verification code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
   /api/v1/auth/me:
     get:
       tags: [Auth]
@@ -1303,6 +1484,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/auth/email/verification/request:
+    post:
+      tags: [Auth]
+      summary: Request email verification token
+      description: >
+        Creates a new one-time email verification token for the current user.
+        In dev mode the response may include verification_code. In smtp mode the code is sent by email and is not returned by the API.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Verification request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailVerificationRequestResponse'
         '401':
           description: Unauthorized
           content:
@@ -2390,6 +2594,59 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         '403':
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  
+  /api/v1/datasets/from-election:
+    post:
+      tags: [Experiments]
+      summary: Create research dataset from a real election
+      description: >
+        Creates an anonymized research dataset from accepted ballots of a closed or published election.
+        Admin can export owned closed/results_ready/published elections. Researcher can export published elections with aggregates enabled.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetFromElectionRequest'
+      responses:
+        '200':
+          description: Dataset created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetCreateResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '403':
+          description: Forbidden or aggregates disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: Election not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Election is not ready, not published, or has no accepted ballots
           content:
             application/json:
               schema:

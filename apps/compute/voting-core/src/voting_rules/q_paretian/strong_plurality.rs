@@ -82,7 +82,9 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                 let scores = counts
                     .iter()
                     .zip(profile.active_candidates().iter())
-                    .map(|(score, cand)| (*score as f64).to_score(cand.to_string(), cand.get_name().to_owned()))
+                    .map(|(score, cand)| {
+                        (*score as f64).to_score(cand.to_string(), cand.get_name().to_owned())
+                    })
                     .collect();
                 return Ok((
                     RuleOutcome::from(winners.clone()),
@@ -96,6 +98,7 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                                 .winner_count(winners.len())
                                 .committee_size(0)
                                 .rounds_count(1)
+                                .tie_detected(winners.len() > 1)
                                 .build(),
                         )
                         .build(),
@@ -106,7 +109,13 @@ impl<const LIMIT: usize> VotingRuleExec<RankingBallot> for SimplePluralityRule<L
                                 .step(1)
                                 .title("Round 1".to_owned())
                                 .action("declare_winner".to_owned())
-                                .remaining_candidate_ids(profile.active_candidates().iter().map(ToString::to_string).collect())
+                                .remaining_candidate_ids(
+                                    profile
+                                        .active_candidates()
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect(),
+                                )
                                 .scores(scores)
                                 .build(),
                         ])
@@ -140,6 +149,7 @@ impl<const LIMIT: usize> Default for SimplePluralityRule<LIMIT> {
 #[allow(clippy::expect_used)]
 #[cfg(test)]
 mod tests {
+    use crate::models::BallotData;
     use crate::prelude::CandidateId;
 
     use super::*;
@@ -149,7 +159,18 @@ mod tests {
     #[test_case(vec![vec![1, 0, 2]], vec!["A".into(), "B".into(), "C".into()], (1, "B"); "degenerate majority")]
     #[test_case(vec![vec![0, 1, 2], vec![0, 2, 1], vec![0, 1, 2]], vec!["A".into(), "B".into(), "C".into()], (0, "A"); "unanimous winner")]
     fn unique_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winner: (usize, &str)) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                let names_ref = names.clone();
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names_ref[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimplePluralityRule::<30>
@@ -182,7 +203,18 @@ mod tests {
         "early q=2 detection"
     )]
     fn multiple_winner(voters: Vec<Vec<usize>>, names: Vec<String>, winners: Vec<(usize, &str)>) {
-        let profile = Profile::try_from((voters, names))
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                let names_ref = names.clone();
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names_ref[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise text example");
 
         let result = SimplePluralityRule::<30>
@@ -203,9 +235,19 @@ mod tests {
     #[test]
     fn combinatorial_explosion_filter() {
         let voters = vec![vec![0, 1, 2]; 40];
-        let names = vec!["A".into(), "B".into(), "C".into()];
+        let names: Vec<String> = vec!["A".into(), "B".into(), "C".into()];
+        let ballots: Vec<BallotData> = voters
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, names[id].clone()))
+                        .collect(),
+                )
+            })
+            .collect();
 
-        let profile = Profile::try_from((voters, names))
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile was created incorrectly, revise test example");
 
         let result = SimplePluralityRule::<30>.execute(&profile);

@@ -24,6 +24,24 @@ export type Me = {
   role?: "admin" | "voter" | "researcher" | string;
   full_name?: string | null;
   phone?: string | null;
+  email_verified?: boolean;
+  email_verified_at?: string | null;
+};
+
+export type AuthTokens = {
+  access_token: string;
+  expires_at: string;
+  refresh_token: string;
+  refresh_expires_at: string;
+};
+
+export type EmailVerificationRequestResult = {
+  ok: boolean;
+  already_verified: boolean;
+  delivery?: "dev" | "smtp" | string;
+  expires_at?: string;
+  max_attempts?: number;
+  verification_code?: string;
 };
 
 export type NotificationKind = "info" | "success" | "warning" | "error";
@@ -302,6 +320,12 @@ export type DatasetGenerateReq = {
   score_step?: number;
 };
 
+export type DatasetFromElectionReq = {
+  election_id: string;
+  name?: string;
+  description?: string;
+};
+
 export type Experiment = {
   id: string;
   type: string;
@@ -358,6 +382,8 @@ export type ExperimentRunResultResp = {
   run_id: string;
   status?: "done" | "error" | string;
   error_text?: string;
+  method?: string;
+  params?: unknown;
   winners?: string[];
   metrics?: Record<string, unknown>;
   protocol?: {

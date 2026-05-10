@@ -8,7 +8,7 @@ func intPtr(v int) *int { return &v }
 
 func TestNormalizeRuleName_More(t *testing.T) {
 	cases := map[string]string{
-		" minimax ":            "minmax",
+		" minimax ":           "minmax",
 		"condorcet_practical": "practical_condorcet",
 		"plurality":           "plurality",
 		"inverse-plurality":   "inverse_plurality",
@@ -21,27 +21,18 @@ func TestNormalizeRuleName_More(t *testing.T) {
 	}
 }
 
-func TestRequiresCommitteeSize(t *testing.T) {
-	if !requiresCommitteeSize("plurality") {
-		t.Fatal("plurality should require committee size")
-	}
-	if requiresCommitteeSize("unknown_rule") {
-		t.Fatal("unknown_rule should not require committee size")
-	}
-}
-
-func TestNormalizeCommitteeSize(t *testing.T) {
-	if _, err := normalizeCommitteeSize("plurality", nil, 3); err == nil {
+func TestNormalizeCommitteeSize_More(t *testing.T) {
+	if _, err := normalizeCommitteeSize(true, nil, 3); err == nil {
 		t.Fatal("expected required committee_size error")
 	}
-	if _, err := normalizeCommitteeSize("plurality", intPtr(0), 3); err == nil {
+	if _, err := normalizeCommitteeSize(true, intPtr(0), 3); err == nil {
 		t.Fatal("expected invalid committee_size error")
 	}
-	if _, err := normalizeCommitteeSize("plurality", intPtr(5), 3); err == nil {
+	if _, err := normalizeCommitteeSize(true, intPtr(5), 3); err == nil {
 		t.Fatal("expected too large committee_size error")
 	}
 
-	got, err := normalizeCommitteeSize("plurality", intPtr(2), 3)
+	got, err := normalizeCommitteeSize(true, intPtr(2), 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -49,12 +40,12 @@ func TestNormalizeCommitteeSize(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", got)
 	}
 
-	got, err = normalizeCommitteeSize("unknown_rule", intPtr(2), 3)
+	got, err = normalizeCommitteeSize(false, intPtr(2), 3)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got != nil {
-		t.Fatalf("expected nil for rule without committee_size, got %#v", got)
+		t.Fatalf("expected nil when committee_size is not required, got %#v", got)
 	}
 }
 
@@ -91,7 +82,7 @@ func TestNormalizeCandidateNameAndDescription(t *testing.T) {
 
 func TestCandidateNormalizationCode(t *testing.T) {
 	cases := map[string]string{
-		"at least 2 candidates required":         "candidates_required",
+		"at least 2 candidates required":        "candidates_required",
 		"candidate #1: empty name":              "invalid_candidate_name",
 		"duplicate candidate name: Alice":       "duplicate_candidate_name",
 		"candidate Alice: description too long": "invalid_candidate_description",
@@ -107,11 +98,11 @@ func TestCandidateNormalizationCode(t *testing.T) {
 
 func TestCommitteeSizeCode(t *testing.T) {
 	cases := map[string]string{
-		"at least 2 candidates required":                      "candidates_required",
+		"at least 2 candidates required":                     "candidates_required",
 		"committee_size is required for selected tally rule": "committee_size_required",
 		"committee_size must be >= 1":                        "invalid_committee_size",
 		"committee_size must be <= candidates count (3)":     "committee_size_too_large",
-		"other":                                              "invalid_committee_size",
+		"other": "invalid_committee_size",
 	}
 
 	for msg, want := range cases {

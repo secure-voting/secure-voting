@@ -25,14 +25,14 @@ func (f fakeVerifier) VerifyAccessToken(ctx context.Context, rawToken string) (u
 }
 
 type fakeSvc struct {
-	createFn      func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error)
-	listFn        func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error)
-	getFn         func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error)
-	ballotMetaFn  func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error)
-	updateRulesFn func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error)
-	actionFn      func(ctx context.Context, electionID, adminUserID, action string) (string, error)
-	createInvFn   func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error)
-	listInvFn     func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error)
+	createFn           func(ctx context.Context, createdBy string, in elections.CreateElectionInput) (string, string, error)
+	listFn             func(ctx context.Context, userID, email, role string) ([]elections.ElectionSummary, error)
+	getFn              func(ctx context.Context, electionID, userID, email, role string) (elections.ElectionDetail, string, error)
+	ballotMetaFn       func(ctx context.Context, electionID, userID, email, role string) (elections.BallotMeta, string, error)
+	updateRulesFn      func(ctx context.Context, electionID, adminUserID string, in elections.UpdateRulesInput) (string, error)
+	actionFn           func(ctx context.Context, electionID, adminUserID, action string) (string, error)
+	createInvFn        func(ctx context.Context, electionID, adminUserID, email string) (elections.InviteCreated, string, error)
+	listInvFn          func(ctx context.Context, electionID, adminUserID string) ([]elections.Invite, string, error)
 	importCandidatesFn func(ctx context.Context, filename string, content []byte) ([]elections.CandidateNormalized, string, error)
 }
 

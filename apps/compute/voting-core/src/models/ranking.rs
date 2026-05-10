@@ -7,6 +7,7 @@ use std::{collections::HashSet, ops::Index};
 use thiserror::Error;
 
 use crate::models::{
+    BallotData,
     candidate_id::CandidateId,
     profile::{CandidateRemovalError, Profile},
 };
@@ -22,6 +23,7 @@ pub struct RankingBallot {
 
 impl RankingBallot {
     /// Create a new `RankingBallot`.
+    #[must_use]
     pub fn new(votes: &[CandidateId]) -> Self {
         Self {
             votes: votes.to_vec(),
@@ -77,9 +79,6 @@ pub enum ProfileError {
     /// Returned if ballots from the same profile have different lengths.
     #[error("Votes have different numbers of candidates")]
     DifferentVoteLengths,
-    /// Returned if there is a candidate with an ID too big for the current length (they should be 0..len).
-    #[error("Candidate ID {0} was incorrect")]
-    InvalidCandidateId(usize),
     /// Returned if the ballot contains a duplicate vote.
     #[error("Candidate ID {0} was voted at least twice")]
     DoubleVote(usize),
@@ -137,24 +136,38 @@ impl Profile<RankingBallot> {
     }
 }
 
-impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
+impl TryFrom<(Vec<BallotData>, Vec<String>)> for Profile<RankingBallot> {
     type Error = ProfileError;
 
     /// Upholds these invariants:
     ///
-/// - At least one voter
+    /// - At least one voter
     /// - At least one candidate
     /// - All ballots have the same length
-    /// - All candidates' IDs are valid
     /// - Each ballot has no duplicate votes
     ///
     /// The order of candidates in each ballot represents the preference of chosen voter.
     /// Closer to the beginning means more preferable.
-    fn try_from(value: (Vec<Vec<usize>>, Vec<String>)) -> Result<Self, Self::Error> {
-        let (value, names) = value;
+    fn try_from(value: (Vec<BallotData>, Vec<String>)) -> Result<Self, Self::Error> {
+        let (ballots, names) = value;
+
+        if ballots.is_empty() {
+            return Err(ProfileError::NoVoters);
+        }
+
+        let mut value: Vec<Vec<CandidateId>> = Vec::with_capacity(ballots.len());
+        for ballot in &ballots {
+            let BallotData::Simple(votes) = ballot else {
+                continue;
+            };
+            if votes.is_empty() {
+                return Err(ProfileError::NoCandidates);
+            }
+            value.push(votes.clone());
+        }
 
         if value.is_empty() {
-            return Err(ProfileError::NoVoters);
+            return Err(ProfileError::NoCandidates);
         }
 
         if value[0].is_empty() {
@@ -165,11 +178,6 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
             return Err(ProfileError::DifferentVoteLengths);
         }
 
-        let max_id = value.iter().flat_map(|v| v.iter()).copied().max().unwrap_or(0);
-        if max_id >= names.len() {
-            return Err(ProfileError::InvalidCandidateId(max_id));
-        }
-
         if value[0].len() > names.len() {
             return Err(ProfileError::CandidateLengthMismatch(
                 value[0].len(),
@@ -177,29 +185,19 @@ impl TryFrom<(Vec<Vec<usize>>, Vec<String>)> for Profile<RankingBallot> {
             ));
         }
 
-        // If we have more names than ballot positions, that's ok - those candidates simply weren't ranked.
-
         for vote in &value {
-            let mut seen = vec![false; names.len()];
-            for &candidate in vote {
-                if seen[candidate] {
-                    return Err(ProfileError::DoubleVote(candidate));
+            let mut seen = HashSet::new();
+            for candidate in vote {
+                if !seen.insert(candidate.clone()) {
+                    return Err(ProfileError::DoubleVote(candidate.get_id()));
                 }
-                seen[candidate] = true;
             }
         }
 
         Ok(Profile {
             votes: value
                 .iter()
-                .map(|voter_info| {
-                    RankingBallot::new(
-                        &voter_info
-                            .iter()
-                            .map(|&elem| CandidateId::new(elem, names[elem].clone()))
-                            .collect::<Vec<_>>(),
-                    )
-                })
+                .map(|voter_info| RankingBallot::new(voter_info))
                 .collect(),
             active_candidates: (0..value[0].len())
                 .zip(names.iter())

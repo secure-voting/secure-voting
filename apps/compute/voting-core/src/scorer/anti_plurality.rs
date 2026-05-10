@@ -57,6 +57,8 @@ impl Scorer<RankingBallot> for AntiPluralityScorer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::BallotData;
+    use crate::models::candidate_id::CandidateId;
     use test_case::test_case;
 
     #[test_case(
@@ -82,7 +84,17 @@ mod tests {
 
         let n = votes[0].len();
         let names: Vec<String> = (0..n).map(|i| format!("C{i}")).collect::<Vec<_>>();
-        let profile = Profile::try_from((votes, names))
+        let ballots: Vec<BallotData> = votes
+            .into_iter()
+            .map(|v| {
+                BallotData::Simple(
+                    v.into_iter()
+                        .map(|id| CandidateId::new(id, format!("C{id}")))
+                        .collect(),
+                )
+            })
+            .collect();
+        let profile = Profile::try_from((ballots, names))
             .expect("Profile is constructed incorrectly, revise test examples.");
 
         assert_eq!(answer, scorer.compute_score(&profile).unwrap().score());
