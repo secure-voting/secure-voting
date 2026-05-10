@@ -15,7 +15,7 @@ REMOVE_BUILD_CACHE=0
 usage() {
   cat <<'USAGE'
 Usage:
-  bash scripts/ops/uninstall.sh --yes [options]
+  bash uninstall.sh --yes [options]
 
 Options:
   --yes                   Required confirmation for destructive uninstall.

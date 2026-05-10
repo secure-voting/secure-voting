@@ -14,7 +14,7 @@ WAIT_TIMEOUT_SECONDS=420
 usage() {
   cat <<'USAGE'
 Usage:
-  bash scripts/ops/install.sh [options]
+  bash install.sh [options]
 
 Options:
   --fresh              Stop and remove old containers, networks, volumes and generated certs before install.
