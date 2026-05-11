@@ -7,7 +7,12 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { JsonBlock } from "../../shared/ui/JsonBlock";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
-import type { TallyRuleInfo } from "../../shared/api/types";
+import type {
+  DatasetDetail,
+  DatasetListItem,
+  ElectionSummary,
+  TallyRuleInfo,
+} from "../../shared/api/types";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
@@ -30,6 +35,33 @@ const BALLOT_FORMATS = [
   { value: "ranking", label: "ranking" },
   { value: "score", label: "score" },
 ] as const;
+
+type ExperimentSourceKind = "dataset" | "published_election";
+
+function shortId(value: unknown) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return "—";
+  return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function sourceKindLabel(value: ExperimentSourceKind) {
+  if (value === "dataset") return "Существующий датасет";
+  return "Опубликованное голосование";
+}
+
+function datasetOptionLabel(item: DatasetListItem) {
+  return `${item.name} · ${item.format} · ${shortId(item.id)}`;
+}
+
+function electionOptionLabel(item: ElectionSummary) {
+  const format = item.ballot_format || "формат не указан";
+  const count =
+    typeof item.candidate_count === "number"
+      ? `${item.candidate_count} кандидатов`
+      : "число кандидатов не указано";
+
+  return `${item.title} · ${format} · ${count} · ${shortId(item.id)}`;
+}
 
 function StepHeader({
   current,
@@ -130,6 +162,20 @@ export function ExperimentCreatePage() {
 
   const [step, setStep] = useState(0);
 
+  const [sourceKind, setSourceKind] = useState<ExperimentSourceKind>("dataset");
+
+  const [datasets, setDatasets] = useState<DatasetListItem[]>([]);
+  const [datasetsLoading, setDatasetsLoading] = useState(false);
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [selectedDatasetDetail, setSelectedDatasetDetail] = useState<DatasetDetail | null>(null);
+
+  const [publishedElections, setPublishedElections] = useState<ElectionSummary[]>([]);
+  const [electionsLoading, setElectionsLoading] = useState(false);
+  const [selectedElectionId, setSelectedElectionId] = useState("");
+
+  const [createdRunIds, setCreatedRunIds] = useState<string[]>([]);
+  const [createdJobIds, setCreatedJobIds] = useState<string[]>([]);
+
   const [type, setType] = useState<"algo" | "behavior">("algo");
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
   const [tallyRule, setTallyRule] = useState("");
@@ -162,6 +208,16 @@ export function ExperimentCreatePage() {
   const currentRule = useMemo(
     () => selectedRuleInfo(availableRules, tallyRule),
     [availableRules, tallyRule]
+  );
+
+  const selectedPublishedElection = useMemo(
+    () => publishedElections.find((item) => item.id === selectedElectionId),
+    [publishedElections, selectedElectionId]
+  );
+  
+  const selectedDatasetListItem = useMemo(
+    () => datasets.find((item) => item.id === selectedDatasetId),
+    [datasets, selectedDatasetId]
   );
 
   const maxCommitteeSize = Math.max(1, candidates);
@@ -197,7 +253,7 @@ export function ExperimentCreatePage() {
     api.capabilities
       .tallyRules(token, ac.signal)
       .then((items) => {
-        const mergedItems = mergeRuleItems(items)
+        const mergedItems = mergeRuleItems(items);
         const experimentRules = mergedItems.filter((item) => item.supports_experiment_runs);
         setAvailableRules(experimentRules);
 
@@ -220,6 +276,302 @@ export function ExperimentCreatePage() {
 
     return () => ac.abort();
   }, [token, setToken]);
+
+    useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setDatasetsLoading(true);
+
+    api.datasets
+      .list(token, ac.signal)
+      .then((items) => {
+        setDatasets(items);
+        setSelectedDatasetId((prev) => prev || items[0]?.id || "");
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setErr((prev) => prev || "Не удалось загрузить список датасетов");
+        setDatasets([]);
+      })
+      .finally(() => {
+        setDatasetsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setElectionsLoading(true);
+
+    api.elections
+      .list(token, ac.signal)
+      .then((items) => {
+        const published = items.filter((item) => String(item.status || "") === "published");
+        setPublishedElections(published);
+        setSelectedElectionId((prev) => prev || published[0]?.id || "");
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setPublishedElections([]);
+      })
+      .finally(() => {
+        setElectionsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (sourceKind !== "dataset") return;
+
+    const datasetId = selectedDatasetId.trim();
+    if (!datasetId) {
+      setSelectedDatasetDetail(null);
+      return;
+    }
+
+    const ac = new AbortController();
+
+    api.datasets
+      .get(token, datasetId, ac.signal)
+      .then((dataset) => {
+        setSelectedDatasetDetail(dataset);
+
+        if (
+          dataset.format === "approval" ||
+          dataset.format === "ranking" ||
+          dataset.format === "score"
+        ) {
+          setBallotFormat(dataset.format);
+        }
+
+        const candidateCount = Math.max(2, dataset.candidates.length);
+        setCandidates(candidateCount);
+        setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
+
+        const params = dataset.parameters || {};
+
+        if (typeof params.voters === "number" && Number.isFinite(params.voters)) {
+          setVoters(Math.max(1, params.voters));
+        }
+
+        if (typeof params.approval_max_choices === "number") {
+          setApprovalMax(Math.max(1, Math.min(candidateCount, params.approval_max_choices)));
+        }
+
+        if (typeof params.ranking_top_k === "number") {
+          setRankingTopKEnabled(true);
+          setRankingTopK(Math.max(1, Math.min(candidateCount, params.ranking_top_k)));
+        } else {
+          setRankingTopKEnabled(false);
+        }
+
+        if (typeof params.score_min === "number") {
+          setScoreMin(params.score_min);
+        }
+
+        if (typeof params.score_max === "number") {
+          setScoreMax(params.score_max);
+        }
+
+        if (typeof params.score_step === "number") {
+          setScoreStep(params.score_step);
+        }
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setSelectedDatasetDetail(null);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken, sourceKind, selectedDatasetId]);
+
+  useEffect(() => {
+    if (sourceKind !== "published_election") return;
+    if (!selectedPublishedElection) return;
+
+    if (
+      selectedPublishedElection.ballot_format === "approval" ||
+      selectedPublishedElection.ballot_format === "ranking" ||
+      selectedPublishedElection.ballot_format === "score"
+    ) {
+      setBallotFormat(selectedPublishedElection.ballot_format);
+    }
+
+    if (
+      typeof selectedPublishedElection.candidate_count === "number" &&
+      selectedPublishedElection.candidate_count >= 2
+    ) {
+      const candidateCount = selectedPublishedElection.candidate_count;
+      setCandidates(candidateCount);
+      setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
+    }
+  }, [sourceKind, selectedPublishedElection]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setDatasetsLoading(true);
+
+    api.datasets
+      .list(token, ac.signal)
+      .then((items) => {
+        setDatasets(items);
+        setSelectedDatasetId((prev) => prev || items[0]?.id || "");
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setErr((prev) => prev || "Не удалось загрузить список датасетов");
+        setDatasets([]);
+      })
+      .finally(() => {
+        setDatasetsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const ac = new AbortController();
+    setElectionsLoading(true);
+
+    api.elections
+      .list(token, ac.signal)
+      .then((items) => {
+        const published = items.filter((item) => String(item.status || "") === "published");
+        setPublishedElections(published);
+        setSelectedElectionId((prev) => prev || published[0]?.id || "");
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setPublishedElections([]);
+      })
+      .finally(() => {
+        setElectionsLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (sourceKind !== "dataset") return;
+
+    const datasetId = selectedDatasetId.trim();
+    if (!datasetId) {
+      setSelectedDatasetDetail(null);
+      return;
+    }
+
+    const ac = new AbortController();
+
+    api.datasets
+      .get(token, datasetId, ac.signal)
+      .then((dataset) => {
+        setSelectedDatasetDetail(dataset);
+
+        if (
+          dataset.format === "approval" ||
+          dataset.format === "ranking" ||
+          dataset.format === "score"
+        ) {
+          setBallotFormat(dataset.format);
+        }
+
+        const candidateCount = Math.max(2, dataset.candidates.length);
+        setCandidates(candidateCount);
+        setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
+
+        const params = dataset.parameters || {};
+
+        if (typeof params.voters === "number" && Number.isFinite(params.voters)) {
+          setVoters(Math.max(1, params.voters));
+        }
+
+        if (typeof params.approval_max_choices === "number") {
+          setApprovalMax(Math.max(1, Math.min(candidateCount, params.approval_max_choices)));
+        }
+
+        if (typeof params.ranking_top_k === "number") {
+          setRankingTopKEnabled(true);
+          setRankingTopK(Math.max(1, Math.min(candidateCount, params.ranking_top_k)));
+        } else {
+          setRankingTopKEnabled(false);
+        }
+
+        if (typeof params.score_min === "number") {
+          setScoreMin(params.score_min);
+        }
+
+        if (typeof params.score_max === "number") {
+          setScoreMax(params.score_max);
+        }
+
+        if (typeof params.score_step === "number") {
+          setScoreStep(params.score_step);
+        }
+      })
+      .catch((e: any) => {
+        if (e?.name === "AbortError") return;
+        if (e?.status === 401) {
+          setToken(null);
+          return;
+        }
+        setSelectedDatasetDetail(null);
+      });
+
+    return () => ac.abort();
+  }, [token, setToken, sourceKind, selectedDatasetId]);
+
+  useEffect(() => {
+    if (sourceKind !== "published_election") return;
+    if (!selectedPublishedElection) return;
+
+    if (
+      selectedPublishedElection.ballot_format === "approval" ||
+      selectedPublishedElection.ballot_format === "ranking" ||
+      selectedPublishedElection.ballot_format === "score"
+    ) {
+      setBallotFormat(selectedPublishedElection.ballot_format);
+    }
+
+    if (
+      typeof selectedPublishedElection.candidate_count === "number" &&
+      selectedPublishedElection.candidate_count >= 2
+    ) {
+      const candidateCount = selectedPublishedElection.candidate_count;
+      setCandidates(candidateCount);
+      setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
+    }
+  }, [sourceKind, selectedPublishedElection]);
 
   useEffect(() => {
     if (allowedBallotFormats.length === 0) return;
@@ -344,6 +696,18 @@ export function ExperimentCreatePage() {
 
   const validateStep = (targetStep: number) => {
     if (targetStep >= 0) {
+      if (sourceKind === "dataset") {
+        if (datasetsLoading) return "Список датасетов еще загружается";
+        if (datasets.length === 0) return "Нет доступных датасетов";
+        if (!selectedDatasetId.trim()) return "Выберите датасет из списка";
+      }
+
+      if (sourceKind === "published_election") {
+        if (electionsLoading) return "Список опубликованных голосований еще загружается";
+        if (publishedElections.length === 0) return "Нет опубликованных голосований";
+        if (!selectedElectionId.trim()) return "Выберите опубликованное голосование из списка";
+      }
+
       if (rulesLoading && availableRules.length === 0) {
         return "Список правил еще загружается";
       }
@@ -456,16 +820,42 @@ export function ExperimentCreatePage() {
     setLoading(true);
     setErr(null);
     setCreatedId(null);
+    setCreatedRunIds([]);
+    setCreatedJobIds([]);
     setRawResp(null);
 
     try {
+      let datasetId = "";
+
+      if (sourceKind === "dataset") {
+        datasetId = selectedDatasetId.trim();
+      }
+
+      if (sourceKind === "published_election") {
+        const title = selectedPublishedElection?.title?.trim() || selectedElectionId.trim();
+
+        datasetId = await api.datasets.fromElection(token, {
+          election_id: selectedElectionId.trim(),
+          name: `Датасет из голосования: ${title}`,
+          description: `Сформирован автоматически при запуске эксперимента из опубликованного голосования ${selectedElectionId.trim()}`,
+        });
+      }
+
+      if (!datasetId) {
+        throw new Error("Не удалось определить датасет для запуска эксперимента");
+      }
+
       const body: {
         type: string;
         params: Record<string, unknown>;
         seed?: number;
       } = {
         type,
-        params: finalParams,
+        params: {
+          ...finalParams,
+          dataset_id: datasetId,
+          source_kind: sourceKind,
+        },
       };
 
       if (seed.trim()) {
@@ -473,24 +863,52 @@ export function ExperimentCreatePage() {
       }
 
       const id = await api.experiments.create(token, body);
+
+      const runs = await api.experimentRuns.batch(token, {
+        experiment_id: id,
+        dataset_ids: [datasetId],
+      });
+
+      const runIds = runs
+        .map((item) => {
+          if (typeof item.id === "string") return item.id;
+          if (typeof item.run_id === "string") return item.run_id;
+          return "";
+        })
+        .filter((item) => item.trim() !== "");
+
+      const jobIds = runs
+        .map((item) => (typeof item.job_id === "string" ? item.job_id : ""))
+        .filter((item) => item.trim() !== "");
+
       setCreatedId(id);
+      setCreatedRunIds(runIds);
+      setCreatedJobIds(jobIds);
 
       addNotification({
         kind: "success",
-        title: "Эксперимент создан",
-        message: `Создан эксперимент с id ${id}`,
+        title: "Эксперимент запущен",
+        message: `Создан эксперимент ${id} и поставлен в очередь запуск по выбранному датасету`,
       });
 
       if (IS_DEV) {
-        setRawResp({ id, body });
+        setRawResp({ id, body, runs });
       }
 
       setStep(STEPS.length - 1);
     } catch (e: any) {
       if (e?.status === 401) {
         setToken(null);
+      } else if (e?.code === "election_not_published") {
+        setErr("Для создания датасета можно выбрать только опубликованное голосование");
+      } else if (e?.code === "election_not_ready") {
+        setErr("Выбранное голосование еще не завершено");
+      } else if (e?.code === "aggregates_disabled") {
+        setErr("Для выбранного голосования отключен доступ к агрегированным данным");
+      } else if (e?.code === "no_accepted_ballots") {
+        setErr("В выбранном голосовании нет принятых бюллетеней");
       } else {
-        setErr(e?.message || "Не удалось создать эксперимент");
+        setErr(e?.message || "Не удалось создать и запустить эксперимент");
       }
     } finally {
       setLoading(false);
@@ -532,6 +950,103 @@ export function ExperimentCreatePage() {
 
         {step === 0 ? (
           <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ ...styles.card, background: "#f9fafb" }}>
+              <h3 style={{ marginTop: 0 }}>Источник данных</h3>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    checked={sourceKind === "dataset"}
+                    onChange={() => setSourceKind("dataset")}
+                  />
+                  <span>Выбрать существующий датасет</span>
+                </label>
+
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="radio"
+                    checked={sourceKind === "published_election"}
+                    onChange={() => setSourceKind("published_election")}
+                  />
+                  <span>Выбрать опубликованное голосование</span>
+                </label>
+              </div>
+
+              {sourceKind === "dataset" ? (
+                <div style={{ marginTop: 12 }}>
+                  <label>Датасет</label>
+                  <select
+                    style={styles.input}
+                    value={selectedDatasetId}
+                    onChange={(e) => setSelectedDatasetId(e.target.value)}
+                    disabled={datasetsLoading || datasets.length === 0}
+                  >
+                    {datasets.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {datasetOptionLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+
+                  {datasetsLoading ? (
+                    <div style={{ marginTop: 8, ...styles.muted }}>
+                      Загрузка датасетов...
+                    </div>
+                  ) : null}
+
+                  {!datasetsLoading && datasets.length === 0 ? (
+                    <div style={{ marginTop: 8, ...styles.muted }}>
+                      Нет доступных датасетов. Сначала импортируйте или сгенерируйте набор данных.
+                    </div>
+                  ) : null}
+
+                  {selectedDatasetDetail ? (
+                    <div style={{ marginTop: 12, ...styles.muted }}>
+                      Выбран датасет: {selectedDatasetDetail.name}. Формат: {selectedDatasetDetail.format}.
+                      Кандидатов: {selectedDatasetDetail.candidates.length}.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {sourceKind === "published_election" ? (
+                <div style={{ marginTop: 12 }}>
+                  <label>Опубликованное голосование</label>
+                  <select
+                    style={styles.input}
+                    value={selectedElectionId}
+                    onChange={(e) => setSelectedElectionId(e.target.value)}
+                    disabled={electionsLoading || publishedElections.length === 0}
+                  >
+                    {publishedElections.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {electionOptionLabel(item)}
+                      </option>
+                    ))}
+                  </select>
+
+                  {electionsLoading ? (
+                    <div style={{ marginTop: 8, ...styles.muted }}>
+                      Загрузка опубликованных голосований...
+                    </div>
+                  ) : null}
+
+                  {!electionsLoading && publishedElections.length === 0 ? (
+                    <div style={{ marginTop: 8, ...styles.muted }}>
+                      Нет опубликованных голосований. Для запуска по реальным бюллетеням сначала завершите и опубликуйте голосование.
+                    </div>
+                  ) : null}
+
+                  {selectedPublishedElection ? (
+                    <div style={{ marginTop: 12, ...styles.muted }}>
+                      При создании эксперимента из этого голосования будет автоматически сформирован датасет.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div style={styles.grid2}>
               <div>
                 <label>Тип эксперимента</label>
@@ -825,8 +1340,23 @@ export function ExperimentCreatePage() {
 
         {step === 3 ? (
           <div style={{ display: "grid", gap: 12 }}>
-            <SummaryGrid
+                        <SummaryGrid
               items={[
+                {
+                  label: "Источник данных",
+                  value: sourceKindLabel(sourceKind),
+                },
+                {
+                  label: sourceKind === "dataset" ? "Датасет" : "Опубликованное голосование",
+                  value:
+                    sourceKind === "dataset"
+                      ? selectedDatasetListItem
+                        ? datasetOptionLabel(selectedDatasetListItem)
+                        : "—"
+                      : selectedPublishedElection
+                        ? electionOptionLabel(selectedPublishedElection)
+                        : "—",
+                },
                 { label: "Тип эксперимента", value: type === "algo" ? "Алгоритмический" : "Поведенческий" },
                 {
                   label: "Формат бюллетеня",
@@ -865,15 +1395,30 @@ export function ExperimentCreatePage() {
 
             {createdId ? (
               <div style={{ ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                <div style={{ fontWeight: 700 }}>Эксперимент создан</div>
-                <div style={{ marginTop: 6 }}>ID: {createdId}</div>
+                <div style={{ fontWeight: 700 }}>Эксперимент создан и запущен</div>
+                <div style={{ marginTop: 6 }}>Experiment ID: {createdId}</div>
+
+                {createdRunIds.length > 0 ? (
+                  <div style={{ marginTop: 6 }}>
+                    Run ID: {createdRunIds.join(", ")}
+                  </div>
+                ) : null}
+
+                {createdJobIds.length > 0 ? (
+                  <div style={{ marginTop: 6 }}>
+                    Job ID: {createdJobIds.join(", ")}
+                  </div>
+                ) : null}
 
                 <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button style={styles.btnPrimary} onClick={() => nav("/research/experiments")}>
+                  <button style={styles.btnPrimary} onClick={() => nav("/research/runs")}>
+                    К запускам
+                  </button>
+                  <button style={styles.btn} onClick={() => nav("/research/experiments")}>
                     К списку экспериментов
                   </button>
-                  <button style={styles.btn} onClick={() => nav("/research/runs")}>
-                    К запускам
+                  <button style={styles.btn} onClick={() => nav("/monitoring/jobs")}>
+                    К задачам
                   </button>
                 </div>
               </div>
@@ -895,7 +1440,7 @@ export function ExperimentCreatePage() {
               </button>
             ) : (
               <button style={styles.btnPrimary} onClick={submit} disabled={loading || Boolean(createdId)}>
-                {loading ? "Создание…" : createdId ? "Уже создано" : "Создать эксперимент"}
+                {loading ? "Создание…" : createdId ? "Уже создано" : "Создать и запустить эксперимент"}
               </button>
             )}
           </div>

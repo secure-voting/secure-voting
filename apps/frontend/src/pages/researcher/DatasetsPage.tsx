@@ -215,6 +215,7 @@ export function DatasetsPage() {
 
   const [items, setItems] = useState<DatasetListItem[]>([]);
   const [selected, setSelected] = useState<DatasetDetail | null>(null);
+  const [detailScrollSeq, setDetailScrollSeq] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -270,6 +271,20 @@ export function DatasetsPage() {
 
   const listAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
+  const selectedCardRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!selected) return;
+  
+    const frame = window.requestAnimationFrame(() => {
+      selectedCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected, detailScrollSeq]);
 
   const loadList = useCallback(async () => {
     if (!token) return;
@@ -425,6 +440,7 @@ export function DatasetsPage() {
     try {
       const ds = await api.datasets.get(token, id, ac.signal);
       setSelected(ds);
+      setDetailScrollSeq((prev) => prev + 1);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (e?.status === 401) setToken(null);
@@ -1295,7 +1311,7 @@ export function DatasetsPage() {
         {detailLoading ? <div style={styles.muted}>Загрузка…</div> : null}
 
         {selected ? (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div ref={selectedCardRef} style={{ ...styles.card, scrollMarginTop: 16 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={styles.muted}>{selected.description || "Описание отсутствует"}</div>
