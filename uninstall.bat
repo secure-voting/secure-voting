@@ -10,6 +10,100 @@ set "REMOVE_ENV=0"
 set "REMOVE_BACKUPS=0"
 set "REMOVE_IMAGES=0"
 set "REMOVE_BUILD_CACHE=0"
+set "PAUSE_ON_EXIT=0"
+
+if "%~1"=="" goto interactive_menu
+goto parse_args
+
+:interactive_menu
+set "PAUSE_ON_EXIT=1"
+cls
+echo ============================================================
+echo              Secure Voting - удаление Windows
+echo ============================================================
+echo.
+echo Выберите режим удаления:
+echo.
+echo 1. Безопасное удаление
+echo    Удаляет контейнеры, сети, тома и сгенерированные сертификаты.
+echo    Сохраняет .env, резервные копии, Docker-образы и кэш сборки.
+echo.
+echo 2. Безопасное удаление с удалением .env
+echo    Удаляет стенд и локальный файл окружения .env.
+echo.
+echo 3. Безопасное удаление с удалением образов и кэша сборки
+echo    Удаляет стенд, локальные проектные образы и Docker build cache.
+echo    .env сохраняется.
+echo.
+echo 4. Полное удаление
+echo    Удаляет стенд, .env, локальные проектные образы и кэш сборки.
+echo.
+echo 5. Справка по параметрам командной строки
+echo.
+echo 0. Выход
+echo.
+set "CHOICE="
+set /p "CHOICE=Введите номер действия: "
+
+if "%CHOICE%"=="1" (
+    set "FULL=0"
+    set "YES=0"
+    set "REMOVE_ENV=0"
+    set "REMOVE_BACKUPS=0"
+    set "REMOVE_IMAGES=0"
+    set "REMOVE_BUILD_CACHE=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="2" (
+    set "FULL=0"
+    set "YES=0"
+    set "REMOVE_ENV=1"
+    set "REMOVE_BACKUPS=0"
+    set "REMOVE_IMAGES=0"
+    set "REMOVE_BUILD_CACHE=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="3" (
+    set "FULL=0"
+    set "YES=0"
+    set "REMOVE_ENV=0"
+    set "REMOVE_BACKUPS=0"
+    set "REMOVE_IMAGES=1"
+    set "REMOVE_BUILD_CACHE=1"
+    goto args_done
+)
+
+if "%CHOICE%"=="4" (
+    set "FULL=1"
+    set "YES=0"
+    set "REMOVE_ENV=1"
+    set "REMOVE_BACKUPS=0"
+    set "REMOVE_IMAGES=1"
+    set "REMOVE_BUILD_CACHE=1"
+    goto args_done
+)
+
+if "%CHOICE%"=="5" (
+    cls
+    call :print_help
+    echo.
+    pause
+    goto interactive_menu
+)
+
+if "%CHOICE%"=="0" (
+    echo.
+    echo Удаление отменено.
+    pause
+    exit /b 0
+)
+
+echo.
+echo Неизвестный пункт меню.
+pause
+goto interactive_menu
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -70,14 +164,14 @@ if not "%EXIT_CODE%"=="0" (
     echo   docker network ls
     echo   docker volume ls
     echo.
-    pause
+    if "%PAUSE_ON_EXIT%"=="1" pause
     exit /b %EXIT_CODE%
 )
 
 echo.
 echo Uninstall completed.
 echo.
-pause
+if "%PAUSE_ON_EXIT%"=="1" pause
 exit /b 0
 
 :main
@@ -90,6 +184,8 @@ if "%YES%"=="0" (
     echo.
     if "%FULL%"=="1" (
         echo FULL uninstall mode.
+        echo This will remove containers, networks, volumes, generated certificates,
+        echo .env, local project images and Docker build cache.
         echo Type DELETE to continue.
         set /p "CONFIRM=> "
         if /I not "!CONFIRM!"=="DELETE" (
@@ -99,7 +195,7 @@ if "%YES%"=="0" (
     ) else (
         echo Safe uninstall mode.
         echo Containers, networks, volumes and generated certificates will be removed.
-        echo .env, backups, local images and Docker build cache will be preserved.
+        echo .env, backups, local images and Docker build cache will be preserved unless selected in the menu.
         echo Type YES to continue.
         set /p "CONFIRM=> "
         if /I not "!CONFIRM!"=="YES" (
@@ -316,20 +412,37 @@ echo Usage:
 echo   uninstall.bat
 echo   uninstall.bat --yes
 echo   uninstall.bat --full
-echo   uninstall.bat --remove-env
-echo   uninstall.bat --remove-images
-echo   uninstall.bat --remove-build-cache
-echo   uninstall.bat --remove-backups
+echo   uninstall.bat --yes --remove-env
+echo   uninstall.bat --yes --remove-images --remove-build-cache
+echo   uninstall.bat --yes --remove-backups
+echo.
+echo Double click mode:
+echo   Running uninstall.bat without arguments opens an interactive menu.
 echo.
 echo Default safe mode:
 echo   removes containers, networks, volumes and generated certificates.
 echo   preserves .env, backups, images and Docker build cache.
 echo.
-echo Full mode:
-echo   uninstall.bat --full
-echo   removes .env, local project images and Docker build cache too.
+echo Options:
+echo   --yes
+echo       Run non-interactively without confirmation.
+echo.
+echo   --full
+echo       Remove .env, local project images and Docker build cache too.
+echo.
+echo   --remove-env
+echo       Remove local .env file.
+echo.
+echo   --remove-backups
+echo       Remove local .backups directory.
+echo.
+echo   --remove-images
+echo       Remove local project Docker images.
+echo.
+echo   --remove-build-cache
+echo       Prune Docker build cache after uninstall.
 echo.
 echo Requirements:
-echo   Windows CMD, Docker Desktop, Docker Compose v2.
+echo   Windows CMD, Docker Desktop and Docker Compose v2.
 echo   Git Bash and WSL are not used.
 exit /b 0

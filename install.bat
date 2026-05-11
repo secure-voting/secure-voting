@@ -10,6 +10,110 @@ set "WITH_DEBUG=0"
 set "PRUNE_BUILD_CACHE=0"
 set "SKIP_BUILD=0"
 set "WAIT_TIMEOUT_SECONDS=420"
+set "PAUSE_ON_EXIT=0"
+
+if "%~1"=="" goto interactive_menu
+goto parse_args
+
+:interactive_menu
+set "PAUSE_ON_EXIT=1"
+cls
+echo ============================================================
+echo              Secure Voting - установка Windows
+echo ============================================================
+echo.
+echo Перед запуском убедитесь, что Docker Desktop установлен
+echo и запущен.
+echo.
+echo Выберите режим:
+echo.
+echo 1. Чистая установка
+echo    Удаляет старые контейнеры, сети, тома, .env и сертификаты.
+echo    Создает новый .env, новые секреты и новые TLS-сертификаты.
+echo.
+echo 2. Запуск с сохранением существующего .env
+echo    Подходит, если .env уже настроен вручную.
+echo.
+echo 3. Запуск с отладочными веб-интерфейсами
+echo    Сохраняет .env и включает debug-профиль Docker Compose.
+echo.
+echo 4. Запуск без пересборки образов
+echo    Использует уже собранные Docker-образы.
+echo.
+echo 5. Чистая установка с очисткой кэша сборки Docker
+echo    Используется при проблемах со сборкой образов.
+echo.
+echo 6. Справка по параметрам командной строки
+echo.
+echo 0. Выход
+echo.
+set "CHOICE="
+set /p "CHOICE=Введите номер действия: "
+
+if "%CHOICE%"=="1" (
+    set "FRESH=1"
+    set "RESET_ENV=1"
+    set "WITH_DEBUG=0"
+    set "PRUNE_BUILD_CACHE=0"
+    set "SKIP_BUILD=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="2" (
+    set "FRESH=0"
+    set "RESET_ENV=0"
+    set "WITH_DEBUG=0"
+    set "PRUNE_BUILD_CACHE=0"
+    set "SKIP_BUILD=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="3" (
+    set "FRESH=0"
+    set "RESET_ENV=0"
+    set "WITH_DEBUG=1"
+    set "PRUNE_BUILD_CACHE=0"
+    set "SKIP_BUILD=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="4" (
+    set "FRESH=0"
+    set "RESET_ENV=0"
+    set "WITH_DEBUG=0"
+    set "PRUNE_BUILD_CACHE=0"
+    set "SKIP_BUILD=1"
+    goto args_done
+)
+
+if "%CHOICE%"=="5" (
+    set "FRESH=1"
+    set "RESET_ENV=1"
+    set "WITH_DEBUG=0"
+    set "PRUNE_BUILD_CACHE=1"
+    set "SKIP_BUILD=0"
+    goto args_done
+)
+
+if "%CHOICE%"=="6" (
+    cls
+    call :print_help
+    echo.
+    pause
+    goto interactive_menu
+)
+
+if "%CHOICE%"=="0" (
+    echo.
+    echo Установка отменена.
+    pause
+    exit /b 0
+)
+
+echo.
+echo Неизвестный пункт меню.
+pause
+goto interactive_menu
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -78,7 +182,7 @@ if not "%EXIT_CODE%"=="0" (
     echo   docker compose logs --tail=200 db mongo cache kafka
     echo   docker system df
     echo.
-    pause
+    if "%PAUSE_ON_EXIT%"=="1" pause
     exit /b %EXIT_CODE%
 )
 
@@ -87,7 +191,7 @@ echo Installation completed.
 echo Frontend: https://127.0.0.1:8080
 echo Backend health: http://127.0.0.1:3001/health
 echo.
-pause
+if "%PAUSE_ON_EXIT%"=="1" pause
 exit /b 0
 
 :main
@@ -625,39 +729,82 @@ for /L %%A in (1,1,%WAIT_ATTEMPTS%) do (
 echo.
 echo --- logs: kafka-init ---
 docker logs --tail=120 kafka-init 2>nul
-echo ERROR: timeout waiting for kafka-init
+echo ERROR: timeout waiting for kafka-init.
 exit /b 1
 
 :print_summary
 echo.
-echo == installation completed ==
+echo == stack summary ==
 docker compose --profile prod --profile debug ps
 
-call :get_env_value BOOTSTRAP_ADMIN_EMAIL ADMIN_EMAIL
-call :get_env_value BOOTSTRAP_RESEARCHER_EMAIL RESEARCHER_EMAIL
+echo.
+echo Application:
+echo   Frontend:       https://127.0.0.1:8080
+echo   Backend health: http://127.0.0.1:3001/health
+
+if "%WITH_DEBUG%"=="1" (
+    echo.
+    echo Debug web interfaces:
+    echo   pgAdmin:       http://127.0.0.1:15433
+    echo   RedisInsight:  http://127.0.0.1:5540
+    echo   Mongo Express: http://127.0.0.1:8082
+    echo   Kafka UI:      http://127.0.0.1:8089
+)
+
+call :get_env_value BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_EMAIL_VALUE
+call :get_env_value BOOTSTRAP_ADMIN_PASSWORD BOOTSTRAP_ADMIN_PASSWORD_VALUE
+call :get_env_value BOOTSTRAP_RESEARCHER_EMAIL BOOTSTRAP_RESEARCHER_EMAIL_VALUE
+call :get_env_value BOOTSTRAP_RESEARCHER_PASSWORD BOOTSTRAP_RESEARCHER_PASSWORD_VALUE
 
 echo.
-echo Frontend: https://127.0.0.1:8080
-echo Backend health: http://127.0.0.1:3001/health
-echo Admin email: %ADMIN_EMAIL%
-echo Researcher email: %RESEARCHER_EMAIL%
+echo Bootstrap accounts:
+echo   Admin email:      %BOOTSTRAP_ADMIN_EMAIL_VALUE%
+echo   Admin password:   %BOOTSTRAP_ADMIN_PASSWORD_VALUE%
+echo   Researcher email: %BOOTSTRAP_RESEARCHER_EMAIL_VALUE%
+echo   Researcher pass:  %BOOTSTRAP_RESEARCHER_PASSWORD_VALUE%
+
 echo.
-echo Passwords are stored only in local .env. Keep this file private.
+echo Notes:
+echo   The frontend uses a local TLS certificate generated in scripts\certs\out.
+echo   The browser may show a warning for the local development certificate.
+echo   Keep the .env file private because it contains generated passwords.
 exit /b 0
 
 :print_help
 echo Usage:
 echo   install.bat
-echo   install.bat --with-debug
+echo   install.bat --fresh --reset-env
 echo   install.bat --keep-existing
+echo   install.bat --keep-existing --with-debug
+echo   install.bat --keep-existing --skip-build
 echo   install.bat --prune-build-cache
-echo   install.bat --skip-build
 echo   install.bat --wait-timeout 600
 echo.
-echo Default mode:
-echo   install.bat performs fresh install and recreates .env.
+echo Double click mode:
+echo   Running install.bat without arguments opens an interactive menu.
+echo.
+echo Options:
+echo   --fresh
+echo       Remove old containers, networks, volumes and generated certificates before start.
+echo.
+echo   --reset-env
+echo       Recreate .env from .env.example and generate new local secrets.
+echo.
+echo   --keep-existing
+echo       Preserve existing .env and existing Docker data when possible.
+echo.
+echo   --with-debug
+echo       Start debug web interfaces in addition to the main services.
+echo.
+echo   --prune-build-cache
+echo       Prune Docker build cache before building images.
+echo.
+echo   --skip-build
+echo       Start existing images without rebuilding them.
+echo.
+echo   --wait-timeout N
+echo       Set service readiness timeout in seconds. Default: 420.
 echo.
 echo Requirements:
-echo   Windows CMD, PowerShell, Docker Desktop, Docker Compose v2.
-echo   Git Bash and WSL are not used.
+echo   Windows CMD, PowerShell, Docker Desktop and Docker Compose v2.
 exit /b 0
