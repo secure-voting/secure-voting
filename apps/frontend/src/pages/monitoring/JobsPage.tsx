@@ -45,6 +45,22 @@ function shortId(value: unknown) {
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
 }
 
+function dateStartMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T00:00:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function dateEndMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T23:59:59.999`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function kindLabel(kind: string) {
   switch (kind) {
     case "tally":
@@ -138,6 +154,10 @@ export function JobsPage() {
 
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
+  const [onlyErrors, setOnlyErrors] = useState(false);
 
   const [pollingOn, setPollingOn] = useState(true);
   const [pollEverySec, setPollEverySec] = useState(5);
@@ -239,37 +259,81 @@ export function JobsPage() {
     };
   }, [pollingOn, pollEverySec, load]);
 
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(searchQuery);
+    const fromMs = dateStartMs(createdFrom);
+    const toMs = dateEndMs(createdTo);
+  
+    return items.filter((job, index) => {
+      const id = idOf(job, index);
+      const status = statusOf(job);
+      const kind = kindOf(job);
+  
+      if (onlyErrors && status !== "error") return false;
+  
+      const createdRaw = str((job as any)?.created_at);
+      const createdMs = createdRaw ? Date.parse(createdRaw) : NaN;
+  
+      if (fromMs != null && (!Number.isFinite(createdMs) || createdMs < fromMs)) return false;
+      if (toMs != null && (!Number.isFinite(createdMs) || createdMs > toMs)) return false;
+  
+      if (query) {
+        const text = [
+          id,
+          shortId(id),
+          status,
+          statusLabel(status),
+          kind,
+          kindLabel(kind),
+          (job as any)?.election_id,
+          shortId((job as any)?.election_id),
+          (job as any)?.experiment_id,
+          shortId((job as any)?.experiment_id),
+          (job as any)?.experiment_run_id,
+          shortId((job as any)?.experiment_run_id),
+          (job as any)?.error_text,
+        ]
+          .map(normalizeSearch)
+          .join(" ");
+  
+        if (!text.includes(query)) return false;
+      }
+  
+      return true;
+    });
+  }, [items, searchQuery, createdFrom, createdTo, onlyErrors]);
+
   const counters = useMemo(() => {
     const m: Record<string, number> = {};
-    for (const it of items) {
+    for (const it of filteredItems) {
       const s = statusOf(it);
       m[s] = (m[s] || 0) + 1;
     }
     return m;
-  }, [items]);
+  }, [filteredItems]);
 
   const exportCsv = useCallback(() => {
-    downloadCsvFile("jobs.csv", jobsCsvRows(items));
-  }, [items]);
-
+    downloadCsvFile("jobs.csv", jobsCsvRows(filteredItems));
+  }, [filteredItems]);
+  
   const exportXlsx = useCallback(() => {
-    downloadXlsxFile("jobs.xlsx", jobsCsvRows(items), "Задачи");
-  }, [items]);
-
+    downloadXlsxFile("jobs.xlsx", jobsCsvRows(filteredItems), "Задачи");
+  }, [filteredItems]);
+  
   const exportPdf = useCallback(() => {
     downloadPdfTextFile(
       "jobs-report.pdf",
       "Отчет по задачам",
-      buildJobsReportText(items, {
+      buildJobsReportText(filteredItems, {
         statusFilter,
         kindFilter,
       })
     );
-  }, [items, statusFilter, kindFilter]);
-
+  }, [filteredItems, statusFilter, kindFilter]);
+  
   const exportJson = useCallback(() => {
-    downloadJsonFile("jobs.json", items);
-  }, [items]);
+    downloadJsonFile("jobs.json", filteredItems);
+  }, [filteredItems]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -284,10 +348,10 @@ export function JobsPage() {
             <ActionMenu
               label="Экспорт"
               items={[
-                { label: "CSV", onClick: exportCsv, disabled: items.length === 0 },
-                { label: "XLSX", onClick: exportXlsx, disabled: items.length === 0 },
-                { label: "JSON", onClick: exportJson, disabled: items.length === 0 },
-                { label: "PDF", onClick: exportPdf, disabled: items.length === 0 },
+                { label: "CSV", onClick: exportCsv, disabled: filteredItems.length === 0 },
+                { label: "XLSX", onClick: exportXlsx, disabled: filteredItems.length === 0 },
+                { label: "JSON", onClick: exportJson, disabled: filteredItems.length === 0 },
+                { label: "PDF", onClick: exportPdf, disabled: filteredItems.length === 0 },
               ]}
             />
           </div>
@@ -295,24 +359,102 @@ export function JobsPage() {
 
         <ErrorBanner error={err} />
 
-        <div style={{ marginTop: 12, ...styles.grid2 }}>
-          <div>
-            <label>Фильтр по статусу</label>
-            <input
-              style={styles.input}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              placeholder="queued, running, done, error"
-            />
+        <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Фильтры</div>
+
+          <div style={styles.grid2}>
+            <div>
+              <label>Поиск</label>
+              <input
+                style={styles.input}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ID, короткий ID, ошибка, эксперимент, запуск"
+              />
+            </div>
+
+            <div>
+              <label>Фильтр по статусу</label>
+              <select
+                style={styles.input}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">Все статусы</option>
+                <option value="queued">В очереди</option>
+                <option value="running">Выполняется</option>
+                <option value="done">Завершена</option>
+                <option value="error">Ошибка</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Фильтр по типу</label>
+              <select
+                style={styles.input}
+                value={kindFilter}
+                onChange={(e) => setKindFilter(e.target.value)}
+              >
+                <option value="">Все типы</option>
+                <option value="tally">Расчет результата</option>
+                <option value="experiment_run">Запуск эксперимента</option>
+                <option value="import_dataset">Импорт набора данных</option>
+                <option value="generate_dataset">Генерация набора данных</option>
+                <option value="report">Формирование отчета</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Создана с</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={createdFrom}
+                onChange={(e) => setCreatedFrom(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Создана по</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={createdTo}
+                onChange={(e) => setCreatedTo(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={onlyErrors}
+                  onChange={(e) => setOnlyErrors(e.target.checked)}
+                />
+                Только ошибки
+              </label>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={() => {
+                  setSearchQuery("");
+                  setStatusFilter("");
+                  setKindFilter("");
+                  setCreatedFrom("");
+                  setCreatedTo("");
+                  setOnlyErrors(false);
+                }}
+              >
+                Сбросить фильтры
+              </button>
+            </div>
           </div>
-          <div>
-            <label>Фильтр по типу</label>
-            <input
-              style={styles.input}
-              value={kindFilter}
-              onChange={(e) => setKindFilter(e.target.value)}
-              placeholder="tally, experiment_run, import_dataset"
-            />
+
+          <div style={{ marginTop: 10, ...styles.muted }}>
+            Показано: {filteredItems.length} из {items.length}
           </div>
         </div>
 
@@ -355,9 +497,11 @@ export function JobsPage() {
 
         {items.length === 0 ? (
           <div style={styles.muted}>Список пуст</div>
+        ) : filteredItems.length === 0 ? (
+          <div style={styles.muted}>По заданным фильтрам ничего не найдено</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {items.map((job, index) => {
+            {filteredItems.map((job, index) => {
               const id = idOf(job, index);
               const status = statusOf(job);
               const kind = kindOf(job);

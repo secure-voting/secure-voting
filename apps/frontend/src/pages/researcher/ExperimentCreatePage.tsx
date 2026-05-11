@@ -21,7 +21,6 @@ const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 const STEPS = [
   "Основные параметры",
   "Параметры бюллетеня",
-  "Дополнительные параметры",
   "Проверка",
 ] as const;
 
@@ -74,7 +73,7 @@ function StepHeader({
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
+        gridTemplateColumns: "repeat(3, 1fr)",
         gap: 8,
         marginBottom: 16,
       }}
@@ -193,9 +192,6 @@ export function ExperimentCreatePage() {
   const [scoreStep, setScoreStep] = useState(1);
 
   const [seed, setSeed] = useState("");
-
-  const [includeAdvancedParams, setIncludeAdvancedParams] = useState(false);
-  const [paramsText, setParamsText] = useState("{\n  \n}");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -517,39 +513,6 @@ export function ExperimentCreatePage() {
     quotaEnabled,
   ]);
 
-  const parsedAdvancedParams = useMemo(() => {
-    const trimmed = paramsText.trim();
-    if (!includeAdvancedParams) {
-      return { ok: true, value: {} as Record<string, unknown>, message: "" };
-    }
-    if (!trimmed) {
-      return { ok: true, value: {} as Record<string, unknown>, message: "" };
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return {
-          ok: false,
-          value: {} as Record<string, unknown>,
-          message: "Дополнительные параметры должны быть JSON-объектом",
-        };
-      }
-
-      return {
-        ok: true,
-        value: parsed as Record<string, unknown>,
-        message: "",
-      };
-    } catch {
-      return {
-        ok: false,
-        value: {} as Record<string, unknown>,
-        message: "Дополнительные параметры содержат невалидный JSON",
-      };
-    }
-  }, [includeAdvancedParams, paramsText]);
-
   const structuredParams = useMemo(() => {
     const params: Record<string, unknown> = {
       ballot_format: ballotFormat,
@@ -598,10 +561,7 @@ export function ExperimentCreatePage() {
     selectedRulesNeedScoreRange,
   ]);
 
-  const finalParams = useMemo(
-    () => ({ ...structuredParams, ...parsedAdvancedParams.value }),
-    [structuredParams, parsedAdvancedParams.value]
-  );
+  const finalParams = structuredParams;
 
   const validateStep = (targetStep: number) => {
     if (targetStep >= 0) {
@@ -672,16 +632,12 @@ export function ExperimentCreatePage() {
       }
     }
 
-    if (targetStep >= 2) {
+    if (targetStep >= 0) {
       if (seed.trim()) {
         const seedNum = Number(seed);
         if (!Number.isFinite(seedNum)) {
           return "Seed должен быть числом";
         }
-      }
-
-      if (!parsedAdvancedParams.ok) {
-        return parsedAdvancedParams.message;
       }
     }
 
@@ -1132,6 +1088,19 @@ export function ExperimentCreatePage() {
                 />
               </div>
 
+              <div>
+                <label>Seed</label>
+                <input
+                  style={styles.input}
+                  value={seed}
+                  onChange={(e) => setSeed(e.target.value)}
+                  placeholder="Например: 42"
+                />
+                <div style={{ marginTop: 8, ...styles.muted }}>
+                  Необязательное зерно воспроизводимости. Если указать одно и то же значение, эксперимент можно будет повторить с теми же исходными условиями.
+                </div>
+              </div>
+
               <div style={{ ...styles.card, background: "#f9fafb" }}>
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
@@ -1273,60 +1242,6 @@ export function ExperimentCreatePage() {
         ) : null}
 
         {step === 2 ? (
-          <div style={{ display: "grid", gap: 12 }}>
-            <div style={styles.grid2}>
-              <div>
-                <label>Seed</label>
-                <input
-                  style={styles.input}
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                  placeholder="Например: 42"
-                />
-              </div>
-            </div>
-
-            <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={includeAdvancedParams}
-                  onChange={(e) => setIncludeAdvancedParams(e.target.checked)}
-                />
-                Добавить дополнительные JSON-параметры
-              </label>
-
-              <div style={{ marginTop: 8, ...styles.muted }}>
-                Дополнительные параметры будут объединены со структурированными полями формы.
-                При совпадении ключей значения из JSON переопределят значения из формы.
-              </div>
-            </div>
-
-            {includeAdvancedParams ? (
-              <div>
-                <label>Advanced params (JSON object)</label>
-                <textarea
-                  style={{
-                    ...styles.input,
-                    minHeight: 220,
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                  }}
-                  value={paramsText}
-                  onChange={(e) => setParamsText(e.target.value)}
-                />
-              </div>
-            ) : null}
-
-            <div style={{ ...styles.card, background: parsedAdvancedParams.ok ? "#f0fdf4" : "#fff1f2" }}>
-              <div><b>Статус JSON-параметров:</b></div>
-              <div style={{ marginTop: 6 }}>
-                {parsedAdvancedParams.ok ? "Корректно" : parsedAdvancedParams.message}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {step === 3 ? (
           <div style={{ display: "grid", gap: 12 }}>
             <SummaryGrid
               items={[

@@ -57,6 +57,38 @@ function shortId(value: unknown) {
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
 }
 
+function dateStartMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T00:00:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function dateEndMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T23:59:59.999`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function runTimeMs(item: ExperimentRunItem) {
+  const values = [
+    (item as any)?.created_at,
+    (item as any)?.started_at,
+    (item as any)?.finished_at,
+  ];
+
+  for (const value of values) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms)) return ms;
+  }
+
+  return NaN;
+}
+
 function datasetCandidatesCount(value: unknown, datasetMap?: Record<string, DatasetListItem>) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return "—";
@@ -145,6 +177,23 @@ function experimentRuleId(exp?: Experiment | null) {
 function experimentRuleLabel(exp?: Experiment | null) {
   const id = experimentRuleId(exp);
   return id ? tallyRuleLabel(id) : "—";
+}
+
+function experimentOptionLabel(exp: Experiment, datasetMap: Record<string, DatasetListItem>) {
+  const params = experimentParamsObject(exp.params);
+  const rule = experimentRuleLabel(exp);
+  const format = formatBallotFormat(experimentBallotFormat(exp));
+  const datasetID = typeof params.dataset_id === "string" ? params.dataset_id : "";
+
+  const parts = [rule, format];
+
+  if (datasetID) {
+    parts.push(datasetLabel(datasetID, datasetMap));
+  }
+
+  parts.push(shortId(exp.id));
+
+  return parts.filter((item) => item && item !== "—").join(" · ");
 }
 
 function experimentBallotFormat(exp?: Experiment | null) {
@@ -767,6 +816,13 @@ export function ExperimentRunsPage() {
   const [experimentIdFilter, setExperimentIdFilter] = useState(
     locationState?.experimentIdFilter || ""
   );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [runStatusFilter, setRunStatusFilter] = useState("");
+  const [runRuleFilter, setRunRuleFilter] = useState("");
+  const [runFormatFilter, setRunFormatFilter] = useState("");
+  const [datasetFilter, setDatasetFilter] = useState("");
+  const [createdFrom, setCreatedFrom] = useState("");
+  const [createdTo, setCreatedTo] = useState("");
   const [batchPayload, setBatchPayload] = useState("{\n  \n}");
 
   const [pollingOn, setPollingOn] = useState(true);
@@ -792,6 +848,105 @@ export function ExperimentRunsPage() {
 
   const timerRef = useRef<number | null>(null);
   const prevStatusRef = useRef<Map<string, string>>(new Map());
+
+  const experimentOptions = useMemo(
+    () =>
+      Object.values(experimentMap)
+        .map((item) => ({
+          value: item.id,
+          label: experimentOptionLabel(item, datasetMap),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+    [experimentMap, datasetMap]
+  );
+  
+  const ruleOptions = useMemo(() => {
+    const map = new Map<string, string>();
+  
+    for (const exp of Object.values(experimentMap)) {
+      const rule = experimentRuleId(exp);
+      if (rule) {
+        map.set(rule, tallyRuleLabel(rule));
+      }
+    }
+  
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
+  }, [experimentMap]);
+  
+  const datasetOptions = useMemo(
+    () =>
+      Object.values(datasetMap)
+        .map((item) => ({
+          value: item.id,
+          label: item.name?.trim() ? item.name.trim() : `Датасет ${shortId(item.id)}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+    [datasetMap]
+  );
+  
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(searchQuery);
+    const fromMs = dateStartMs(createdFrom);
+    const toMs = dateEndMs(createdTo);
+  
+    return items.filter((item, index) => {
+      const exp = experimentRunExperiment(item, experimentMap);
+      const ruleID = experimentRuleId(exp);
+      const format = experimentBallotFormat(exp);
+      const status = runStatus(item);
+      const datasetID = typeof item.dataset_id === "string" ? item.dataset_id : "";
+      const id = runId(item, index);
+  
+      if (experimentIdFilter.trim() && item.experiment_id !== experimentIdFilter.trim()) return false;
+      if (runStatusFilter && status !== runStatusFilter) return false;
+      if (runRuleFilter && ruleID !== runRuleFilter) return false;
+      if (runFormatFilter && format !== runFormatFilter) return false;
+      if (datasetFilter && datasetID !== datasetFilter) return false;
+  
+      const ms = runTimeMs(item);
+      if (fromMs != null && (!Number.isFinite(ms) || ms < fromMs)) return false;
+      if (toMs != null && (!Number.isFinite(ms) || ms > toMs)) return false;
+  
+      if (query) {
+        const text = [
+          id,
+          shortId(id),
+          item.experiment_id,
+          shortId(item.experiment_id),
+          item.dataset_id,
+          shortId(item.dataset_id),
+          status,
+          runStatusLabel(status),
+          ruleID,
+          tallyRuleLabel(ruleID),
+          format,
+          formatBallotFormat(format),
+          datasetLabel(item.dataset_id, datasetMap),
+          exp ? experimentOptionLabel(exp, datasetMap) : "",
+        ]
+          .map(normalizeSearch)
+          .join(" ");
+  
+        if (!text.includes(query)) return false;
+      }
+  
+      return true;
+    });
+  }, [
+    items,
+    searchQuery,
+    createdFrom,
+    createdTo,
+    experimentIdFilter,
+    runStatusFilter,
+    runRuleFilter,
+    runFormatFilter,
+    datasetFilter,
+    experimentMap,
+    datasetMap,
+  ]);
 
   const loadList = useCallback(
     async (silent?: boolean) => {
@@ -1296,6 +1451,142 @@ export function ExperimentRunsPage() {
           </div>
         ) : null}
 
+        <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Фильтры</div>
+
+          <div style={styles.grid2}>
+            <div>
+              <label>Поиск</label>
+              <input
+                style={styles.input}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Правило, датасет, статус, короткий ID"
+              />
+            </div>
+
+            <div>
+              <label>Эксперимент</label>
+              <select
+                style={styles.input}
+                value={experimentIdFilter}
+                onChange={(e) => setExperimentIdFilter(e.target.value)}
+              >
+                <option value="">Все эксперименты</option>
+                {experimentOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Правило подсчета</label>
+              <select
+                style={styles.input}
+                value={runRuleFilter}
+                onChange={(e) => setRunRuleFilter(e.target.value)}
+              >
+                <option value="">Все правила</option>
+                {ruleOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Формат бюллетеня</label>
+              <select
+                style={styles.input}
+                value={runFormatFilter}
+                onChange={(e) => setRunFormatFilter(e.target.value)}
+              >
+                <option value="">Все форматы</option>
+                <option value="approval">Одобрение</option>
+                <option value="ranking">Ранжирование</option>
+                <option value="score">Оценивание</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Датасет</label>
+              <select
+                style={styles.input}
+                value={datasetFilter}
+                onChange={(e) => setDatasetFilter(e.target.value)}
+              >
+                <option value="">Все датасеты</option>
+                {datasetOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Статус запуска</label>
+              <select
+                style={styles.input}
+                value={runStatusFilter}
+                onChange={(e) => setRunStatusFilter(e.target.value)}
+              >
+                <option value="">Все статусы</option>
+                <option value="queued">В очереди</option>
+                <option value="running">Выполняется</option>
+                <option value="done">Завершен</option>
+                <option value="error">Ошибка</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Дата с</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={createdFrom}
+                onChange={(e) => setCreatedFrom(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Дата по</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={createdTo}
+                onChange={(e) => setCreatedTo(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={() => {
+                  setSearchQuery("");
+                  setExperimentIdFilter("");
+                  setRunStatusFilter("");
+                  setRunRuleFilter("");
+                  setRunFormatFilter("");
+                  setDatasetFilter("");
+                  setCreatedFrom("");
+                  setCreatedTo("");
+                }}
+              >
+                Сбросить фильтры
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, ...styles.muted }}>
+            Показано: {filteredItems.length} из {items.length}
+          </div>
+        </div>
+
         <div style={{ marginTop: 12, ...styles.grid2 }}>
           <div>
             <label>Фильтр по эксперименту</label>
@@ -1359,7 +1650,7 @@ export function ExperimentRunsPage() {
           {loading ? <div style={styles.muted}>Загрузка…</div> : null}
           {!loading && items.length === 0 ? <div style={styles.muted}>Список пуст</div> : null}
 
-          {items.map((item, index) => {
+          {filteredItems.map((item, index) => {
             const id = runId(item, index);
             const status = runStatus(item);
             const experiment = experimentRunExperiment(item, experimentMap);

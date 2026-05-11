@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../shared/api/client";
 import type { AuditLogItem } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
@@ -38,6 +38,22 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function dateStartIso(value: string) {
+  if (!value.trim()) return "";
+  const ms = Date.parse(`${value}T00:00:00`);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
+}
+
+function dateEndIso(value: string) {
+  if (!value.trim()) return "";
+  const ms = Date.parse(`${value}T23:59:59.999`);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : "";
 }
 
 function detailsOf(item: AuditLogItem): Record<string, unknown> {
@@ -210,6 +226,9 @@ export function AuditLogPage() {
   const [actorUserId, setActorUserId] = useState("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [targetTypeFilter, setTargetTypeFilter] = useState("");
+  const [targetIdFilter, setTargetIdFilter] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -232,8 +251,8 @@ export function AuditLogPage() {
         {
           event_type: eventType.trim() || undefined,
           actor_user_id: actorUserId.trim() || undefined,
-          since: since.trim() || undefined,
-          until: until.trim() || undefined,
+          since: dateStartIso(since) || undefined,
+          until: dateEndIso(until) || undefined,
         },
         ac.signal
       );
@@ -248,30 +267,85 @@ export function AuditLogPage() {
     }
   }, [token, eventType, actorUserId, since, until, setToken]);
 
-  const exportCsv = useCallback(() => {
-    downloadCsvFile("audit-log.csv", auditCsvRows(items));
+  const eventOptions = useMemo(() => {
+    const map = new Map<string, string>();
+
+    for (const item of items) {
+      const event = String(item.event_type ?? "").trim();
+      if (event) {
+        map.set(event, auditEventLabel(event));
+      }
+    }
+
+    return Array.from(map.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru"));
   }, [items]);
 
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(searchQuery);
+    const targetType = targetTypeFilter.trim();
+    const targetId = targetIdFilter.trim().toLowerCase();
+
+    return items.filter((item) => {
+      const details = detailsOf(item);
+      const itemTargetType = String(details.target_type ?? "").trim();
+      const itemTargetId = String(details.target_id ?? "").trim();
+      const actorUserIdValue = compact((item as Record<string, unknown>).actor_user_id);
+
+      if (targetType && itemTargetType !== targetType) return false;
+      if (targetId && !itemTargetId.toLowerCase().includes(targetId)) return false;
+
+      if (query) {
+        const text = [
+          item.id,
+          shortId(item.id),
+          item.event_type,
+          auditEventLabel(item.event_type),
+          item.occurred_at,
+          actorUserIdValue,
+          shortId(actorUserIdValue),
+          itemTargetType,
+          targetTypeLabel(itemTargetType),
+          itemTargetId,
+          shortId(itemTargetId),
+          auditMainDescription(item),
+          compact(details),
+        ]
+          .map(normalizeSearch)
+          .join(" ");
+
+        if (!text.includes(query)) return false;
+      }
+
+      return true;
+    });
+  }, [items, searchQuery, targetTypeFilter, targetIdFilter]);
+
+  const exportCsv = useCallback(() => {
+    downloadCsvFile("audit-log.csv", auditCsvRows(filteredItems));
+  }, [filteredItems]);
+
   const exportXlsx = useCallback(() => {
-    downloadXlsxFile("audit-log.xlsx", auditCsvRows(items), "AuditLog");
-  }, [items]);
+    downloadXlsxFile("audit-log.xlsx", auditCsvRows(filteredItems), "AuditLog");
+  }, [filteredItems]);
 
   const exportPdf = useCallback(() => {
     downloadPdfTextFile(
       "audit-log-report.pdf",
       "Отчет по журналу аудита",
-      buildAuditReportText(items, selected, {
+      buildAuditReportText(filteredItems, selected, {
         eventType,
         actorUserId,
         since,
         until,
       })
     );
-  }, [items, selected, eventType, actorUserId, since, until]);
+  }, [filteredItems, selected, eventType, actorUserId, since, until]);
 
   const exportJson = useCallback(() => {
-    downloadJsonFile("audit-log.json", items);
-  }, [items]);
+    downloadJsonFile("audit-log.json", filteredItems);
+  }, [filteredItems]);
 
   const exportSelectedJson = useCallback(() => {
     if (!selected) return;
@@ -305,10 +379,10 @@ export function AuditLogPage() {
             <ActionMenu
               label="Экспорт"
               items={[
-                { label: "CSV", onClick: exportCsv, disabled: items.length === 0 },
-                { label: "XLSX", onClick: exportXlsx, disabled: items.length === 0 },
-                { label: "JSON", onClick: exportJson, disabled: items.length === 0 },
-                { label: "PDF", onClick: exportPdf, disabled: items.length === 0 },
+                { label: "CSV", onClick: exportCsv, disabled: filteredItems.length === 0 },
+                { label: "XLSX", onClick: exportXlsx, disabled: filteredItems.length === 0 },
+                { label: "JSON", onClick: exportJson, disabled: filteredItems.length === 0 },
+                { label: "PDF", onClick: exportPdf, disabled: filteredItems.length === 0 },
                 {
                   label: "Выбранное событие",
                   onClick: exportSelectedJson,
@@ -321,50 +395,128 @@ export function AuditLogPage() {
 
         <ErrorBanner error={err} />
 
-        <div style={{ marginTop: 12, ...styles.grid2 }}>
-          <div>
-            <label>Тип события</label>
-            <input
-              style={styles.input}
-              value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
-              placeholder="например: election_created"
-            />
+        <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Фильтры журнала</div>
+
+          <div style={styles.grid2}>
+            <div>
+              <label>Поиск</label>
+              <input
+                style={styles.input}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Событие, объект, ID, details"
+              />
+            </div>
+
+            <div>
+              <label>Тип события</label>
+              <select
+                style={styles.input}
+                value={eventType}
+                onChange={(e) => setEventType(e.target.value)}
+              >
+                <option value="">Все события</option>
+                {eventOptions.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>ID пользователя</label>
+              <input
+                style={styles.input}
+                value={actorUserId}
+                onChange={(e) => setActorUserId(e.target.value)}
+                placeholder="UUID пользователя"
+              />
+            </div>
+
+            <div>
+              <label>Тип объекта</label>
+              <select
+                style={styles.input}
+                value={targetTypeFilter}
+                onChange={(e) => setTargetTypeFilter(e.target.value)}
+              >
+                <option value="">Все объекты</option>
+                <option value="user">Пользователь</option>
+                <option value="auth_session">Сессия</option>
+                <option value="election">Голосование</option>
+                <option value="election_invite">Приглашение</option>
+                <option value="ballot">Бюллетень</option>
+                <option value="experiment">Эксперимент</option>
+                <option value="experiment_run">Запуск эксперимента</option>
+                <option value="dataset">Набор данных</option>
+                <option value="job">Задача</option>
+              </select>
+            </div>
+
+            <div>
+              <label>ID объекта</label>
+              <input
+                style={styles.input}
+                value={targetIdFilter}
+                onChange={(e) => setTargetIdFilter(e.target.value)}
+                placeholder="UUID или короткий ID"
+              />
+            </div>
+
+            <div>
+              <label>С даты</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={since}
+                onChange={(e) => setSince(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>По дату</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={until}
+                onChange={(e) => setUntil(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={() => {
+                  setEventType("");
+                  setActorUserId("");
+                  setSince("");
+                  setUntil("");
+                  setSearchQuery("");
+                  setTargetTypeFilter("");
+                  setTargetIdFilter("");
+                }}
+              >
+                Сбросить фильтры
+              </button>
+            </div>
           </div>
-          <div>
-            <label>ID пользователя</label>
-            <input
-              style={styles.input}
-              value={actorUserId}
-              onChange={(e) => setActorUserId(e.target.value)}
-              placeholder="UUID пользователя"
-            />
-          </div>
-          <div>
-            <label>С даты</label>
-            <input
-              style={styles.input}
-              value={since}
-              onChange={(e) => setSince(e.target.value)}
-              placeholder="2026-04-28T00:00:00Z"
-            />
-          </div>
-          <div>
-            <label>По дату</label>
-            <input
-              style={styles.input}
-              value={until}
-              onChange={(e) => setUntil(e.target.value)}
-              placeholder="2026-04-29T00:00:00Z"
-            />
+
+          <div style={{ marginTop: 10, ...styles.muted }}>
+            Показано: {filteredItems.length} из {items.length}
           </div>
         </div>
 
         <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           {loading ? <div style={styles.muted}>Загрузка…</div> : null}
           {!loading && items.length === 0 ? <div style={styles.muted}>Список пуст</div> : null}
+          {!loading && items.length > 0 && filteredItems.length === 0 ? (
+            <div style={styles.muted}>По заданным фильтрам ничего не найдено</div>
+          ) : null}
 
-          {items.map((item, index) => {
+          {filteredItems.map((item, index) => {
             const id = String(item.id ?? `audit-${index}`);
             const event = String(item.event_type ?? "unknown");
             const occurredAt = item.occurred_at ?? "—";

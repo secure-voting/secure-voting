@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type {
@@ -86,6 +86,38 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
+}
+
+function dateStartMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T00:00:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function dateEndMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T23:59:59.999`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function datasetCreatedMs(item: DatasetListItem) {
+  const raw = (item as any)?.created_at;
+  if (typeof raw !== "string" || !raw.trim()) return NaN;
+  return Date.parse(raw);
+}
+
+function datasetCandidatesCount(item: DatasetListItem) {
+  const candidates = (item as any)?.candidates;
+  if (Array.isArray(candidates)) return candidates.length;
+
+  const count = (item as any)?.candidate_count;
+  if (typeof count === "number" && Number.isFinite(count)) return count;
+
+  return null;
 }
 
 function boolLabel(value: unknown) {
@@ -217,6 +249,13 @@ export function DatasetsPage() {
   const [selected, setSelected] = useState<DatasetDetail | null>(null);
   const [detailScrollSeq, setDetailScrollSeq] = useState(0);
 
+  const [datasetSearchQuery, setDatasetSearchQuery] = useState("");
+  const [datasetFormatFilter, setDatasetFormatFilter] = useState("");
+  const [datasetSourceFilter, setDatasetSourceFilter] = useState("");
+  const [datasetCreatedFrom, setDatasetCreatedFrom] = useState("");
+  const [datasetCreatedTo, setDatasetCreatedTo] = useState("");
+  const [datasetSeedFilter, setDatasetSeedFilter] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -273,16 +312,73 @@ export function DatasetsPage() {
   const detailAbortRef = useRef<AbortController | null>(null);
   const selectedCardRef = useRef<HTMLDivElement | null>(null);
 
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(datasetSearchQuery);
+    const fromMs = dateStartMs(datasetCreatedFrom);
+    const toMs = dateEndMs(datasetCreatedTo);
+    const seed = datasetSeedFilter.trim();
+
+    return items.filter((item) => {
+      const format = String((item as any)?.format ?? "").trim();
+      const source = String((item as any)?.source ?? "").trim();
+      const id = String((item as any)?.id ?? "").trim();
+      const name = String((item as any)?.name ?? "").trim();
+      const description = String((item as any)?.description ?? "").trim();
+      const createdMs = datasetCreatedMs(item);
+      const parameters = (item as any)?.parameters;
+      const itemSeed =
+        parameters && typeof parameters === "object"
+          ? String((parameters as Record<string, unknown>).seed ?? "")
+          : String((item as any)?.seed ?? "");
+
+      if (datasetFormatFilter && format !== datasetFormatFilter) return false;
+      if (datasetSourceFilter && source !== datasetSourceFilter) return false;
+      if (seed && itemSeed !== seed) return false;
+
+      if (fromMs != null && (!Number.isFinite(createdMs) || createdMs < fromMs)) return false;
+      if (toMs != null && (!Number.isFinite(createdMs) || createdMs > toMs)) return false;
+
+      if (query) {
+        const text = [
+          id,
+          shortId(id),
+          name,
+          description,
+          format,
+          formatLabel(format),
+          source,
+          sourceLabel(source),
+          itemSeed,
+          datasetCandidatesCount(item),
+        ]
+          .map(normalizeSearch)
+          .join(" ");
+
+        if (!text.includes(query)) return false;
+      }
+
+      return true;
+    });
+  }, [
+    items,
+    datasetSearchQuery,
+    datasetFormatFilter,
+    datasetSourceFilter,
+    datasetCreatedFrom,
+    datasetCreatedTo,
+    datasetSeedFilter,
+  ]);
+
   useEffect(() => {
     if (!selected) return;
-  
+
     const frame = window.requestAnimationFrame(() => {
       selectedCardRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "start",
       });
     });
-  
+
     return () => window.cancelAnimationFrame(frame);
   }, [selected, detailScrollSeq]);
 
@@ -928,17 +1024,117 @@ export function DatasetsPage() {
         </div>
 
         <ErrorBanner error={err} />
+
         {info ? (
           <div style={{ ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0", marginBottom: 12 }}>
             {info}
           </div>
         ) : null}
 
+        <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Фильтры датасетов</div>
+
+          <div style={styles.grid2}>
+            <div>
+              <label>Поиск</label>
+              <input
+                style={styles.input}
+                value={datasetSearchQuery}
+                onChange={(e) => setDatasetSearchQuery(e.target.value)}
+                placeholder="Название, ID, короткий ID, seed"
+              />
+            </div>
+
+            <div>
+              <label>Формат бюллетеня</label>
+              <select
+                style={styles.input}
+                value={datasetFormatFilter}
+                onChange={(e) => setDatasetFormatFilter(e.target.value)}
+              >
+                <option value="">Все форматы</option>
+                <option value="approval">Одобрение</option>
+                <option value="ranking">Ранжирование</option>
+                <option value="score">Оценивание</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Источник</label>
+              <select
+                style={styles.input}
+                value={datasetSourceFilter}
+                onChange={(e) => setDatasetSourceFilter(e.target.value)}
+              >
+                <option value="">Все источники</option>
+                <option value="generate">Сгенерирован</option>
+                <option value="import">Импортирован</option>
+                <option value="election">Из голосования</option>
+                <option value="external">Внешний</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Создан с</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={datasetCreatedFrom}
+                onChange={(e) => setDatasetCreatedFrom(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Создан по</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={datasetCreatedTo}
+                onChange={(e) => setDatasetCreatedTo(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Seed</label>
+              <input
+                style={styles.input}
+                value={datasetSeedFilter}
+                onChange={(e) => setDatasetSeedFilter(e.target.value)}
+                placeholder="Например: 42"
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={() => {
+                  setDatasetSearchQuery("");
+                  setDatasetFormatFilter("");
+                  setDatasetSourceFilter("");
+                  setDatasetCreatedFrom("");
+                  setDatasetCreatedTo("");
+                  setDatasetSeedFilter("");
+                }}
+              >
+                Сбросить фильтры
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, ...styles.muted }}>
+            Показано: {filteredItems.length} из {items.length}
+          </div>
+        </div>
+
         <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           {loading ? <div style={styles.muted}>Загрузка…</div> : null}
           {!loading && items.length === 0 ? <div style={styles.muted}>Список пуст</div> : null}
+          {!loading && items.length > 0 && filteredItems.length === 0 ? (
+            <div style={styles.muted}>По заданным фильтрам ничего не найдено</div>
+          ) : null}
 
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <div key={item.id} style={{ ...styles.card, padding: 12 }}>
               <div
                 style={{
