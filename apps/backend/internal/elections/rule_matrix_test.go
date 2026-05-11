@@ -58,6 +58,16 @@ func mockRules() []computeclient.TallyRuleInfo {
 			SupportsRankingTopK:        true,
 			RequiresScoreRange:         false,
 		},
+		{
+			ID:                         "hare",
+			BallotFormats:              []string{"ranking"},
+			SupportsElectionTally:      true,
+			RequiresCommitteeSize:      true,
+			SupportsQuotaType:          true,
+			RequiresApprovalMaxChoices: false,
+			SupportsRankingTopK:        true,
+			RequiresScoreRange:         false,
+		},
 	}
 }
 
@@ -367,3 +377,19 @@ func TestValidateRuleCompatibility_RuleMatrixContract_RejectsWrongBallotFormat(t
 }
 
 func strPtr(v string) *string { return &v }
+
+func TestRuleSupportsQuotaType_UsesCapabilities(t *testing.T) {
+	rules := mockRules()
+
+	if ruleSupportsQuotaType("plurality", rules, true) {
+		t.Fatalf("expected plurality not to support quota")
+	}
+
+	if !ruleSupportsQuotaType("hare", rules, false) {
+		t.Fatalf("expected hare to support quota")
+	}
+
+	if !ruleSupportsQuotaType("unknown_rule", rules, true) {
+		t.Fatalf("expected fallback to be used for unknown rule")
+	}
+}

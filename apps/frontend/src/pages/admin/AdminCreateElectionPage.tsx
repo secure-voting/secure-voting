@@ -859,7 +859,7 @@ export function AdminCreateElectionPage() {
       "";
 
     setTallyRule(defaultRankingRule);
-    setCommitteeSize(2);
+    setCommitteeSize(maxCommitteeSize);
     setQuotaEnabled(false);
     setQuotaType("hare");
     setApprovalMax(2);
@@ -902,7 +902,7 @@ export function AdminCreateElectionPage() {
         tally_rule: tallyRule,
         ballot_format: ballotFormat,
         committee_size: committeeSize,
-        quota_type: quotaEnabled && quotaSupported ? quotaType : null,
+        quota_type: quotaEnabled && quotaSupported ? quotaType : undefined,
         access_mode: accessMode,
         publish_at: delayPublish ? publishAtRFC3339 : null,
         show_aggregates: showAggregates,

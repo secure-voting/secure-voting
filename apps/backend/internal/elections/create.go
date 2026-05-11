@@ -78,17 +78,20 @@ func (s *Service) Create(ctx context.Context, createdBy string, in CreateElectio
 		return "", committeeSizeCode(err), nil
 	}
 
-	var quotaType *string
-	if committeeSize != nil && *committeeSize > 1 {
-		if in.QuotaType == nil {
-			return "", "quota_type_required", nil
-		}
+	quotaSupported := ruleSupportsQuotaType(tally, rules, s.capabilities == nil)
 
+	var quotaType *string
+	if in.QuotaType != nil {
 		q := norm(*in.QuotaType)
-		if !allowedQuotaTypes[q] {
-			return "", "invalid_quota_type", nil
+		if q != "" {
+			if !allowedQuotaTypes[q] {
+				return "", "invalid_quota_type", nil
+			}
+			if !quotaSupported {
+				return "", ErrUnsupportedQuota.Error(), nil
+			}
+			quotaType = &q
 		}
-		quotaType = &q
 	}
 
 	rankingTopK, err := normalizeRankingTopK(format, in.RankingTopK, candidateCount)
