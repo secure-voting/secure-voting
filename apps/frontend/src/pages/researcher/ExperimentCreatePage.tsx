@@ -1170,19 +1170,6 @@ export function ExperimentCreatePage() {
                 ) : null}
               </div>
             </div>
-
-            <div style={{ ...styles.card, background: "#f9fafb" }}>
-              <div><b>Проверки на этом шаге:</b></div>
-              <div style={{ marginTop: 6, ...styles.muted }}>
-                • задан тип эксперимента;
-                <br />
-                • выбраны формат бюллетеня и правила подсчёта;
-                <br />
-                • количество кандидатов не меньше 2;
-                <br />
-                • количество избирателей не меньше 1.
-              </div>
-            </div>
           </div>
         ) : null}
 
