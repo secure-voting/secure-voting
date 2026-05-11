@@ -76,7 +76,7 @@ pub fn construct_tennessee_wiki_example() -> Profile<RankingBallot> {
 
 static INIT: Once = Once::new();
 
-#[ctor]
+#[ctor(unsafe)]
 pub fn init_tracing() {
     INIT.call_once(|| {
         let subscriber = fmt()
