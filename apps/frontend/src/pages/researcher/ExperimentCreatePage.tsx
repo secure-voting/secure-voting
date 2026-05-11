@@ -122,10 +122,7 @@ function supportsBallotFormat(
   return Boolean(rule?.ballot_formats?.includes(format));
 }
 
-function selectedRuleInfo(
-  rules: TallyRuleInfo[],
-  ruleId: string
-) {
+function selectedRuleInfo(rules: TallyRuleInfo[], ruleId: string) {
   return rules.find((rule) => rule.id === ruleId);
 }
 
@@ -179,6 +176,7 @@ export function ExperimentCreatePage() {
   const [type, setType] = useState<"algo" | "behavior">("algo");
   const [ballotFormat, setBallotFormat] = useState<"approval" | "ranking" | "score">("ranking");
   const [tallyRule, setTallyRule] = useState("");
+  const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
 
   const [candidates, setCandidates] = useState(5);
   const [voters, setVoters] = useState(100);
@@ -205,6 +203,8 @@ export function ExperimentCreatePage() {
   const [rawResp, setRawResp] = useState<unknown>(null);
 
   const [availableRules, setAvailableRules] = useState<TallyRuleInfo[]>([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
+
   const currentRule = useMemo(
     () => selectedRuleInfo(availableRules, tallyRule),
     [availableRules, tallyRule]
@@ -214,14 +214,42 @@ export function ExperimentCreatePage() {
     () => publishedElections.find((item) => item.id === selectedElectionId),
     [publishedElections, selectedElectionId]
   );
-  
+
   const selectedDatasetListItem = useMemo(
     () => datasets.find((item) => item.id === selectedDatasetId),
     [datasets, selectedDatasetId]
   );
 
+  const selectedRuleInfos = useMemo(
+    () =>
+      selectedRuleIds
+        .map((ruleId) => selectedRuleInfo(availableRules, ruleId))
+        .filter((rule): rule is TallyRuleInfo => Boolean(rule)),
+    [availableRules, selectedRuleIds]
+  );
+
+  const selectedRulesNeedApprovalMax = selectedRuleInfos.some(
+    (rule) => rule.requires_approval_max_choices
+  );
+
+  const selectedRulesSupportRankingTopK = selectedRuleInfos.some(
+    (rule) => rule.supports_ranking_top_k
+  );
+
+  const selectedRulesNeedScoreRange = selectedRuleInfos.some(
+    (rule) => rule.requires_score_range
+  );
+
+  const selectedRulesSupportQuota = selectedRuleInfos.some(
+    (rule) => rule.supports_quota_type
+  );
+
+  const selectedRulesNeedCommitteeSize = selectedRuleInfos.some(
+    (rule) => rule.requires_committee_size
+  );
+
   const maxCommitteeSize = Math.max(1, candidates);
-  const quotaSupported = Boolean(currentRule?.supports_quota_type);
+  const quotaSupported = selectedRulesSupportQuota;
 
   const allowedBallotFormats = useMemo(() => {
     const formats = new Set<"approval" | "ranking" | "score">();
@@ -242,7 +270,27 @@ export function ExperimentCreatePage() {
     [availableRules, ballotFormat]
   );
 
-  const [rulesLoading, setRulesLoading] = useState(false);
+  useEffect(() => {
+    if (rulesForSelectedBallotFormat.length === 0) {
+      setSelectedRuleIds([]);
+      setTallyRule("");
+      return;
+    }
+
+    setSelectedRuleIds((prev) => {
+      const allowed = new Set(rulesForSelectedBallotFormat.map((rule) => rule.id));
+      const next = prev.filter((ruleId) => allowed.has(ruleId));
+
+      if (next.length > 0) {
+        setTallyRule(next[0]);
+        return next;
+      }
+
+      const first = rulesForSelectedBallotFormat[0].id;
+      setTallyRule(first);
+      return [first];
+    });
+  }, [rulesForSelectedBallotFormat]);
 
   useEffect(() => {
     if (!token) return;
@@ -276,154 +324,6 @@ export function ExperimentCreatePage() {
 
     return () => ac.abort();
   }, [token, setToken]);
-
-    useEffect(() => {
-    if (!token) return;
-
-    const ac = new AbortController();
-    setDatasetsLoading(true);
-
-    api.datasets
-      .list(token, ac.signal)
-      .then((items) => {
-        setDatasets(items);
-        setSelectedDatasetId((prev) => prev || items[0]?.id || "");
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        if (e?.status === 401) {
-          setToken(null);
-          return;
-        }
-        setErr((prev) => prev || "Не удалось загрузить список датасетов");
-        setDatasets([]);
-      })
-      .finally(() => {
-        setDatasetsLoading(false);
-      });
-
-    return () => ac.abort();
-  }, [token, setToken]);
-
-  useEffect(() => {
-    if (!token) return;
-
-    const ac = new AbortController();
-    setElectionsLoading(true);
-
-    api.elections
-      .list(token, ac.signal)
-      .then((items) => {
-        const published = items.filter((item) => String(item.status || "") === "published");
-        setPublishedElections(published);
-        setSelectedElectionId((prev) => prev || published[0]?.id || "");
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        if (e?.status === 401) {
-          setToken(null);
-          return;
-        }
-        setPublishedElections([]);
-      })
-      .finally(() => {
-        setElectionsLoading(false);
-      });
-
-    return () => ac.abort();
-  }, [token, setToken]);
-
-  useEffect(() => {
-    if (!token) return;
-    if (sourceKind !== "dataset") return;
-
-    const datasetId = selectedDatasetId.trim();
-    if (!datasetId) {
-      setSelectedDatasetDetail(null);
-      return;
-    }
-
-    const ac = new AbortController();
-
-    api.datasets
-      .get(token, datasetId, ac.signal)
-      .then((dataset) => {
-        setSelectedDatasetDetail(dataset);
-
-        if (
-          dataset.format === "approval" ||
-          dataset.format === "ranking" ||
-          dataset.format === "score"
-        ) {
-          setBallotFormat(dataset.format);
-        }
-
-        const candidateCount = Math.max(2, dataset.candidates.length);
-        setCandidates(candidateCount);
-        setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
-
-        const params = dataset.parameters || {};
-
-        if (typeof params.voters === "number" && Number.isFinite(params.voters)) {
-          setVoters(Math.max(1, params.voters));
-        }
-
-        if (typeof params.approval_max_choices === "number") {
-          setApprovalMax(Math.max(1, Math.min(candidateCount, params.approval_max_choices)));
-        }
-
-        if (typeof params.ranking_top_k === "number") {
-          setRankingTopKEnabled(true);
-          setRankingTopK(Math.max(1, Math.min(candidateCount, params.ranking_top_k)));
-        } else {
-          setRankingTopKEnabled(false);
-        }
-
-        if (typeof params.score_min === "number") {
-          setScoreMin(params.score_min);
-        }
-
-        if (typeof params.score_max === "number") {
-          setScoreMax(params.score_max);
-        }
-
-        if (typeof params.score_step === "number") {
-          setScoreStep(params.score_step);
-        }
-      })
-      .catch((e: any) => {
-        if (e?.name === "AbortError") return;
-        if (e?.status === 401) {
-          setToken(null);
-          return;
-        }
-        setSelectedDatasetDetail(null);
-      });
-
-    return () => ac.abort();
-  }, [token, setToken, sourceKind, selectedDatasetId]);
-
-  useEffect(() => {
-    if (sourceKind !== "published_election") return;
-    if (!selectedPublishedElection) return;
-
-    if (
-      selectedPublishedElection.ballot_format === "approval" ||
-      selectedPublishedElection.ballot_format === "ranking" ||
-      selectedPublishedElection.ballot_format === "score"
-    ) {
-      setBallotFormat(selectedPublishedElection.ballot_format);
-    }
-
-    if (
-      typeof selectedPublishedElection.candidate_count === "number" &&
-      selectedPublishedElection.candidate_count >= 2
-    ) {
-      const candidateCount = selectedPublishedElection.candidate_count;
-      setCandidates(candidateCount);
-      setCommitteeSize((prev) => Math.max(1, Math.min(prev, candidateCount)));
-    }
-  }, [sourceKind, selectedPublishedElection]);
 
   useEffect(() => {
     if (!token) return;
@@ -581,37 +481,41 @@ export function ExperimentCreatePage() {
   }, [allowedBallotFormats, ballotFormat]);
 
   useEffect(() => {
-    if (rulesForSelectedBallotFormat.length === 0) return;
-    if (!rulesForSelectedBallotFormat.some((rule) => rule.id === tallyRule)) {
-      setTallyRule(rulesForSelectedBallotFormat[0].id);
-    }
-  }, [rulesForSelectedBallotFormat, tallyRule]);
+    if (selectedRuleIds.length === 0) return;
 
-  useEffect(() => {
-    if (!currentRule) return;
-
-    if (!currentRule.supports_ranking_top_k && ballotFormat === "ranking") {
+    if (!selectedRulesSupportRankingTopK && ballotFormat === "ranking") {
       setRankingTopK(1);
+      setRankingTopKEnabled(false);
     }
 
-    if (!currentRule.requires_approval_max_choices && ballotFormat === "approval") {
+    if (!selectedRulesNeedApprovalMax && ballotFormat === "approval") {
       setApprovalMax(1);
     }
 
-    if (!currentRule.requires_score_range && ballotFormat === "score") {
+    if (!selectedRulesNeedScoreRange && ballotFormat === "score") {
       setScoreMin(0);
       setScoreMax(10);
       setScoreStep(1);
     }
 
-    if (!currentRule.supports_quota_type && quotaEnabled) {
+    if (!selectedRulesSupportQuota && quotaEnabled) {
       setQuotaEnabled(false);
     }
 
     if (committeeSize > maxCommitteeSize) {
       setCommitteeSize(maxCommitteeSize);
     }
-  }, [currentRule, ballotFormat, committeeSize, maxCommitteeSize, quotaEnabled]);
+  }, [
+    selectedRuleIds.length,
+    selectedRulesSupportRankingTopK,
+    selectedRulesNeedApprovalMax,
+    selectedRulesNeedScoreRange,
+    selectedRulesSupportQuota,
+    ballotFormat,
+    committeeSize,
+    maxCommitteeSize,
+    quotaEnabled,
+  ]);
 
   const parsedAdvancedParams = useMemo(() => {
     const trimmed = paramsText.trim();
@@ -649,25 +553,25 @@ export function ExperimentCreatePage() {
   const structuredParams = useMemo(() => {
     const params: Record<string, unknown> = {
       ballot_format: ballotFormat,
-      tally_rule: tallyRule,
+      tally_rules: selectedRuleIds,
       candidates,
       voters,
       committee_size: committeeSize,
     };
 
-    if (quotaEnabled && currentRule?.supports_quota_type) {
+    if (quotaEnabled && selectedRulesSupportQuota) {
       params.quota_type = quotaType;
     }
 
-    if (ballotFormat === "approval" && currentRule?.requires_approval_max_choices) {
+    if (ballotFormat === "approval" && selectedRulesNeedApprovalMax) {
       params.approval_max_choices = approvalMax;
     }
 
-    if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k && rankingTopKEnabled) {
+    if (ballotFormat === "ranking" && selectedRulesSupportRankingTopK && rankingTopKEnabled) {
       params.ranking_top_k = rankingTopK;
     }
 
-    if (ballotFormat === "score" && currentRule?.requires_score_range) {
+    if (ballotFormat === "score" && selectedRulesNeedScoreRange) {
       params.score_min = scoreMin;
       params.score_max = scoreMax;
       params.score_step = scoreStep;
@@ -676,7 +580,7 @@ export function ExperimentCreatePage() {
     return params;
   }, [
     ballotFormat,
-    tallyRule,
+    selectedRuleIds,
     candidates,
     voters,
     committeeSize,
@@ -684,9 +588,14 @@ export function ExperimentCreatePage() {
     quotaType,
     approvalMax,
     rankingTopK,
+    rankingTopKEnabled,
     scoreMin,
     scoreMax,
     scoreStep,
+    selectedRulesSupportQuota,
+    selectedRulesNeedApprovalMax,
+    selectedRulesSupportRankingTopK,
+    selectedRulesNeedScoreRange,
   ]);
 
   const finalParams = useMemo(
@@ -715,40 +624,44 @@ export function ExperimentCreatePage() {
         return "Нет доступных правил для экспериментальных запусков";
       }
       if (!type.trim()) return "Выберите тип эксперимента";
-      if (!tallyRule.trim()) return "Выберите правило подсчёта";
+      if (selectedRuleIds.length === 0) return "Выберите хотя бы одно правило подсчёта";
       if (rulesForSelectedBallotFormat.length === 0) {
         return "Для выбранного формата бюллетеня нет доступных правил для экспериментальных запусков";
       }
-      if (!currentRule) return "Выберите допустимое правило подсчёта";
-      if (!currentRule.supports_experiment_runs) {
-        return "Выбранное правило недоступно для экспериментальных запусков";
+      if (selectedRuleInfos.length !== selectedRuleIds.length) {
+        return "Среди выбранных правил есть недопустимое правило подсчёта";
       }
-      if (!supportsBallotFormat(currentRule, ballotFormat)) {
-        return "Выбранное правило не поддерживает этот формат бюллетеня";
+
+      if (selectedRuleInfos.some((rule) => !rule.supports_experiment_runs)) {
+        return "Среди выбранных правил есть правило, недоступное для экспериментальных запусков";
+      }
+
+      if (selectedRuleInfos.some((rule) => !supportsBallotFormat(rule, ballotFormat))) {
+        return "Среди выбранных правил есть правило, не поддерживающее выбранный формат бюллетеня";
       }
       if (candidates < 2) return "Количество кандидатов должно быть не меньше 2";
       if (voters < 1) return "Количество избирателей должно быть не меньше 1";
-      if (currentRule.requires_committee_size && committeeSize < 1) {
+      if (selectedRulesNeedCommitteeSize && committeeSize < 1) {
         return "Размер комитета должен быть не меньше 1";
       }
     }
 
     if (targetStep >= 1) {
-      if (ballotFormat === "approval" && currentRule?.requires_approval_max_choices) {
+      if (ballotFormat === "approval" && selectedRulesNeedApprovalMax) {
         if (approvalMax < 1) return "approval_max_choices должен быть не меньше 1";
         if (approvalMax > candidates) {
           return "approval_max_choices не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "ranking" && currentRule?.supports_ranking_top_k && rankingTopKEnabled) {
+      if (ballotFormat === "ranking" && selectedRulesSupportRankingTopK && rankingTopKEnabled) {
         if (rankingTopK < 1) return "Ограничение top-k должно быть не меньше 1";
         if (rankingTopK > candidates) {
           return "Ограничение top-k не может превышать число кандидатов";
         }
       }
 
-      if (ballotFormat === "score" && currentRule?.requires_score_range) {
+      if (ballotFormat === "score" && selectedRulesNeedScoreRange) {
         if (scoreStep <= 0) return "Шаг оценки должен быть больше 0";
         if (scoreMin > scoreMax) {
           return "Нижняя граница оценки не может быть больше верхней";
@@ -808,6 +721,21 @@ export function ExperimentCreatePage() {
     setStep(nextStep);
   };
 
+  const toggleRuleSelection = (ruleId: string) => {
+    setSelectedRuleIds((prev) => {
+      const exists = prev.includes(ruleId);
+      const next = exists ? prev.filter((item) => item !== ruleId) : [...prev, ruleId];
+
+      if (next.length > 0) {
+        setTallyRule(next[0]);
+      } else {
+        setTallyRule("");
+      }
+
+      return next;
+    });
+  };
+
   const submit = async () => {
     if (!token) return;
 
@@ -845,54 +773,107 @@ export function ExperimentCreatePage() {
         throw new Error("Не удалось определить датасет для запуска эксперимента");
       }
 
-      const body: {
-        type: string;
-        params: Record<string, unknown>;
-        seed?: number;
-      } = {
-        type,
-        params: {
+      const createdExperimentIds: string[] = [];
+      const allRunIds: string[] = [];
+      const allJobIds: string[] = [];
+      const rawCreated: unknown[] = [];
+
+      for (const ruleId of selectedRuleIds) {
+        const ruleInfo = selectedRuleInfo(availableRules, ruleId);
+
+        const params: Record<string, unknown> = {
           ...finalParams,
           dataset_id: datasetId,
           source_kind: sourceKind,
-        },
-      };
+          tally_rule: ruleId,
+          tally_rule_label: ruleDisplayLabel(ruleInfo, ruleId),
+        };
 
-      if (seed.trim()) {
-        body.seed = Number(seed);
+        delete params.tally_rules;
+
+        if (quotaEnabled && ruleInfo?.supports_quota_type) {
+          params.quota_type = quotaType;
+        } else {
+          delete params.quota_type;
+        }
+
+        if (!(ballotFormat === "approval" && ruleInfo?.requires_approval_max_choices)) {
+          delete params.approval_max_choices;
+        }
+
+        if (!(ballotFormat === "ranking" && ruleInfo?.supports_ranking_top_k && rankingTopKEnabled)) {
+          delete params.ranking_top_k;
+        }
+
+        if (!(ballotFormat === "score" && ruleInfo?.requires_score_range)) {
+          delete params.score_min;
+          delete params.score_max;
+          delete params.score_step;
+        }
+
+        const body: {
+          type: string;
+          params: Record<string, unknown>;
+          seed?: number;
+        } = {
+          type,
+          params,
+        };
+
+        if (seed.trim()) {
+          body.seed = Number(seed);
+        }
+
+        const experimentId = await api.experiments.create(token, body);
+
+        const runs = await api.experimentRuns.batch(token, {
+          experiment_id: experimentId,
+          dataset_ids: [datasetId],
+        });
+
+        createdExperimentIds.push(experimentId);
+
+        const runIds = runs
+          .map((item) => {
+            if (typeof item.id === "string") return item.id;
+            if (typeof item.run_id === "string") return item.run_id;
+            return "";
+          })
+          .filter((item) => item.trim() !== "");
+
+        const jobIds = runs
+          .map((item) => (typeof item.job_id === "string" ? item.job_id : ""))
+          .filter((item) => item.trim() !== "");
+
+        allRunIds.push(...runIds);
+        allJobIds.push(...jobIds);
+
+        rawCreated.push({
+          experiment_id: experimentId,
+          rule_id: ruleId,
+          body,
+          runs,
+        });
       }
 
-      const id = await api.experiments.create(token, body);
-
-      const runs = await api.experimentRuns.batch(token, {
-        experiment_id: id,
-        dataset_ids: [datasetId],
-      });
-
-      const runIds = runs
-        .map((item) => {
-          if (typeof item.id === "string") return item.id;
-          if (typeof item.run_id === "string") return item.run_id;
-          return "";
-        })
-        .filter((item) => item.trim() !== "");
-
-      const jobIds = runs
-        .map((item) => (typeof item.job_id === "string" ? item.job_id : ""))
-        .filter((item) => item.trim() !== "");
-
-      setCreatedId(id);
-      setCreatedRunIds(runIds);
-      setCreatedJobIds(jobIds);
+      setCreatedId(createdExperimentIds.join(", "));
+      setCreatedRunIds(allRunIds);
+      setCreatedJobIds(allJobIds);
 
       addNotification({
         kind: "success",
-        title: "Эксперимент запущен",
-        message: `Создан эксперимент ${id} и поставлен в очередь запуск по выбранному датасету`,
+        title: "Эксперименты запущены",
+        message: `Создано экспериментов: ${createdExperimentIds.length}. Запусков: ${allRunIds.length}`,
       });
 
       if (IS_DEV) {
-        setRawResp({ id, body, runs });
+        setRawResp({
+          dataset_id: datasetId,
+          experiment_ids: createdExperimentIds,
+          run_ids: allRunIds,
+          job_ids: allJobIds,
+          created: rawCreated,
+        });
       }
 
       setStep(STEPS.length - 1);
@@ -908,7 +889,7 @@ export function ExperimentCreatePage() {
       } else if (e?.code === "no_accepted_ballots") {
         setErr("В выбранном голосовании нет принятых бюллетеней");
       } else {
-        setErr(e?.message || "Не удалось создать и запустить эксперимент");
+        setErr(e?.message || "Не удалось создать и запустить эксперименты");
       }
     } finally {
       setLoading(false);
@@ -1082,19 +1063,35 @@ export function ExperimentCreatePage() {
                 </select>
               </div>
 
-              <div>
-                <label>Правило подсчёта</label>
-                <select
-                  style={styles.input}
-                  value={tallyRule}
-                  onChange={(e) => setTallyRule(e.target.value)}
-                >
+              <div style={{ ...styles.card, background: "#f9fafb" }}>
+                <label style={{ display: "block", fontWeight: 600, marginBottom: 8 }}>
+                  Правила подсчёта
+                </label>
+
+                <div style={{ display: "grid", gap: 8 }}>
                   {rulesForSelectedBallotFormat.map((rule) => (
-                    <option key={rule.id} value={rule.id}>
-                      {ruleDisplayLabel(rule, rule.id)}
-                    </option>
+                    <label key={rule.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRuleIds.includes(rule.id)}
+                        onChange={() => toggleRuleSelection(rule.id)}
+                      />
+                      <span>{ruleDisplayLabel(rule, rule.id)}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
+
+                {rulesForSelectedBallotFormat.length === 0 ? (
+                  <div style={{ marginTop: 8, ...styles.muted }}>
+                    Для выбранного формата бюллетеня нет доступных правил.
+                  </div>
+                ) : null}
+
+                {selectedRuleIds.length > 0 ? (
+                  <div style={{ marginTop: 8, ...styles.muted }}>
+                    Выбрано правил: {selectedRuleIds.length}
+                  </div>
+                ) : null}
               </div>
 
               <div>
@@ -1147,7 +1144,11 @@ export function ExperimentCreatePage() {
                 </label>
 
                 <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
-                  {quotaAvailabilityText(currentRule)}
+                  {selectedRuleIds.length === 0
+                    ? "Сначала выберите правила подсчёта."
+                    : selectedRulesSupportQuota
+                      ? "Квота доступна для части выбранных правил. Она будет применена только к правилам, которые поддерживают квоту."
+                      : "Выбранные правила не поддерживают выбор квоты."}
                 </div>
 
                 {quotaEnabled && quotaSupported ? (
@@ -1175,7 +1176,7 @@ export function ExperimentCreatePage() {
               <div style={{ marginTop: 6, ...styles.muted }}>
                 • задан тип эксперимента;
                 <br />
-                • выбраны формат бюллетеня и правило подсчёта;
+                • выбраны формат бюллетеня и правила подсчёта;
                 <br />
                 • количество кандидатов не меньше 2;
                 <br />
@@ -1191,7 +1192,7 @@ export function ExperimentCreatePage() {
               {formatHint(ballotFormat)}
             </div>
 
-            {ballotFormat === "approval" && currentRule?.requires_approval_max_choices ? (
+            {ballotFormat === "approval" && selectedRulesNeedApprovalMax ? (
               <div style={styles.grid2}>
                 <div>
                   <label>Максимум отметок</label>
@@ -1207,7 +1208,7 @@ export function ExperimentCreatePage() {
               </div>
             ) : null}
 
-            {ballotFormat === "ranking" && currentRule?.supports_ranking_top_k ? (
+            {ballotFormat === "ranking" && selectedRulesSupportRankingTopK ? (
               <div style={{ display: "grid", gap: 10 }}>
                 <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                   <input
@@ -1340,7 +1341,7 @@ export function ExperimentCreatePage() {
 
         {step === 3 ? (
           <div style={{ display: "grid", gap: 12 }}>
-                        <SummaryGrid
+            <SummaryGrid
               items={[
                 {
                   label: "Источник данных",
@@ -1367,19 +1368,25 @@ export function ExperimentCreatePage() {
                         ? "Ранжирование"
                         : "Оценивание",
                 },
-                { label: "Правило подсчёта", value: ruleDisplayLabel(currentRule, tallyRule) },
+                {
+                  label: "Правила подсчёта",
+                  value:
+                    selectedRuleInfos.length > 0
+                      ? selectedRuleInfos.map((rule) => ruleDisplayLabel(rule, rule.id)).join(", ")
+                      : "—",
+                },
                 { label: "Количество кандидатов", value: String(candidates) },
                 { label: "Количество избирателей", value: String(voters) },
                 { label: "Размер комитета", value: String(committeeSize) },
                 {
                   label: "Тип квоты",
-                  value: quotaEnabled && currentRule?.supports_quota_type ? quotaType : "не используется",
+                  value: quotaEnabled && selectedRulesSupportQuota ? quotaType : "не используется",
                 },
                 { label: "Seed", value: seed.trim() || "не задан" },
                 {
                   label: "Ограничение top-k",
                   value:
-                    ballotFormat === "ranking" && currentRule?.supports_ranking_top_k
+                    ballotFormat === "ranking" && selectedRulesSupportRankingTopK
                       ? rankingTopKEnabled
                         ? String(rankingTopK)
                         : "Не используется"
@@ -1395,7 +1402,7 @@ export function ExperimentCreatePage() {
 
             {createdId ? (
               <div style={{ ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-                <div style={{ fontWeight: 700 }}>Эксперимент создан и запущен</div>
+                <div style={{ fontWeight: 700 }}>Эксперименты созданы и запущены</div>
                 <div style={{ marginTop: 6 }}>Experiment ID: {createdId}</div>
 
                 {createdRunIds.length > 0 ? (
@@ -1440,7 +1447,7 @@ export function ExperimentCreatePage() {
               </button>
             ) : (
               <button style={styles.btnPrimary} onClick={submit} disabled={loading || Boolean(createdId)}>
-                {loading ? "Создание…" : createdId ? "Уже создано" : "Создать и запустить эксперимент"}
+                {loading ? "Создание…" : createdId ? "Уже создано" : "Создать и запустить эксперименты"}
               </button>
             )}
           </div>
