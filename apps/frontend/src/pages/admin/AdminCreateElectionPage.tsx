@@ -116,6 +116,27 @@ function quotaTypeLabel(value: "hare" | "droop") {
   return value === "hare" ? "Хэра" : "Друпа";
 }
 
+function quotaTypeDescription(value: "hare" | "droop") {
+  if (value === "hare") {
+    return "Квота Хэра: базовый порог, рассчитываемый как отношение числа голосов к размеру комитета.";
+  }
+
+  return "Квота Друпа: более строгий порог избрания.";
+}
+
+function quotaAvailabilityText(rule: TallyRuleInfo | undefined) {
+  if (!rule) {
+    return "Сначала выберите правило подсчёта.";
+  }
+
+  if (!rule.supports_quota_type) {
+    return "Выбранное правило не поддерживает выбор квоты.";
+  }
+
+  const formats = rule.ballot_formats.join(", ");
+  return `Квота доступна для выбранного правила. Поддерживаемые форматы бюллетеня: ${formats}.`;
+}
+
 function submitModeLabel(value: "draft" | "open" | "schedule") {
   if (value === "draft") return "Сохранить как черновик";
   if (value === "open") return "Открыть сразу";
@@ -295,12 +316,13 @@ export function AdminCreateElectionPage() {
   const [tallyRule, setTallyRule] = useState("");
 
   const [committeeSize, setCommitteeSize] = useState<number>(1);
+  const [quotaEnabled, setQuotaEnabled] = useState(false);
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
 
   const [approvalMax, setApprovalMax] = useState<number>(2);
 
-  const [limitRankingTopK, setLimitRankingTopK] = useState(true);
-  const [rankingTopKInput, setRankingTopKInput] = useState("3");
+  const [limitRankingTopK, setLimitRankingTopK] = useState(false);
+  const [rankingTopKInput, setRankingTopKInput] = useState("1");
 
   const [scoreMin, setScoreMin] = useState<number>(0);
   const [scoreMax, setScoreMax] = useState<number>(10);
@@ -368,6 +390,7 @@ export function AdminCreateElectionPage() {
 
       if (typeof draft.tallyRule === "string") setTallyRule(draft.tallyRule);
       setCommitteeSize(safeNumber(draft.committeeSize, 1));
+      setQuotaEnabled(Boolean(draft.quotaEnabled));
 
       if (draft.quotaType === "hare" || draft.quotaType === "droop") {
         setQuotaType(draft.quotaType);
@@ -416,6 +439,7 @@ export function AdminCreateElectionPage() {
       ballotFormat,
       tallyRule,
       committeeSize,
+      quotaEnabled,
       quotaType,
       approvalMax,
       limitRankingTopK,
@@ -443,6 +467,7 @@ export function AdminCreateElectionPage() {
     ballotFormat,
     tallyRule,
     committeeSize,
+    quotaEnabled,
     quotaType,
     approvalMax,
     limitRankingTopK,
@@ -462,6 +487,9 @@ export function AdminCreateElectionPage() {
     () => selectedRuleInfo(availableRules, tallyRule),
     [availableRules, tallyRule]
   );
+
+  const maxCommitteeSize = Math.max(1, candidateCount);
+  const quotaSupported = Boolean(currentRule?.supports_quota_type);
 
   const approvalRuleLimit = approvalLimitFromRule(currentRule);
   const effectiveApprovalMax =
@@ -509,8 +537,12 @@ export function AdminCreateElectionPage() {
       setCommitteeSize(1);
     }
 
-    if (!currentRule.supports_quota_type && committeeSize > 1) {
-      setQuotaType("hare");
+    if (currentRule.requires_committee_size && committeeSize > maxCommitteeSize) {
+      setCommitteeSize(maxCommitteeSize);
+    }
+
+    if (!currentRule.supports_quota_type && quotaEnabled) {
+      setQuotaEnabled(false);
     }
 
     if (!currentRule.requires_approval_max_choices && ballotFormat === "approval") {
@@ -528,7 +560,7 @@ export function AdminCreateElectionPage() {
       setScoreStep(1);
       setScoreAllowSkip(false);
     }
-  }, [currentRule, ballotFormat, committeeSize]);
+  }, [currentRule, ballotFormat, committeeSize, maxCommitteeSize, quotaEnabled]);
 
   useEffect(() => {
     if (ballotFormat !== "approval") return;
@@ -541,6 +573,28 @@ export function AdminCreateElectionPage() {
       setApprovalMax(bounded);
     }
   }, [ballotFormat, currentRule, candidateCount, approvalMax]);
+
+  useEffect(() => {
+    if (!currentRule) return;
+
+    if (!currentRule.requires_committee_size) {
+      if (committeeSize !== 1) {
+        setCommitteeSize(1);
+      }
+      if (quotaEnabled) {
+        setQuotaEnabled(false);
+      }
+      return;
+    }
+
+    if (committeeSize < 1 || committeeSize > maxCommitteeSize) {
+      setCommitteeSize(maxCommitteeSize);
+    }
+
+    if (!currentRule.supports_quota_type && quotaEnabled) {
+      setQuotaEnabled(false);
+    }
+  }, [currentRule, committeeSize, maxCommitteeSize, quotaEnabled]);
 
   const candidateErrors = useMemo(
     () => candidates.map((candidate) => candidateError(candidate, candidates)),
@@ -576,6 +630,22 @@ export function AdminCreateElectionPage() {
     if (!Number.isFinite(raw) || raw < 1) return 1;
     if (raw > candidateCount) return candidateCount;
     return Math.floor(raw);
+  };
+
+  const handleTallyRuleChange = (ruleId: string) => {
+    setTallyRule(ruleId);
+
+    const nextRule = selectedRuleInfo(availableRules, ruleId);
+
+    if (nextRule?.requires_committee_size) {
+      setCommitteeSize(maxCommitteeSize);
+    } else {
+      setCommitteeSize(1);
+    }
+
+    if (!nextRule?.supports_quota_type) {
+      setQuotaEnabled(false);
+    }
   };
 
   const updateCandidate = (index: number, patch: Partial<CandidateDraft>) => {
@@ -789,11 +859,12 @@ export function AdminCreateElectionPage() {
       "";
 
     setTallyRule(defaultRankingRule);
-    setCommitteeSize(1);
+    setCommitteeSize(2);
+    setQuotaEnabled(false);
     setQuotaType("hare");
     setApprovalMax(2);
-    setLimitRankingTopK(true);
-    setRankingTopKInput("3");
+    setLimitRankingTopK(false);
+    setRankingTopKInput("1");
     setScoreMin(0);
     setScoreMax(10);
     setScoreStep(1);
@@ -831,7 +902,7 @@ export function AdminCreateElectionPage() {
         tally_rule: tallyRule,
         ballot_format: ballotFormat,
         committee_size: committeeSize,
-        quota_type: committeeSize > 1 ? quotaType : null,
+        quota_type: quotaEnabled && quotaSupported ? quotaType : null,
         access_mode: accessMode,
         publish_at: delayPublish ? publishAtRFC3339 : null,
         show_aggregates: showAggregates,
@@ -842,7 +913,7 @@ export function AdminCreateElectionPage() {
         body.committee_size = null;
       }
 
-      if (!currentRule?.supports_quota_type) {
+      if (!currentRule?.supports_quota_type || !quotaEnabled) {
         body.quota_type = null;
       }
 
@@ -1125,7 +1196,7 @@ export function AdminCreateElectionPage() {
                 <select
                   style={styles.input}
                   value={tallyRule}
-                  onChange={(e) => setTallyRule(e.target.value)}
+                  onChange={(e) => handleTallyRuleChange(e.target.value)}
                 >
                   {rulesForSelectedBallotFormat.map((rule) => (
                     <option key={rule.id} value={rule.id}>
@@ -1149,34 +1220,51 @@ export function AdminCreateElectionPage() {
                   style={styles.input}
                   type="number"
                   min={1}
+                  max={maxCommitteeSize}
                   value={committeeSize}
                   disabled={!currentRule?.requires_committee_size}
                   onChange={(e) => setCommitteeSize(Number(e.target.value))}
                 />
+                <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                  Максимально доступный размер комитета: {maxCommitteeSize}
+                </div>
               </div>
 
-              <div>
-                <label>
-                  Тип квоты
-                  <Hint text="Квота определяет порог голосов, необходимый для распределения мандатов в некоторых многомандатных правилах." />
+              <div style={{ ...styles.card, background: "#f9fafb" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={quotaEnabled}
+                    disabled={!quotaSupported}
+                    onChange={(e) => setQuotaEnabled(e.target.checked)}
+                  />
+                  <span>
+                    Использовать квоту
+                    <Hint text="Квота применяется только для правил, которые поддерживают распределение мандатов по квоте." />
+                  </span>
                 </label>
-                <select
-                  style={styles.input}
-                  value={quotaType}
-                  disabled={committeeSize <= 1 || !currentRule?.supports_quota_type}
-                  onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
-                >
-                  <option value="hare">hare</option>
-                  <option value="droop">droop</option>
-                </select>
 
                 <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
-                  {committeeSize <= 1
-                    ? "Для одного победителя квота не используется."
-                    : quotaType === "hare"
-                    ? "Квота Хэра: число голосов на один мандат."
-                    : "Квота Друпа: более строгий порог избрания."}
+                  {quotaAvailabilityText(currentRule)}
                 </div>
+
+                {quotaEnabled && quotaSupported ? (
+                  <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+                    <label>Тип квоты</label>
+                    <select
+                      style={styles.input}
+                      value={quotaType}
+                      onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
+                    >
+                      <option value="hare">Квота Хэра</option>
+                      <option value="droop">Квота Друпа</option>
+                    </select>
+
+                    <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                      {quotaTypeDescription(quotaType)}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -1448,7 +1536,7 @@ export function AdminCreateElectionPage() {
                 {
                   label: "Квота",
                   value: reviewQuotaUsageLabel(
-                    Boolean(committeeSize > 1 && currentRule?.supports_quota_type),
+                    Boolean(quotaEnabled && currentRule?.supports_quota_type),
                     quotaType
                   ),
                 },

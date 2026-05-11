@@ -12,6 +12,7 @@ import { ProtocolTimeline } from "../../shared/ui/ProtocolTimeline";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { SimpleBarChart } from "../../shared/ui/SimpleBarChart";
 import { styles } from "../../shared/ui/styles";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import {
   downloadCsvFile,
@@ -54,21 +55,6 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function datasetCandidatesCount(value: unknown, datasetMap?: Record<string, DatasetListItem>) {
@@ -685,8 +671,8 @@ function buildRunReportText(
   lines.push(`- rule: ${experimentRuleLabel(experiment)}`);
   lines.push(`- ballot_format: ${formatBallotFormat(experimentBallotFormat(experiment))}`);
   lines.push(`- dataset: ${datasetLabel(runRec?.dataset_id, datasetMap)}`);
-  lines.push(`- started_at: ${prettyValue(runRec?.started_at)}`);
-  lines.push(`- finished_at: ${prettyValue(runRec?.finished_at)}`);
+  lines.push(`- started_at: ${formatDateTime(runRec?.started_at)}`);
+  lines.push(`- finished_at: ${formatDateTime(runRec?.finished_at)}`);
   lines.push(`- technical_id: ${prettyValue(runRec?.id)}`);
   lines.push(`- experiment_id: ${prettyValue(runRec?.experiment_id)}`);
   lines.push(`- dataset_id: ${prettyValue(runRec?.dataset_id)}`);

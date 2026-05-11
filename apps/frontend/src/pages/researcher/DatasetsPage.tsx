@@ -9,6 +9,7 @@ import type {
   TallyRuleInfo,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import { useNotifications } from "../../app/notifications";
@@ -85,21 +86,6 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function boolLabel(value: unknown) {

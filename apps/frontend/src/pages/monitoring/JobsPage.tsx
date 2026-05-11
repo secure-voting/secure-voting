@@ -14,6 +14,7 @@ import {
   downloadPdfTextFile,
   downloadXlsxFile,
 } from "../../shared/utils/export";
+import { formatDateTime } from "../../shared/utils/dateTime";
 
 function str(v: unknown) {
   if (v == null) return "";
@@ -36,21 +37,6 @@ function idOf(job: JobItem, index: number) {
 function nowTimeLabel() {
   const d = new Date();
   return d.toLocaleTimeString();
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function shortId(value: unknown) {

@@ -9,6 +9,7 @@ import { Badge } from "../../shared/ui/Badge";
 import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
@@ -21,21 +22,6 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function experimentTypeLabel(value: unknown) {
@@ -401,7 +387,7 @@ export function ExperimentsPage() {
                     { label: "ID эксперимента", value: selected.id },
                     { label: "Короткий ID", value: shortId(selected.id) },
                     { label: "Владелец", value: selected.created_by },
-                    { label: "Создан", value: selected.created_at },
+                    { label: "Создан", value: formatDateTime(selected.created_at) },
                   ]}
                 />
               </div>

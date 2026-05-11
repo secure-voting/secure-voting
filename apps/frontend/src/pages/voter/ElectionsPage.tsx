@@ -8,6 +8,7 @@ import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
 import { useAuth } from "../../app/auth";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 function statusLabel(value: unknown) {
@@ -47,21 +48,6 @@ function ballotFormatLabel(value: unknown) {
   };
 
   return labels[raw] || raw || "Формат не указан";
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function electionSubtitle(e: ElectionSummary) {
@@ -302,9 +288,9 @@ export function ElectionsPage() {
                     { label: "Режим доступа", value: e.access_mode },
                     { label: "Формат бюллетеня", value: e.ballot_format ?? "—" },
                     { label: "Правило подсчета", value: e.tally_rule ?? "—" },
-                    { label: "Начало", value: e.start_at },
-                    { label: "Окончание", value: e.end_at },
-                    { label: "Опубликовано", value: e.published_at ?? "—" },
+                    { label: "Начало", value: formatDateTime(e.start_at) },
+                    { label: "Окончание", value: formatDateTime(e.end_at) },
+                    { label: "Опубликовано", value: formatDateTime(e.published_at) },
                   ]}
                 />
               </div>

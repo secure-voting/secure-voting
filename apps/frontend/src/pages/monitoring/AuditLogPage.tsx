@@ -14,6 +14,7 @@ import {
   downloadPdfTextFile,
   downloadXlsxFile,
 } from "../../shared/utils/export";
+import { formatDateTime } from "../../shared/utils/dateTime";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
 
@@ -37,21 +38,6 @@ function shortId(value: unknown) {
   const raw = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
   if (!raw) return "—";
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function detailsOf(item: AuditLogItem): Record<string, unknown> {
@@ -425,7 +411,7 @@ export function AuditLogPage() {
                       items={[
                         { label: "ID события", value: id },
                         { label: "Тип события", value: event },
-                        { label: "Время", value: compact(occurredAt) },
+                        { label: "Время", value: formatDateTime(occurredAt) },
                         { label: "ID пользователя", value: actorUserID || "—" },
                       ]}
                     />

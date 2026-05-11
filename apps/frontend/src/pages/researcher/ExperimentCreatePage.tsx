@@ -102,6 +102,27 @@ function ruleDisplayLabel(rule: TallyRuleInfo | undefined, fallbackId: string) {
   return tallyRuleLabel(rule?.id || fallbackId);
 }
 
+function quotaTypeDescription(value: "hare" | "droop") {
+  if (value === "hare") {
+    return "Квота Хэра: базовый порог, рассчитываемый как отношение числа голосов к размеру комитета.";
+  }
+
+  return "Квота Друпа: более строгий порог избрания.";
+}
+
+function quotaAvailabilityText(rule: TallyRuleInfo | undefined) {
+  if (!rule) {
+    return "Сначала выберите правило подсчёта.";
+  }
+
+  if (!rule.supports_quota_type) {
+    return "Выбранное правило не поддерживает выбор квоты.";
+  }
+
+  const formats = rule.ballot_formats.join(", ");
+  return `Квота доступна для выбранного правила. Поддерживаемые форматы бюллетеня: ${formats}.`;
+}
+
 export function ExperimentCreatePage() {
   const nav = useNavigate();
   const { token, setToken } = useAuth();
@@ -116,6 +137,7 @@ export function ExperimentCreatePage() {
   const [candidates, setCandidates] = useState(5);
   const [voters, setVoters] = useState(100);
   const [committeeSize, setCommitteeSize] = useState(1);
+  const [quotaEnabled, setQuotaEnabled] = useState(false);
   const [quotaType, setQuotaType] = useState<"hare" | "droop">("hare");
 
   const [approvalMax, setApprovalMax] = useState(2);
@@ -142,6 +164,8 @@ export function ExperimentCreatePage() {
     [availableRules, tallyRule]
   );
 
+  const maxCommitteeSize = Math.max(1, candidates);
+  const quotaSupported = Boolean(currentRule?.supports_quota_type);
 
   const allowedBallotFormats = useMemo(() => {
     const formats = new Set<"approval" | "ranking" | "score">();
@@ -228,10 +252,14 @@ export function ExperimentCreatePage() {
       setScoreStep(1);
     }
 
-    if (!currentRule.supports_quota_type && committeeSize > 1) {
-      setQuotaType("hare");
+    if (!currentRule.supports_quota_type && quotaEnabled) {
+      setQuotaEnabled(false);
     }
-  }, [currentRule, ballotFormat, committeeSize]);
+
+    if (committeeSize > maxCommitteeSize) {
+      setCommitteeSize(maxCommitteeSize);
+    }
+  }, [currentRule, ballotFormat, committeeSize, maxCommitteeSize, quotaEnabled]);
 
   const parsedAdvancedParams = useMemo(() => {
     const trimmed = paramsText.trim();
@@ -275,7 +303,7 @@ export function ExperimentCreatePage() {
       committee_size: committeeSize,
     };
 
-    if (committeeSize > 1 && currentRule?.supports_quota_type) {
+    if (quotaEnabled && currentRule?.supports_quota_type) {
       params.quota_type = quotaType;
     }
 
@@ -300,6 +328,7 @@ export function ExperimentCreatePage() {
     candidates,
     voters,
     committeeSize,
+    quotaEnabled,
     quotaType,
     approvalMax,
     rankingTopK,
@@ -559,12 +588,13 @@ export function ExperimentCreatePage() {
                   style={styles.input}
                   type="number"
                   min={1}
+                  max={maxCommitteeSize}
                   value={committeeSize}
                   onChange={(e) => setCommitteeSize(Number(e.target.value))}
                 />
                 <div style={{ marginTop: 8, ...styles.muted }}>
-                  Внимание: некоторые алгоритмы возвращают одного победителя.
-                  Это связано со свойствами конкретного правила подсчета.
+                  Максимально доступный размер комитета: {maxCommitteeSize}.
+                  Некоторые алгоритмы могут возвращать одного победителя независимо от указанного размера.
                 </div>
               </div>
 
@@ -590,17 +620,38 @@ export function ExperimentCreatePage() {
                 />
               </div>
 
-              <div>
-                <label>Тип квоты</label>
-                <select
-                  style={styles.input}
-                  value={quotaType}
-                  disabled={committeeSize <= 1 || !currentRule?.supports_quota_type}
-                  onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
-                >
-                  <option value="hare">hare</option>
-                  <option value="droop">droop</option>
-                </select>
+              <div style={{ ...styles.card, background: "#f9fafb" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={quotaEnabled}
+                    disabled={!quotaSupported}
+                    onChange={(e) => setQuotaEnabled(e.target.checked)}
+                  />
+                  <span>Использовать квоту</span>
+                </label>
+
+                <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                  {quotaAvailabilityText(currentRule)}
+                </div>
+
+                {quotaEnabled && quotaSupported ? (
+                  <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+                    <label>Тип квоты</label>
+                    <select
+                      style={styles.input}
+                      value={quotaType}
+                      onChange={(e) => setQuotaType(e.target.value as "hare" | "droop")}
+                    >
+                      <option value="hare">Квота Хэра</option>
+                      <option value="droop">Квота Друпа</option>
+                    </select>
+
+                    <div style={{ marginTop: 6, fontSize: 13, color: "#667085" }}>
+                      {quotaTypeDescription(quotaType)}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
 
@@ -790,7 +841,10 @@ export function ExperimentCreatePage() {
                 { label: "Количество кандидатов", value: String(candidates) },
                 { label: "Количество избирателей", value: String(voters) },
                 { label: "Размер комитета", value: String(committeeSize) },
-                { label: "Тип квоты", value: committeeSize > 1 ? quotaType : "не используется" },
+                {
+                  label: "Тип квоты",
+                  value: quotaEnabled && currentRule?.supports_quota_type ? quotaType : "не используется",
+                },
                 { label: "Seed", value: seed.trim() || "не задан" },
                 {
                   label: "Ограничение top-k",
