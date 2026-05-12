@@ -50,6 +50,11 @@ func TestFromEnv_Defaults(t *testing.T) {
 		"BOOTSTRAP_ADMIN_PASSWORD",
 		"BOOTSTRAP_RESEARCHER_EMAIL",
 		"BOOTSTRAP_RESEARCHER_PASSWORD",
+		"AUTH_RATE_LIMIT",
+		"AUTH_RATE_LIMIT_TTL",
+		"WRITE_RATE_LIMIT",
+		"WRITE_RATE_LIMIT_TTL",
+		"ADMIN_TRUSTED_CIDRS",
 	}
 	for _, k := range keys {
 		t.Setenv(k, "")
