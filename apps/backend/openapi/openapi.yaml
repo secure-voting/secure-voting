@@ -2524,9 +2524,18 @@ paths:
           required: true
           schema:
             type: string
+        - name: format
+          in: query
+          required: false
+          description: >
+            Optional export format. If omitted, the original stored dataset file
+            is returned. Supported export formats are csv, txt, and xlsx.
+          schema:
+            type: string
+            enum: [csv, txt, xlsx]
       responses:
         '200':
-          description: Dataset file
+          description: Dataset file or exported dataset table
           content:
             application/octet-stream:
               schema:
@@ -2534,8 +2543,20 @@ paths:
                 format: binary
             application/json:
               schema:
-                type: object
-                additionalProperties: true
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
         '400':
           description: Invalid identifier
           content:
@@ -2686,6 +2707,13 @@ paths:
     post:
       tags: [Experiments]
       summary: Import dataset from uploaded file
+      description: >
+        Dataset file. Supported structured formats are JSON, PrefLib .soc/.soi,
+        Pabulib .pb, CSV .csv, and tabular text .txt.
+        CSV/TXT files must contain columns record_type, id, name, voter_ref,
+        approval, ranking, scores. Candidate rows use record_type=candidate.
+        Ballot rows use record_type=ballot. Approval and ranking values are separated
+        by "|". Score values use "candidate_id=score" pairs separated by "|".
       security:
         - bearerAuth: []
       requestBody:

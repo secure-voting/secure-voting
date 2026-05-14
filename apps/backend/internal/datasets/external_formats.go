@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func parseImportFile(b []byte, filename, mime string) (importFile, bool) {
+func parseImportFile(b []byte, filename, mime, formatHint string) (importFile, bool) {
 	var parsed importFile
 
 	lowerMime := strings.ToLower(strings.TrimSpace(mime))
@@ -21,6 +21,12 @@ func parseImportFile(b []byte, filename, mime string) (importFile, bool) {
 	if strings.Contains(lowerMime, "json") || ext == ".json" {
 		if err := json.Unmarshal(b, &parsed); err == nil && strings.TrimSpace(parsed.Dataset.Format) != "" {
 			return parsed, true
+		}
+	}
+
+	if isTabularDatasetFile(filename, mime) {
+		if pf, err := parseTabularDataset(b, filename, formatHint); err == nil {
+			return pf, true
 		}
 	}
 

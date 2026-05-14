@@ -1,6 +1,9 @@
 package datasets
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParsePrefLibOrdinal_SOC(t *testing.T) {
 	src := []byte(`# FILE NAME: sample.soc
@@ -128,7 +131,7 @@ func TestParseImportFile_PrefLibByExtension(t *testing.T) {
 # ALTERNATIVE NAME 2: Bob
 1: 1,2
 `)
-	parsed, ok := parseImportFile(src, "sample.soc", "text/plain")
+	parsed, ok := parseImportFile(src, "sample.soc", "text/plain", "")
 	if !ok {
 		t.Fatalf("expected parse ok")
 	}
@@ -149,7 +152,7 @@ VOTES
 voter_id; vote
 1; 1,2
 `)
-	parsed, ok := parseImportFile(src, "sample.pb", "text/plain")
+	parsed, ok := parseImportFile(src, "sample.pb", "text/plain", "")
 	if !ok {
 		t.Fatalf("expected parse ok")
 	}
@@ -170,7 +173,7 @@ func TestParsePrefLibOrdinal_SOI(t *testing.T) {
 1: 1,3,2
 1: 3,2,1
 `)
-	parsed, ok := parseImportFile(src, "sample.soi", "text/plain")
+	parsed, ok := parseImportFile(src, "sample.soi", "text/plain", "")
 	if !ok {
 		t.Fatalf("expected parse ok")
 	}
@@ -201,7 +204,7 @@ func TestParsePrefLibOrdinal_TiedRankingRejected(t *testing.T) {
 		t.Fatalf("expected error for tied ranking")
 	}
 
-	_, ok := parseImportFile(src, "tied.soc", "text/plain")
+	_, ok := parseImportFile(src, "tied.soc", "text/plain", "")
 	if ok {
 		t.Fatalf("expected parseImportFile to reject tied ranking")
 	}
@@ -300,8 +303,125 @@ voter_id; vote
 		t.Fatalf("expected unsupported vote_type error")
 	}
 
-	_, ok := parseImportFile(src, "unsupported.pb", "text/plain")
+	_, ok := parseImportFile(src, "unsupported.pb", "text/plain", "")
 	if ok {
 		t.Fatalf("expected parseImportFile to reject unsupported vote_type")
+	}
+}
+
+func TestParseImportFile_CSVApproval(t *testing.T) {
+	src := []byte(`record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,c1|c2,,
+ballot,,,v2,c2|c3,,
+`)
+
+	parsed, ok := parseImportFile(src, "approval.csv", "text/csv", "approval")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if parsed.Dataset.Format != "approval" {
+		t.Fatalf("unexpected format: %q", parsed.Dataset.Format)
+	}
+	if len(parsed.Dataset.Candidates) != 3 {
+		t.Fatalf("unexpected candidates count: %d", len(parsed.Dataset.Candidates))
+	}
+	if len(parsed.Ballots) != 2 {
+		t.Fatalf("unexpected ballots count: %d", len(parsed.Ballots))
+	}
+	if got := parsed.Ballots[0].Approval; len(got) != 2 || got[0] != "c1" || got[1] != "c2" {
+		t.Fatalf("unexpected approval ballot: %+v", got)
+	}
+}
+
+func TestParseImportFile_CSVRanking(t *testing.T) {
+	src := []byte(`record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,,c2|c1|c3,
+ballot,,,v2,,c3|c2|c1,
+`)
+
+	parsed, ok := parseImportFile(src, "ranking.csv", "text/csv", "ranking")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if parsed.Dataset.Format != "ranking" {
+		t.Fatalf("unexpected format: %q", parsed.Dataset.Format)
+	}
+	if len(parsed.Dataset.Candidates) != 3 {
+		t.Fatalf("unexpected candidates count: %d", len(parsed.Dataset.Candidates))
+	}
+	if got := parsed.Ballots[0].Ranking; len(got) != 3 || got[0] != "c2" || got[1] != "c1" || got[2] != "c3" {
+		t.Fatalf("unexpected ranking ballot: %+v", got)
+	}
+}
+
+func TestParseImportFile_CSVScore(t *testing.T) {
+	src := []byte(`record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,,,c1=5|c2=3|c3=1
+ballot,,,v2,,,c1=2|c2=4|c3=5
+`)
+
+	parsed, ok := parseImportFile(src, "score.csv", "text/csv", "score")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if parsed.Dataset.Format != "score" {
+		t.Fatalf("unexpected format: %q", parsed.Dataset.Format)
+	}
+	if len(parsed.Ballots) != 2 {
+		t.Fatalf("unexpected ballots count: %d", len(parsed.Ballots))
+	}
+	if parsed.Ballots[0].Scores["c1"] != 5 || parsed.Ballots[0].Scores["c2"] != 3 || parsed.Ballots[0].Scores["c3"] != 1 {
+		t.Fatalf("unexpected scores: %+v", parsed.Ballots[0].Scores)
+	}
+}
+
+func TestParseImportFile_TXTRanking(t *testing.T) {
+	line := func(cols ...string) string {
+		return strings.Join(cols, "\t")
+	}
+
+	src := []byte(strings.Join([]string{
+		line("record_type", "id", "name", "voter_ref", "approval", "ranking", "scores"),
+		line("candidate", "c1", "Alice", "", "", "", ""),
+		line("candidate", "c2", "Bob", "", "", "", ""),
+		line("candidate", "c3", "Carol", "", "", "", ""),
+		line("ballot", "", "", "v1", "", "c1|c3|c2", ""),
+	}, "\n") + "\n")
+
+	parsed, ok := parseImportFile(src, "ranking.txt", "text/plain", "ranking")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if parsed.Dataset.Format != "ranking" {
+		t.Fatalf("unexpected format: %q", parsed.Dataset.Format)
+	}
+	if len(parsed.Dataset.Candidates) != 3 {
+		t.Fatalf("unexpected candidates count: %d", len(parsed.Dataset.Candidates))
+	}
+	if len(parsed.Ballots) != 1 {
+		t.Fatalf("unexpected ballots count: %d", len(parsed.Ballots))
+	}
+	if got := parsed.Ballots[0].Ranking; len(got) != 3 || got[0] != "c1" || got[1] != "c3" || got[2] != "c2" {
+		t.Fatalf("unexpected ranking ballot: %+v", got)
+	}
+}
+
+func TestParseImportFile_CSVInvalidRejected(t *testing.T) {
+	src := []byte(`id,name
+c1,Alice
+`)
+
+	_, ok := parseImportFile(src, "bad.csv", "text/csv", "ranking")
+	if ok {
+		t.Fatalf("expected invalid csv dataset to be rejected")
 	}
 }

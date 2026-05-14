@@ -26,7 +26,7 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 
 	var parsed importFile
 	parsedOK := false
-	if p, ok := parseImportFile(b, fileHeader.Filename, mime); ok {
+	if p, ok := parseImportFile(b, fileHeader.Filename, mime, format); ok {
 		parsed = p
 		parsedOK = true
 		if name == "" {
@@ -35,6 +35,10 @@ func (s *Service) Import(ctx context.Context, meta ImportMeta, fileHeader *multi
 		if format == "" {
 			format = normalizeFormat(parsed.Dataset.Format)
 		}
+	}
+
+	if !parsedOK && isTabularDatasetFile(fileHeader.Filename, mime) {
+		return "", "invalid_import_file", nil
 	}
 
 	if name == "" {
