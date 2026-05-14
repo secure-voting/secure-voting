@@ -1,0 +1,30 @@
+{
+  "dataset": {
+    "name": "Большой JSON ranking dataset",
+    "description": "Тестовый набор ранжированных предпочтений",
+    "format": "ranking",
+    "candidates": [
+      { "id": "c1", "name": "Алиса" },
+      { "id": "c2", "name": "Борис" },
+      { "id": "c3", "name": "Виктория" },
+      { "id": "c4", "name": "Георгий" },
+      { "id": "c5", "name": "Диана" },
+      { "id": "c6", "name": "Егор" }
+    ],
+    "parameters": {
+      "ranking_top_k": 6
+    }
+  },
+  "ballots": [
+    { "voter_ref": "v001", "ranking": ["c1", "c2", "c3", "c4", "c5", "c6"] },
+    { "voter_ref": "v002", "ranking": ["c2", "c1", "c4", "c3", "c6", "c5"] },
+    { "voter_ref": "v003", "ranking": ["c3", "c5", "c1", "c2", "c4", "c6"] },
+    { "voter_ref": "v004", "ranking": ["c4", "c3", "c2", "c1", "c5", "c6"] },
+    { "voter_ref": "v005", "ranking": ["c5", "c1", "c6", "c2", "c3", "c4"] },
+    { "voter_ref": "v006", "ranking": ["c6", "c4", "c5", "c3", "c2", "c1"] },
+    { "voter_ref": "v007", "ranking": ["c1", "c3", "c5", "c2", "c4", "c6"] },
+    { "voter_ref": "v008", "ranking": ["c2", "c4", "c1", "c6", "c3", "c5"] },
+    { "voter_ref": "v009", "ranking": ["c3", "c2", "c6", "c5", "c1", "c4"] },
+    { "voter_ref": "v010", "ranking": ["c4", "c6", "c2", "c1", "c3", "c5"] }
+  ]
+}

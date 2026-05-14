@@ -52,7 +52,7 @@ func (s *Service) Export(ctx context.Context, id string, format string) ([]byte,
 
 	switch exportFormat {
 	case "csv":
-		data, err := writeDelimitedRows(rows, ',')
+		data, err := writeDelimitedRows(rows, ';')
 		if err != nil {
 			return nil, "", "", "", err
 		}
@@ -194,8 +194,11 @@ func scoresExportCell(candidates []Candidate, scores map[string]int) string {
 
 func writeDelimitedRows(rows [][]string, delimiter rune) ([]byte, error) {
 	var buf bytes.Buffer
+	buf.WriteString("\ufeff")
+
 	writer := csv.NewWriter(&buf)
 	writer.Comma = delimiter
+	writer.UseCRLF = true
 
 	for _, row := range rows {
 		if err := writer.Write(row); err != nil {

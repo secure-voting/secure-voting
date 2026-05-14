@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 func isTabularDatasetFile(filename, mime string) bool {
@@ -19,7 +22,72 @@ func isTabularDatasetFile(filename, mime string) bool {
 	return strings.Contains(lowerMime, "text/csv")
 }
 
+func normalizeTabularBytes(b []byte) []byte {
+	b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
+
+	if utf8.Valid(b) {
+		return b
+	}
+
+	decoded, err := charmap.Windows1251.NewDecoder().Bytes(b)
+	if err == nil && utf8.Valid(decoded) {
+		return decoded
+	}
+
+	return b
+}
+
+func repairTabularText(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+
+	if !looksLikeWindows1251Mojibake(value) {
+		return value
+	}
+
+	encoded, err := charmap.Windows1251.NewEncoder().Bytes([]byte(value))
+	if err != nil || !utf8.Valid(encoded) {
+		return value
+	}
+
+	decoded := string(encoded)
+	if decoded == "" {
+		return value
+	}
+
+	return decoded
+}
+
+func looksLikeWindows1251Mojibake(value string) bool {
+	if !strings.ContainsAny(value, "РС") {
+		return false
+	}
+
+	markers := []string{
+		"Рђ", "Р‘", "Р’", "Р“", "Р”", "Р•", "Р–", "Р—", "Р", "Р™",
+		"Рљ", "Р›", "Рњ", "Рќ", "Рћ", "Рџ", "Р ", "РЎ", "Рў", "РЈ",
+		"Р¤", "РҐ", "Р¦", "Р§", "РЁ", "Р©", "РЄ", "Р«", "Р¬", "Р­",
+		"Р®", "РЇ", "Р°", "Р±", "Р²", "Р³", "Р´", "Рµ", "Р¶", "Р·",
+		"Рё", "Р№", "Рє", "Р»", "Р¼", "Р½", "Рѕ", "Р¿", "СЂ", "СЃ",
+		"С‚", "Сѓ", "С„", "С…", "С†", "С‡", "С€", "С‰", "СЉ", "С‹",
+		"СЊ", "СЌ", "СЋ", "СЏ",
+	}
+
+	count := 0
+	for _, marker := range markers {
+		if strings.Contains(value, marker) {
+			count++
+		}
+	}
+
+	return count >= 1
+}
+
 func parseTabularDataset(b []byte, filename, formatHint string) (importFile, error) {
+	b = normalizeTabularBytes(b)
+
 	records, err := readTabularRecords(b, filename)
 	if err != nil {
 		return importFile{}, err
@@ -163,7 +231,7 @@ func readTabDelimitedRecords(b []byte) [][]string {
 
 		record := strings.Split(line, "\t")
 		for i := range record {
-			record[i] = strings.TrimSpace(record[i])
+			record[i] = repairTabularText(record[i])
 		}
 
 		records = append(records, record)
@@ -221,7 +289,7 @@ func tabularRecordToMap(header map[string]int, record []string) map[string]strin
 	out := make(map[string]string, len(header))
 	for key, idx := range header {
 		if idx >= 0 && idx < len(record) {
-			out[key] = strings.TrimSpace(record[idx])
+			out[key] = repairTabularText(record[idx])
 		}
 	}
 	return out

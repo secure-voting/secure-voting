@@ -3,6 +3,8 @@ package datasets
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 func TestParsePrefLibOrdinal_SOC(t *testing.T) {
@@ -423,5 +425,62 @@ c1,Alice
 	_, ok := parseImportFile(src, "bad.csv", "text/csv", "ranking")
 	if ok {
 		t.Fatalf("expected invalid csv dataset to be rejected")
+	}
+}
+
+func TestParseImportFile_CSVWindows1251CandidateNames(t *testing.T) {
+	srcUTF8 := []byte(`record_type;id;name;voter_ref;approval;ranking;scores
+candidate;c1;Алиса;;;;
+candidate;c2;Борис;;;;
+candidate;c3;Виктория;;;;
+ballot;;;v1;;c1|c2|c3;
+`)
+
+	src1251, err := charmap.Windows1251.NewEncoder().Bytes(srcUTF8)
+	if err != nil {
+		t.Fatalf("encode windows-1251: %v", err)
+	}
+
+	parsed, ok := parseImportFile(src1251, "ranking.csv", "text/csv", "ranking")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if len(parsed.Dataset.Candidates) != 3 {
+		t.Fatalf("unexpected candidates count: %d", len(parsed.Dataset.Candidates))
+	}
+	if parsed.Dataset.Candidates[0].Name != "Алиса" {
+		t.Fatalf("unexpected candidate name: %q", parsed.Dataset.Candidates[0].Name)
+	}
+	if parsed.Dataset.Candidates[1].Name != "Борис" {
+		t.Fatalf("unexpected candidate name: %q", parsed.Dataset.Candidates[1].Name)
+	}
+	if got := parsed.Ballots[0].Ranking; len(got) != 3 || got[0] != "c1" || got[1] != "c2" || got[2] != "c3" {
+		t.Fatalf("unexpected ranking ballot: %+v", got)
+	}
+}
+
+func TestParseImportFile_CSVRepairsMojibakeCandidateNames(t *testing.T) {
+	src := []byte(`record_type;id;name;voter_ref;approval;ranking;scores
+candidate;c1;РђР»РёСЃР°;;;;
+candidate;c2;Р‘РѕСЂРёСЃ;;;;
+candidate;c3;Р’РёРєС‚РѕСЂРёСЏ;;;;
+ballot;;;v1;;c1|c2|c3;
+`)
+
+	parsed, ok := parseImportFile(src, "ranking.csv", "text/csv", "ranking")
+	if !ok {
+		t.Fatalf("expected parse ok")
+	}
+	if len(parsed.Dataset.Candidates) != 3 {
+		t.Fatalf("unexpected candidates count: %d", len(parsed.Dataset.Candidates))
+	}
+	if parsed.Dataset.Candidates[0].Name != "Алиса" {
+		t.Fatalf("unexpected candidate name: %q", parsed.Dataset.Candidates[0].Name)
+	}
+	if parsed.Dataset.Candidates[1].Name != "Борис" {
+		t.Fatalf("unexpected candidate name: %q", parsed.Dataset.Candidates[1].Name)
+	}
+	if parsed.Dataset.Candidates[2].Name != "Виктория" {
+		t.Fatalf("unexpected candidate name: %q", parsed.Dataset.Candidates[2].Name)
 	}
 }

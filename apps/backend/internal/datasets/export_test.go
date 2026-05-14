@@ -91,13 +91,13 @@ func TestExportCSV_Ranking(t *testing.T) {
 	}
 
 	body := string(data)
-	if !strings.Contains(body, "record_type,id,name,voter_ref,approval,ranking,scores") {
+	if !strings.Contains(body, "record_type;id;name;voter_ref;approval;ranking;scores") {
 		t.Fatalf("missing header: %s", body)
 	}
-	if !strings.Contains(body, "candidate,c1,Alice,,,,") {
+	if !strings.Contains(body, "candidate;c1;Alice;;;;") {
 		t.Fatalf("missing candidate row: %s", body)
 	}
-	if !strings.Contains(body, "ballot,,,v1,,c1|c2,") {
+	if !strings.Contains(body, "ballot;;;v1;;c1|c2;") {
 		t.Fatalf("missing ranking row: %s", body)
 	}
 }
@@ -164,7 +164,7 @@ func TestExportCSV_Score(t *testing.T) {
 	}
 
 	body := string(data)
-	if !strings.Contains(body, "ballot,,,v1,,,c1=5|c2=3") {
+	if !strings.Contains(body, "ballot;;;v1;;;c1=5|c2=3") {
 		t.Fatalf("missing score row: %s", body)
 	}
 }

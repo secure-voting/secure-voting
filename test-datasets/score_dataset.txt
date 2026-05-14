@@ -1,0 +1,17 @@
+record_type	id	name	voter_ref	approval	ranking	scores
+candidate	c1	Алиса				
+candidate	c2	Борис				
+candidate	c3	Виктория				
+candidate	c4	Георгий				
+candidate	c5	Диана				
+candidate	c6	Егор				
+ballot			v001			c1=10|c2=8|c3=6|c4=4|c5=2|c6=0
+ballot			v002			c1=7|c2=10|c3=5|c4=8|c5=3|c6=1
+ballot			v003			c1=9|c2=4|c3=10|c4=6|c5=8|c6=2
+ballot			v004			c1=3|c2=6|c3=9|c4=10|c5=5|c6=1
+ballot			v005			c1=8|c2=7|c3=6|c4=5|c5=10|c6=4
+ballot			v006			c1=2|c2=5|c3=4|c4=8|c5=7|c6=10
+ballot			v007			c1=10|c2=9|c3=7|c4=3|c5=5|c6=2
+ballot			v008			c1=6|c2=10|c3=8|c4=7|c5=4|c6=1
+ballot			v009			c1=5|c2=4|c3=10|c4=9|c5=7|c6=3
+ballot			v010			c1=4|c2=6|c3=5|c4=10|c5=8|c6=2
