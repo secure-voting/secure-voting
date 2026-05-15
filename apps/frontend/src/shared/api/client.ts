@@ -638,8 +638,10 @@ export const api = {
       return await request<DatasetDetail>(`/api/v1/datasets/${id}`, { method: "GET", signal }, token);
     },
 
-    async download(token: string, id: string) {
-      return await authorizedDownload(`/api/v1/datasets/${id}/download`, token, `dataset-${id}`);
+    async download(token: string, id: string, format?: "csv" | "txt" | "xlsx") {
+      const query = format ? `?format=${encodeURIComponent(format)}` : "";
+      const fallbackFilename = format ? `dataset-${id}.${format}` : `dataset-${id}`;
+      return await authorizedDownload(`/api/v1/datasets/${id}/download${query}`, token, fallbackFilename);
     },
 
     async importFile(

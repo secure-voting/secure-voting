@@ -20,6 +20,7 @@ func restoreDatasetHandlerHooks() func() {
 	oldList := listDatasetsFn
 	oldGet := getDatasetFn
 	oldDownload := downloadDatasetFn
+	oldExport := exportDatasetFn
 	oldImport := importDatasetFn
 	oldGenerate := generateDatasetFn
 
@@ -27,6 +28,7 @@ func restoreDatasetHandlerHooks() func() {
 		listDatasetsFn = oldList
 		getDatasetFn = oldGet
 		downloadDatasetFn = oldDownload
+		exportDatasetFn = oldExport
 		importDatasetFn = oldImport
 		generateDatasetFn = oldGenerate
 	}
@@ -166,6 +168,37 @@ func TestDownload_Success(t *testing.T) {
 	}
 	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
 		t.Fatalf("unexpected content type: %q", ct)
+	}
+}
+
+func TestDownload_ExportCSVSuccess(t *testing.T) {
+	defer restoreDatasetHandlerHooks()()
+
+	exportDatasetFn = func(_ *domain.Service, _ context.Context, id string, format string) ([]byte, string, string, string, error) {
+		if id != "ds-1" {
+			t.Fatalf("unexpected id: %q", id)
+		}
+		if format != "csv" {
+			t.Fatalf("unexpected format: %q", format)
+		}
+		return []byte("record_type,id,name,voter_ref,approval,ranking,scores\n"), "dataset.csv", "text/csv; charset=utf-8", "", nil
+	}
+
+	h := newTestHandlers()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/datasets/ds-1/download?format=csv", nil)
+	req.SetPathValue("id", "ds-1")
+	w := httptest.NewRecorder()
+
+	h.Download(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/csv") {
+		t.Fatalf("unexpected content type: %q", ct)
+	}
+	if !strings.Contains(w.Body.String(), "record_type") {
+		t.Fatalf("unexpected body: %s", w.Body.String())
 	}
 }
 

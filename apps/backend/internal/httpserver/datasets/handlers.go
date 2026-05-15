@@ -26,6 +26,10 @@ var downloadDatasetFn = func(svc *datasets.Service, ctx context.Context, id stri
 	return svc.Download(ctx, id)
 }
 
+var exportDatasetFn = func(svc *datasets.Service, ctx context.Context, id string, format string) ([]byte, string, string, string, error) {
+	return svc.Export(ctx, id, format)
+}
+
 var importDatasetFn = func(svc *datasets.Service, ctx context.Context, meta datasets.ImportMeta, fh *multipart.FileHeader, f multipart.File) (string, string, error) {
 	return svc.Import(ctx, meta, fh, f)
 }
@@ -79,6 +83,23 @@ func (h *Handlers) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) Download(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(r.PathValue("id"))
+	exportFormat := strings.TrimSpace(r.URL.Query().Get("format"))
+
+	if exportFormat != "" {
+		data, filename, mime, code, err := exportDatasetFn(h.svc, r.Context(), id, exportFormat)
+		if err != nil {
+			log.Printf("datasets.export error: %v", err)
+			httputil.WriteError(w, http.StatusInternalServerError, "internal_error", "export dataset failed")
+			return
+		}
+		if code != "" {
+			writeDownloadDatasetError(w, code)
+			return
+		}
+		httputil.WriteFile(w, filename, mime, data)
+		return
+	}
+
 	data, filename, mime, code, err := downloadDatasetFn(h.svc, r.Context(), id)
 	if err != nil {
 		log.Printf("datasets.download error: %v", err)
@@ -86,15 +107,23 @@ func (h *Handlers) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if code != "" {
-		switch code {
-		case "not_found":
-			httputil.WriteError(w, http.StatusNotFound, "not_found", "dataset not found")
-		default:
-			httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
-		}
+		writeDownloadDatasetError(w, code)
 		return
 	}
 	httputil.WriteFile(w, filename, mime, data)
+}
+
+func writeDownloadDatasetError(w http.ResponseWriter, code string) {
+	switch code {
+	case "not_found":
+		httputil.WriteError(w, http.StatusNotFound, "not_found", "dataset not found")
+	case "no_ballots":
+		httputil.WriteError(w, http.StatusConflict, "no_ballots", "dataset has no stored ballots")
+	case "unsupported_export_format":
+		httputil.WriteError(w, http.StatusBadRequest, "unsupported_export_format", "unsupported dataset export format")
+	default:
+		httputil.WriteError(w, http.StatusBadRequest, "bad_request", code)
+	}
 }
 
 func (h *Handlers) Import(w http.ResponseWriter, r *http.Request) {

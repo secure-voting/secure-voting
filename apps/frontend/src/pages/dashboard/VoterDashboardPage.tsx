@@ -7,6 +7,7 @@ import { Badge } from "../../shared/ui/Badge";
 import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { KeyValueList } from "../../shared/ui/KeyValueList";
 import { styles } from "../../shared/ui/styles";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 function displayName(me: ReturnType<typeof useAuth>["me"]) {
@@ -56,21 +57,6 @@ function ballotFormatLabel(value: unknown) {
   };
 
   return labels[raw] || raw || "Формат не указан";
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function electionSubtitle(item: ElectionSummary) {
@@ -133,7 +119,6 @@ export function VoterDashboardPage() {
 
   const activeItems = useMemo(() => items.filter((item) => isActiveLike(item.status)), [items]);
   const publishedItems = useMemo(() => items.filter((item) => Boolean(item.published_at)), [items]);
-  const recentItems = useMemo(() => items.slice(0, 5), [items]);
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -230,8 +215,8 @@ export function VoterDashboardPage() {
                           { label: "ID голосования", value: item.id },
                           { label: "Статус", value: item.status },
                           { label: "Режим доступа", value: item.access_mode },
-                          { label: "Начало", value: item.start_at },
-                          { label: "Окончание", value: item.end_at },
+                          { label: "Начало", value: formatDateTime(item.start_at) },
+                          { label: "Окончание", value: formatDateTime(item.end_at) },
                         ]}
                       />
                     </div>
@@ -277,7 +262,7 @@ export function VoterDashboardPage() {
                       <KeyValueList
                         items={[
                           { label: "ID голосования", value: item.id },
-                          { label: "Опубликовано", value: item.published_at ?? "—" },
+                          { label: "Опубликовано", value: formatDateTime(item.published_at) },
                           { label: "Статус", value: item.status },
                         ]}
                       />
@@ -294,53 +279,6 @@ export function VoterDashboardPage() {
             </div>
           )}
         </div>
-      </div>
-
-      <div style={styles.card}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 10,
-            alignItems: "baseline",
-            flexWrap: "wrap",
-          }}
-        >
-          <h3 style={{ margin: 0 }}>Последние голосования</h3>
-          <Link to="/elections" style={{ textDecoration: "none" }}>
-            <button style={styles.btn}>Открыть список</button>
-          </Link>
-        </div>
-
-        {recentItems.length === 0 ? (
-          <div style={{ marginTop: 10, ...styles.muted }}>Список пока пуст</div>
-        ) : (
-          <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-            {recentItems.map((item) => (
-              <div
-                key={item.id}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr auto",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: "8px 0",
-                  borderBottom: "1px solid #f3f4f6",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 800 }}>{item.title}</div>
-                  <div style={{ ...styles.muted, marginTop: 4 }}>
-                    {statusLabel(item.status)} · {electionSubtitle(item)}
-                  </div>
-                </div>
-                <Link to={`/elections/${item.id}`} style={{ textDecoration: "none" }}>
-                  <button style={styles.btn}>Открыть</button>
-                </Link>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

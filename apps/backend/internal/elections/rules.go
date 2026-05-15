@@ -108,22 +108,27 @@ func (s *Service) UpdateRules(ctx context.Context, electionID, adminUserID strin
 		return committeeSizeCode(err), nil
 	}
 
+	quotaSupported := ruleSupportsQuotaType(finalTally, rules, s.capabilities == nil)
+
 	var finalQuota *string
-	if finalCommittee != nil && *finalCommittee > 1 {
+	if quotaSupported {
+		finalQuota = curQuota
+
 		if in.QuotaType != nil {
 			q := norm(*in.QuotaType)
-			if !allowedQuotaTypes[q] {
-				return "invalid_quota_type", nil
+			if q == "" {
+				finalQuota = nil
+			} else {
+				if !allowedQuotaTypes[q] {
+					return "invalid_quota_type", nil
+				}
+				finalQuota = &q
 			}
-			finalQuota = &q
-		} else {
-			finalQuota = curQuota
-		}
-
-		if finalQuota == nil {
-			return "quota_type_required", nil
 		}
 	} else {
+		if in.QuotaType != nil && strings.TrimSpace(*in.QuotaType) != "" {
+			return ErrUnsupportedQuota.Error(), nil
+		}
 		finalQuota = nil
 	}
 

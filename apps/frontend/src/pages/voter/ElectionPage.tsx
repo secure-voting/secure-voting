@@ -8,6 +8,7 @@ import { ErrorBanner } from "../../shared/ui/ErrorBanner";
 import { SummaryGrid } from "../../shared/ui/SummaryGrid";
 import { styles } from "../../shared/ui/styles";
 import { downloadJsonFile } from "../../shared/utils/export";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 function statusLabel(status?: string) {
@@ -240,6 +241,106 @@ export function ElectionPage() {
     );
   }, [item, isAdmin, runAdminAction, actionState.busy]);
 
+  const voterSummaryItems = item
+    ? [
+        { label: "Начало", value: formatDateTime(item.start_at) },
+        { label: "Окончание", value: formatDateTime(item.end_at) },
+        { label: "Опубликовано", value: formatDateTime(item.published_at) },
+        { label: "Кандидатов", value: String(item.candidates.length) },
+        {
+          label: "Лимит выбора",
+          value:
+            item.ballot_format === "approval"
+              ? String(item.approval_max_choices ?? "—")
+              : "—",
+        },
+        {
+          label: "Ограничение top-k",
+          value:
+            item.ballot_format === "ranking"
+              ? String(item.ranking_top_k ?? "Не ограничено")
+              : "—",
+        },
+        {
+          label: "Диапазон оценок",
+          value:
+            item.ballot_format === "score"
+              ? `${item.score_min ?? "—"}..${item.score_max ?? "—"}`
+              : "—",
+        },
+        {
+          label: "Шаг оценки",
+          value:
+            item.ballot_format === "score"
+              ? String(item.score_step ?? "—")
+              : "—",
+        },
+        {
+          label: "Разрешить пропуск",
+          value:
+            item.ballot_format === "score"
+              ? yesNo(item.score_allow_skip)
+              : "—",
+        },
+      ]
+    : [];
+
+  const adminSummaryItems = item
+    ? [
+        { label: "Организатор", value: item.organizer_email ?? item.created_by ?? "—" },
+        { label: "Создано", value: formatDateTime(item.created_at) },
+        { label: "Начало", value: formatDateTime(item.start_at) },
+        { label: "Окончание", value: formatDateTime(item.end_at) },
+        { label: "Публиковать не ранее", value: formatDateTime(item.publish_at) },
+        { label: "Опубликовано", value: formatDateTime(item.published_at) },
+        { label: "Размер комитета", value: String(item.committee_size ?? "—") },
+        { label: "Тип квоты", value: item.quota_type ?? "—" },
+        { label: "Показывать агрегаты", value: yesNo(item.show_aggregates) },
+        { label: "Кандидатов", value: String(item.candidates.length) },
+        { label: "Подано бюллетеней", value: String(item.submitted_ballots_count ?? "—") },
+        { label: "Всего приглашений", value: String(item.invites_total_count ?? "—") },
+        { label: "Принято приглашений", value: String(item.invites_accepted_count ?? "—") },
+        { label: "Ожидают", value: String(item.invites_pending_count ?? "—") },
+        {
+          label: "Лимит выбора",
+          value:
+            item.ballot_format === "approval"
+              ? String(item.approval_max_choices ?? "—")
+              : "—",
+        },
+        {
+          label: "Ограничение top-k",
+          value:
+            item.ballot_format === "ranking"
+              ? String(item.ranking_top_k ?? "—")
+              : "—",
+        },
+        {
+          label: "Диапазон оценок",
+          value:
+            item.ballot_format === "score"
+              ? `${item.score_min ?? "—"}..${item.score_max ?? "—"}`
+              : "—",
+        },
+        {
+          label: "Шаг оценки",
+          value:
+            item.ballot_format === "score"
+              ? String(item.score_step ?? "—")
+              : "—",
+        },
+        {
+          label: "Разрешить пропуск",
+          value:
+            item.ballot_format === "score"
+              ? yesNo(item.score_allow_skip)
+              : "—",
+        },
+      ]
+    : [];
+
+  const summaryItems = isAdmin ? adminSummaryItems : voterSummaryItems;
+
   return (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={styles.card}>
@@ -270,7 +371,7 @@ export function ElectionPage() {
             <button style={styles.btn} onClick={load} disabled={loading || actionState.busy}>
               Обновить
             </button>
-            {item ? (
+            {item && isAdmin ? (
               <button
                 style={styles.btn}
                 onClick={() => downloadJsonFile(`election-${electionId}.json`, item)}
@@ -315,59 +416,7 @@ export function ElectionPage() {
             {adminButtons}
 
             <div style={{ marginTop: 12 }}>
-              <SummaryGrid
-                items={[
-                  { label: "Организатор", value: item.organizer_email ?? item.created_by ?? "—" },
-                  { label: "Создано", value: item.created_at ?? "—" },
-                  { label: "Начало", value: item.start_at },
-                  { label: "Окончание", value: item.end_at },
-                  { label: "Публиковать не ранее", value: item.publish_at ?? "—" },
-                  { label: "Опубликовано", value: item.published_at ?? "—" },
-                  { label: "Размер комитета", value: String(item.committee_size ?? "—") },
-                  { label: "Тип квоты", value: item.quota_type ?? "—" },
-                  { label: "Показывать агрегаты", value: yesNo(item.show_aggregates) },
-                  { label: "Кандидатов", value: String(item.candidates.length) },
-                  { label: "Подано бюллетеней", value: String(item.submitted_ballots_count ?? "—") },
-                  { label: "Всего приглашений", value: String(item.invites_total_count ?? "—") },
-                  { label: "Принято приглашений", value: String(item.invites_accepted_count ?? "—") },
-                  { label: "Ожидают", value: String(item.invites_pending_count ?? "—") },
-                  {
-                    label: "Лимит выбора",
-                    value:
-                      item.ballot_format === "approval"
-                        ? String(item.approval_max_choices ?? "—")
-                        : "—",
-                  },
-                  {
-                    label: "Ограничение top-k",
-                    value:
-                      item.ballot_format === "ranking"
-                        ? String(item.ranking_top_k ?? "—")
-                        : "—",
-                  },
-                  {
-                    label: "Диапазон оценок",
-                    value:
-                      item.ballot_format === "score"
-                        ? `${item.score_min ?? "—"}..${item.score_max ?? "—"}`
-                        : "—",
-                  },
-                  {
-                    label: "Шаг оценки",
-                    value:
-                      item.ballot_format === "score"
-                        ? String(item.score_step ?? "—")
-                        : "—",
-                  },
-                  {
-                    label: "Разрешить пропуск",
-                    value:
-                      item.ballot_format === "score"
-                        ? yesNo(item.score_allow_skip)
-                        : "—",
-                  },
-                ]}
-              />
+              <SummaryGrid items={summaryItems} />
             </div>
 
             <hr style={styles.hr} />

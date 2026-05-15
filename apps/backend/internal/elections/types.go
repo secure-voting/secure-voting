@@ -90,6 +90,15 @@ func ruleRequiresCommitteeSize(rule string, rules []computeclient.TallyRuleInfo,
 	return info.RequiresCommitteeSize
 }
 
+func ruleSupportsQuotaType(rule string, rules []computeclient.TallyRuleInfo, fallback bool) bool {
+	matrix := buildRuleMatrix(rules)
+	info, ok := matrix.get(rule)
+	if !ok {
+		return fallback
+	}
+	return info.SupportsQuotaType
+}
+
 func normalizeRankingTopK(ballotFormat string, rankingTopK *int, candidateCount int) (*int, error) {
 	format := norm(ballotFormat)
 

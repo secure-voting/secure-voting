@@ -15,6 +15,7 @@ import {
   downloadPdfTextFile,
   downloadXlsxFile,
 } from "../../shared/utils/export";
+import { formatDateTime } from "../../shared/utils/dateTime";
 
 function compactValue(value: unknown): string {
   if (typeof value === "string") return value;
@@ -251,7 +252,7 @@ function buildResultReportText(result: ResultResp, winnerLabels: string[]) {
   lines.push(`ID голосования: ${compactValue(result.election_id)}`);
   lines.push(`Версия результата: ${compactValue(result.version)}`);
   lines.push(`Метод: ${compactValue(result.method)}`);
-  lines.push(`Опубликовано: ${compactValue(result.published_at ?? "—")}`);
+  lines.push(`Опубликовано: ${formatDateTime(result.published_at)}`);
   lines.push("");
   lines.push("Победители:");
   if (winnerLabels.length > 0) {
@@ -417,7 +418,7 @@ export function ResultsPage() {
             <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Badge text={`Метод: ${res.method}`} />
               <Badge text={`Версия: ${String(res.version)}`} />
-              <Badge text={`Опубликовано: ${res.published_at ?? "—"}`} />
+              <Badge text={`Опубликовано: ${formatDateTime(res.published_at)}`} />
             </div>
 
             <hr style={styles.hr} />

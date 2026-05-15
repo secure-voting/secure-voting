@@ -20,6 +20,7 @@ import { styles } from "../../shared/ui/styles";
 import { ActionMenu } from "../../shared/ui/ActionMenu";
 import { downloadCsvFile, downloadJsonFile } from "../../shared/utils/export";
 import { isValidEmail, parseEmailsFromText, uniqueEmails } from "../../shared/utils/email";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 
 const IS_DEV = Boolean((import.meta as any)?.env?.DEV);
@@ -173,21 +174,6 @@ function ballotFormatLabel(value: unknown) {
   };
 
   return labels[raw] || raw || "Формат не указан";
-}
-
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
-
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 function boolLabel(value: boolean | null | undefined) {
@@ -664,11 +650,11 @@ export function AdminElectionPage() {
                       { label: "Режим доступа", value: item.access_mode },
                       { label: "Формат бюллетеня", value: item.ballot_format },
                       { label: "Правило подсчета", value: item.tally_rule },
-                      { label: "Создано", value: item.created_at ?? "—" },
-                      { label: "Начало", value: item.start_at },
-                      { label: "Окончание", value: item.end_at },
-                      { label: "Публикация", value: item.publish_at ?? "—" },
-                      { label: "Опубликовано", value: item.published_at ?? "—" },
+                      { label: "Создано", value: formatDateTime(item.created_at) },
+                      { label: "Начало", value: formatDateTime(item.start_at) },
+                      { label: "Окончание", value: formatDateTime(item.end_at) },
+                      { label: "Публикация", value: formatDateTime(item.publish_at) },
+                      { label: "Опубликовано", value: formatDateTime(item.published_at) },
                     ]}
                   />
                 </div>

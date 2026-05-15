@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../shared/api/client";
 import type {
@@ -9,6 +9,7 @@ import type {
   TallyRuleInfo,
 } from "../../shared/api/types";
 import { useAuth } from "../../app/auth";
+import { formatDateTime } from "../../shared/utils/dateTime";
 import { mergeRuleItems } from "../../shared/utils/mergeRuleItems";
 import { tallyRuleLabel } from "../../shared/utils/tallyRuleLabel";
 import { useNotifications } from "../../app/notifications";
@@ -24,6 +25,78 @@ const GENERATION_MODELS = [
 ] as const;
 
 const MAX_GENERATED_VOTERS = 10_000_000;
+
+const DATASET_IMPORT_TEMPLATE_CSV = `record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,c1|c2,,
+ballot,,,v2,c2|c3,,`;
+
+const DATASET_IMPORT_TEMPLATE_RANKING_CSV = `record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,,c1|c2|c3,
+ballot,,,v2,,c2|c1|c3,`;
+
+const DATASET_IMPORT_TEMPLATE_SCORE_CSV = `record_type,id,name,voter_ref,approval,ranking,scores
+candidate,c1,Alice,,,,
+candidate,c2,Bob,,,,
+candidate,c3,Carol,,,,
+ballot,,,v1,,,c1=5|c2=3|c3=1
+ballot,,,v2,,,c1=2|c2=4|c3=5`;
+
+const DATASET_IMPORT_TEMPLATE_TXT = `record_type	id	name	voter_ref	approval	ranking	scores
+candidate	c1	Alice				
+candidate	c2	Bob				
+candidate	c3	Carol				
+ballot			v1		c1|c2|c3	`;
+
+const DATASET_IMPORT_TEMPLATE_JSON = `{
+  "dataset": {
+    "name": "Example ranking dataset",
+    "description": "Example dataset for experiments",
+    "format": "ranking",
+    "candidates": [
+      { "id": "c1", "name": "Alice" },
+      { "id": "c2", "name": "Bob" },
+      { "id": "c3", "name": "Carol" }
+    ],
+    "parameters": {
+      "ranking_top_k": 3
+    }
+  },
+  "ballots": [
+    { "voter_ref": "v1", "ranking": ["c1", "c2", "c3"] },
+    { "voter_ref": "v2", "ranking": ["c2", "c1", "c3"] }
+  ]
+}`;
+
+const DATASET_IMPORT_TEMPLATE_PREFLIB = `# FILE NAME: sample.soc
+# TITLE: Sample PrefLib
+# NUMBER ALTERNATIVES: 3
+# NUMBER VOTERS: 3
+# NUMBER UNIQUE ORDERS: 2
+# ALTERNATIVE NAME 1: Alice
+# ALTERNATIVE NAME 2: Bob
+# ALTERNATIVE NAME 3: Carol
+2: 1,2,3
+1: 2,1,3`;
+
+const DATASET_IMPORT_TEMPLATE_PABULIB = `META
+key; value
+description; PB approval sample
+vote_type; approval
+PROJECTS
+project_id; name
+1; Alpha
+2; Beta
+3; Gamma
+VOTES
+voter_id; vote
+1; 1,2
+2; 2,3`;
 
 type CreatedSyntheticRun = {
   rule: string;
@@ -87,19 +160,36 @@ function shortId(value: unknown) {
   return raw.length > 12 ? `${raw.slice(0, 8)}…${raw.slice(-4)}` : raw;
 }
 
-function formatDateTime(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "—";
+function dateStartMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T00:00:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
 
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
+function dateEndMs(value: string) {
+  if (!value.trim()) return null;
+  const ms = Date.parse(`${value}T23:59:59.999`);
+  return Number.isFinite(ms) ? ms : null;
+}
 
-  return d.toLocaleString("ru-RU", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+function normalizeSearch(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function datasetCreatedMs(item: DatasetListItem) {
+  const raw = (item as any)?.created_at;
+  if (typeof raw !== "string" || !raw.trim()) return NaN;
+  return Date.parse(raw);
+}
+
+function datasetCandidatesCount(item: DatasetListItem) {
+  const candidates = (item as any)?.candidates;
+  if (Array.isArray(candidates)) return candidates.length;
+
+  const count = (item as any)?.candidate_count;
+  if (typeof count === "number" && Number.isFinite(count)) return count;
+
+  return null;
 }
 
 function boolLabel(value: unknown) {
@@ -193,6 +283,30 @@ function ruleSupportsFormat(rule: TallyRuleInfo, format: DatasetBallotFormat) {
   return rule.supports_experiment_runs && rule.ballot_formats.includes(format);
 }
 
+function renderImportExample(title: string, description: string, content: string) {
+  return (
+    <div style={{ ...styles.card, padding: 10 }}>
+      <div style={{ fontWeight: 700 }}>{title}</div>
+      <div style={{ marginTop: 6, ...styles.muted }}>{description}</div>
+      <pre
+        style={{
+          marginTop: 8,
+          whiteSpace: "pre-wrap",
+          overflowX: "auto",
+          fontSize: 12,
+          lineHeight: 1.45,
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 8,
+          padding: 10,
+        }}
+      >
+        {content}
+      </pre>
+    </div>
+  );
+}
+
 function renderParameters(value: Record<string, unknown> | undefined) {
   if (!value || Object.keys(value).length === 0) {
     return <span style={styles.muted}>Нет дополнительных параметров</span>;
@@ -229,6 +343,14 @@ export function DatasetsPage() {
 
   const [items, setItems] = useState<DatasetListItem[]>([]);
   const [selected, setSelected] = useState<DatasetDetail | null>(null);
+  const [detailScrollSeq, setDetailScrollSeq] = useState(0);
+
+  const [datasetSearchQuery, setDatasetSearchQuery] = useState("");
+  const [datasetFormatFilter, setDatasetFormatFilter] = useState("");
+  const [datasetSourceFilter, setDatasetSourceFilter] = useState("");
+  const [datasetCreatedFrom, setDatasetCreatedFrom] = useState("");
+  const [datasetCreatedTo, setDatasetCreatedTo] = useState("");
+  const [datasetSeedFilter, setDatasetSeedFilter] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -284,6 +406,77 @@ export function DatasetsPage() {
 
   const listAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
+  const selectedCardRef = useRef<HTMLDivElement | null>(null);
+
+  const filteredItems = useMemo(() => {
+    const query = normalizeSearch(datasetSearchQuery);
+    const fromMs = dateStartMs(datasetCreatedFrom);
+    const toMs = dateEndMs(datasetCreatedTo);
+    const seed = datasetSeedFilter.trim();
+
+    return items.filter((item) => {
+      const format = String((item as any)?.format ?? "").trim();
+      const source = String((item as any)?.source ?? "").trim();
+      const id = String((item as any)?.id ?? "").trim();
+      const name = String((item as any)?.name ?? "").trim();
+      const description = String((item as any)?.description ?? "").trim();
+      const createdMs = datasetCreatedMs(item);
+      const parameters = (item as any)?.parameters;
+      const itemSeed =
+        parameters && typeof parameters === "object"
+          ? String((parameters as Record<string, unknown>).seed ?? "")
+          : String((item as any)?.seed ?? "");
+
+      if (datasetFormatFilter && format !== datasetFormatFilter) return false;
+      if (datasetSourceFilter && source !== datasetSourceFilter) return false;
+      if (seed && itemSeed !== seed) return false;
+
+      if (fromMs != null && (!Number.isFinite(createdMs) || createdMs < fromMs)) return false;
+      if (toMs != null && (!Number.isFinite(createdMs) || createdMs > toMs)) return false;
+
+      if (query) {
+        const text = [
+          id,
+          shortId(id),
+          name,
+          description,
+          format,
+          formatLabel(format),
+          source,
+          sourceLabel(source),
+          itemSeed,
+          datasetCandidatesCount(item),
+        ]
+          .map(normalizeSearch)
+          .join(" ");
+
+        if (!text.includes(query)) return false;
+      }
+
+      return true;
+    });
+  }, [
+    items,
+    datasetSearchQuery,
+    datasetFormatFilter,
+    datasetSourceFilter,
+    datasetCreatedFrom,
+    datasetCreatedTo,
+    datasetSeedFilter,
+  ]);
+
+  useEffect(() => {
+    if (!selected) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      selectedCardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [selected, detailScrollSeq]);
 
   const loadList = useCallback(async () => {
     if (!token) return;
@@ -439,6 +632,7 @@ export function DatasetsPage() {
     try {
       const ds = await api.datasets.get(token, id, ac.signal);
       setSelected(ds);
+      setDetailScrollSeq((prev) => prev + 1);
     } catch (e: any) {
       if (e?.name === "AbortError") return;
       if (e?.status === 401) setToken(null);
@@ -449,14 +643,14 @@ export function DatasetsPage() {
     }
   };
 
-  const handleDownload = async (id: string) => {
+  const handleDownload = async (id: string, format?: "csv" | "txt" | "xlsx") => {
     if (!token) return;
 
     setErr(null);
     setInfo(null);
 
     try {
-      const { blob, filename } = await api.datasets.download(token, id);
+      const { blob, filename } = await api.datasets.download(token, id, format);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -926,17 +1120,117 @@ export function DatasetsPage() {
         </div>
 
         <ErrorBanner error={err} />
+
         {info ? (
           <div style={{ ...styles.card, background: "#f0fdf4", borderColor: "#bbf7d0", marginBottom: 12 }}>
             {info}
           </div>
         ) : null}
 
+        <div style={{ marginTop: 12, ...styles.card, background: "#f9fafb" }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Фильтры датасетов</div>
+
+          <div style={styles.grid2}>
+            <div>
+              <label>Поиск</label>
+              <input
+                style={styles.input}
+                value={datasetSearchQuery}
+                onChange={(e) => setDatasetSearchQuery(e.target.value)}
+                placeholder="Название, ID, короткий ID, seed"
+              />
+            </div>
+
+            <div>
+              <label>Формат бюллетеня</label>
+              <select
+                style={styles.input}
+                value={datasetFormatFilter}
+                onChange={(e) => setDatasetFormatFilter(e.target.value)}
+              >
+                <option value="">Все форматы</option>
+                <option value="approval">Одобрение</option>
+                <option value="ranking">Ранжирование</option>
+                <option value="score">Оценивание</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Источник</label>
+              <select
+                style={styles.input}
+                value={datasetSourceFilter}
+                onChange={(e) => setDatasetSourceFilter(e.target.value)}
+              >
+                <option value="">Все источники</option>
+                <option value="generate">Сгенерирован</option>
+                <option value="import">Импортирован</option>
+                <option value="election">Из голосования</option>
+                <option value="external">Внешний</option>
+              </select>
+            </div>
+
+            <div>
+              <label>Создан с</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={datasetCreatedFrom}
+                onChange={(e) => setDatasetCreatedFrom(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Создан по</label>
+              <input
+                style={styles.input}
+                type="date"
+                value={datasetCreatedTo}
+                onChange={(e) => setDatasetCreatedTo(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label>Seed</label>
+              <input
+                style={styles.input}
+                value={datasetSeedFilter}
+                onChange={(e) => setDatasetSeedFilter(e.target.value)}
+                placeholder="Например: 42"
+              />
+            </div>
+
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <button
+                type="button"
+                style={styles.btn}
+                onClick={() => {
+                  setDatasetSearchQuery("");
+                  setDatasetFormatFilter("");
+                  setDatasetSourceFilter("");
+                  setDatasetCreatedFrom("");
+                  setDatasetCreatedTo("");
+                  setDatasetSeedFilter("");
+                }}
+              >
+                Сбросить фильтры
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 10, ...styles.muted }}>
+            Показано: {filteredItems.length} из {items.length}
+          </div>
+        </div>
+
         <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
           {loading ? <div style={styles.muted}>Загрузка…</div> : null}
           {!loading && items.length === 0 ? <div style={styles.muted}>Список пуст</div> : null}
+          {!loading && items.length > 0 && filteredItems.length === 0 ? (
+            <div style={styles.muted}>По заданным фильтрам ничего не найдено</div>
+          ) : null}
 
-          {items.map((item) => (
+          {filteredItems.map((item) => (
             <div key={item.id} style={{ ...styles.card, padding: 12 }}>
               <div
                 style={{
@@ -992,6 +1286,15 @@ export function DatasetsPage() {
                 <button style={styles.btn} onClick={() => handleDownload(item.id)}>
                   Скачать файл
                 </button>
+                <button style={styles.btn} onClick={() => handleDownload(item.id, "csv")}>
+                  CSV
+                </button>
+                <button style={styles.btn} onClick={() => handleDownload(item.id, "txt")}>
+                  TXT
+                </button>
+                <button style={styles.btn} onClick={() => handleDownload(item.id, "xlsx")}>
+                  XLSX
+                </button>
               </div>
             </div>
           ))}
@@ -1019,7 +1322,7 @@ export function DatasetsPage() {
             <option value="score">Оценивание</option>
           </select>
           <div style={{ marginTop: 8, ...styles.muted }}>
-            Для JSON формат задается вручную. Для PrefLib/Pabulib он может быть определен содержимым файла.
+            Для JSON, CSV и TXT формат выбирается вручную. Для PrefLib/Pabulib он может быть определен содержимым файла.
           </div>
 
           <div style={{ height: 10 }} />
@@ -1028,7 +1331,7 @@ export function DatasetsPage() {
           <input
             style={styles.input}
             type="file"
-            accept=".json,.soc,.soi,.pb"
+            accept=".json,.soc,.soi,.pb,.csv,.txt,application/json,text/csv,text/plain"
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
               setImportFile(file);
@@ -1041,12 +1344,62 @@ export function DatasetsPage() {
           />
 
           <div style={{ marginTop: 8, ...styles.muted }}>
-            Поддерживаются JSON, PrefLib (.soc, .soi), Pabulib (.pb)
+            Поддерживаются JSON, PrefLib (.soc, .soi), Pabulib (.pb), CSV (.csv), TXT (.txt).
           </div>
 
           <div style={{ marginTop: 6, ...styles.muted }}>
             Для файлов .soc/.soi формат будет ranking. Для .pb формат определяется сервером по vote_type.
           </div>
+
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700 }}>
+              Требуемые форматы файлов для загрузки
+            </summary>
+
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {renderImportExample(
+                "JSON",
+                "Файл должен содержать объект dataset с форматом, кандидатами и параметрами, а также массив ballots. Для approval используется поле approval, для ranking поле ranking, для score объект scores.",
+                DATASET_IMPORT_TEMPLATE_JSON
+              )}
+
+              {renderImportExample(
+                "PrefLib .soc/.soi",
+                "Используется для ранжированных бюллетеней. Кандидаты задаются строками ALTERNATIVE NAME, бюллетени задаются строками вида количество: порядок кандидатов. Связанные ранги в фигурных скобках не принимаются.",
+                DATASET_IMPORT_TEMPLATE_PREFLIB
+              )}
+
+              {renderImportExample(
+                "Pabulib .pb",
+                "Файл должен содержать секции META, PROJECTS и VOTES. Формат определяется по vote_type: approval/app/app. дает approval, ordinal дает ranking, scoring/score дает score.",
+                DATASET_IMPORT_TEMPLATE_PABULIB
+              )}
+
+              {renderImportExample(
+                "CSV для approval",
+                "Обязательные колонки: record_type, id, name, voter_ref, approval, ranking, scores. Строки candidate задают кандидатов. В строках ballot поле approval содержит ID кандидатов через символ |.",
+                DATASET_IMPORT_TEMPLATE_CSV
+              )}
+
+              {renderImportExample(
+                "CSV для ranking",
+                "Структура такая же, как у approval CSV. В строках ballot поле ranking содержит порядок кандидатов через символ |. В поле Формат перед загрузкой нужно выбрать Ранжирование.",
+                DATASET_IMPORT_TEMPLATE_RANKING_CSV
+              )}
+
+              {renderImportExample(
+                "CSV для score",
+                "Структура такая же, как у approval CSV. В строках ballot поле scores содержит пары candidate_id=score через символ |. В поле Формат перед загрузкой нужно выбрать Оценивание.",
+                DATASET_IMPORT_TEMPLATE_SCORE_CSV
+              )}
+
+              {renderImportExample(
+                "TXT",
+                "TXT использует те же колонки, что CSV, но разделителем является табуляция. Для approval заполняется колонка approval, для ranking колонка ranking, для score колонка scores.",
+                DATASET_IMPORT_TEMPLATE_TXT
+              )}
+            </div>
+          </details>
 
           {importFile ? (
             <div style={{ marginTop: 8, ...styles.muted }}>
@@ -1309,7 +1662,7 @@ export function DatasetsPage() {
         {detailLoading ? <div style={styles.muted}>Загрузка…</div> : null}
 
         {selected ? (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div ref={selectedCardRef} style={{ ...styles.card, scrollMarginTop: 16 }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selected.name}</div>
               <div style={styles.muted}>{selected.description || "Описание отсутствует"}</div>
@@ -1336,6 +1689,21 @@ export function DatasetsPage() {
                 { label: "Seed", value: selected.seed != null ? String(selected.seed) : "—" },
               ]}
             />
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={styles.btn} onClick={() => handleDownload(selected.id)}>
+                Скачать исходный файл
+              </button>
+              <button style={styles.btn} onClick={() => handleDownload(selected.id, "csv")}>
+                CSV
+              </button>
+              <button style={styles.btn} onClick={() => handleDownload(selected.id, "txt")}>
+                TXT
+              </button>
+              <button style={styles.btn} onClick={() => handleDownload(selected.id, "xlsx")}>
+                XLSX
+              </button>
+            </div>
 
             <details>
               <summary style={{ cursor: "pointer", ...styles.muted }}>
