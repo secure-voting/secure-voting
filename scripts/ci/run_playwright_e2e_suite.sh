@@ -167,8 +167,29 @@ kafka_topics_tls --create --if-not-exists --topic secure-voting.compute.tasks --
 kafka_topics_tls --create --if-not-exists --topic secure-voting.compute.results --partitions 1 --replication-factor 1
 
 echo "== verify kafka topics over TLS =="
-kafka_topics_tls --list | grep -qx 'secure-voting.compute.tasks'
-kafka_topics_tls --list | grep -qx 'secure-voting.compute.results'
+
+topics=""
+for i in {1..10}; do
+  topics="$(kafka_topics_tls --list 2>&1 || true)"
+  printf '%s\n' "$topics"
+
+  if printf '%s\n' "$topics" | grep -Fxq 'secure-voting.compute.tasks' \
+    && printf '%s\n' "$topics" | grep -Fxq 'secure-voting.compute.results'; then
+    break
+  fi
+
+  sleep 2
+done
+
+if ! printf '%s\n' "$topics" | grep -Fxq 'secure-voting.compute.tasks'; then
+  echo "Kafka topic not found: secure-voting.compute.tasks" >&2
+  exit 1
+fi
+
+if ! printf '%s\n' "$topics" | grep -Fxq 'secure-voting.compute.results'; then
+  echo "Kafka topic not found: secure-voting.compute.results" >&2
+  exit 1
+fi
 
 echo "== start worker services =="
 docker compose up -d --build worker compute-runner
