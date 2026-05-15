@@ -29,7 +29,7 @@ jobs:
             apps/compute -> target
 
       - name: "Execute pipeline"
-        run: "moon ci --color"
+        run: moon ci $(moon query projects | jq '.projects[] | select(.config.language == "rust") | .tasks[] | select(.options.runInCI == true) | .target' | tr -d '\"') --color
 
       - name: "Collect results"
         uses: "appthrust/moon-ci-retrospect@v2"
